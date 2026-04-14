@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS, USERS } from "./constants.js";
 import Dashboard from "./Dashboard.jsx";
@@ -107,7 +107,25 @@ function dIn(y,m){return new Date(y,m+1,0).getDate();}function gFD(y,m){return n
 // ═══ UI ═══
 function Bdg({children,color=C.tl,bg=C.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
 function SL2({s,L}){const m={pending:{l:L.pending,c:C.yellow,b:C.yBg},in_progress:{l:L.inProgress,c:C.blue,b:C.bBg},completed:{l:L.done,c:C.green,b:C.gBg},issue:{l:L.issue,c:C.red,b:C.rBg}};const v=m[s]||m.pending;return <Bdg color={v.c} bg={v.b}>{v.l}</Bdg>;}
-function Sel2({value,onChange,options,style:cs}){return <select value={value} onChange={e=>onChange(e.target.value)} style={{padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,fontFamily:F.b,fontSize:13,color:C.text,cursor:"pointer",outline:"none",...cs}}>{options.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>;}
+function SearchSelect({value,onChange,options,style:cs,placeholder}){
+  const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
+  useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
+  const fil=options.filter(o=>String(o.l).toLowerCase().includes(q.toLowerCase()));
+  const cur=options.find(o=>String(o.v)===String(value));
+  return(<div ref={ref} style={{position:"relative",...cs}}>
+    <button onClick={()=>{setOpen(p=>!p);setQ("");}} style={{width:"100%",minWidth:80,padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,fontFamily:F.b,fontSize:12,color:C.text,cursor:"pointer",outline:"none",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
+      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cur?.l||placeholder||"Select..."}</span>
+      <span style={{fontSize:9,color:C.tl,flexShrink:0}}>▾</span>
+    </button>
+    {open&&<div style={{position:"absolute",top:"100%",left:0,zIndex:9999,minWidth:"100%",background:C.white,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,0.15)",marginTop:2,overflow:"hidden"}}>
+      <div style={{padding:5,borderBottom:`1px solid ${C.border}`}}><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search..." style={{width:"100%",padding:"5px 7px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:11,outline:"none",boxSizing:"border-box"}}/></div>
+      <div style={{maxHeight:180,overflowY:"auto"}}>{fil.map(o=><div key={o.v} onMouseDown={()=>{onChange(o.v);setOpen(false);setQ("");}} style={{padding:"7px 10px",cursor:"pointer",fontSize:12,fontFamily:F.b,background:String(o.v)===String(value)?C.maroonSoft:"transparent",color:String(o.v)===String(value)?C.maroon:C.text,fontWeight:String(o.v)===String(value)?600:400}}>{o.l}</div>)}
+      {fil.length===0&&<div style={{padding:10,fontSize:11,color:C.tl,textAlign:"center"}}>No results</div>}
+      </div>
+    </div>}
+  </div>);
+}
+function Sel2({value,onChange,options,style:cs}){return <SearchSelect value={value} onChange={onChange} options={options} style={cs}/>;}
 function Btn2({children,onClick,primary,small,style:cs}){return <button onClick={onClick} style={{padding:small?"6px 12px":"10px 18px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:small?11:13,fontWeight:600,background:primary?C.maroon:C.bg,color:primary?C.white:C.text,...cs}}>{children}</button>;}
 
 // ═══ LOGIN ═══
@@ -179,9 +197,9 @@ function TC({task:t,uTask,delTask,depts,areas,user:u,allM,L,lang}){
       <div style={{display:"flex",gap:6,marginTop:6}}><input type="text" placeholder={L.comment} value={cT} onChange={e=>setCT(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")subC();}} style={{flex:1,padding:"7px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none"}}/><Btn2 primary small onClick={subC}>{L.send}</Btn2></div></div>}
     {sE&&isA&&<div style={{padding:"8px 10px 8px 50px",borderTop:`1px solid ${C.border}`,background:C.maroonSoft}}>
       <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-        <select value={eA} onChange={e=>setEA(e.target.value)} style={{padding:"5px 8px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:10}}>{allM?.map(m=><option key={m.id} value={m.id}>{m.n}</option>)}</select>
+        <SearchSelect value={eA} onChange={setEA} options={allM?.map(m=>({v:m.id,l:m.n}))||[]} style={{minWidth:120}}/>
         <Btn2 primary small onClick={()=>{const nm=allM?.find(m=>m.id===eA);if(nm)uTask(t.id,{assignedTo:eA,assigneeName:nm.n});setSE(false);}}>{L.reassign}</Btn2>
-        <select value={t.status} onChange={e=>uTask(t.id,{status:e.target.value})} style={{padding:"5px 8px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:10}}><option value="pending">⏳</option><option value="in_progress">🔄</option><option value="completed">✅</option><option value="issue">⚠️</option></select>
+        <SearchSelect value={t.status} onChange={v=>uTask(t.id,{status:v})} options={[{v:"pending",l:"⏳ Pending"},{v:"in_progress",l:"🔄 In Progress"},{v:"completed",l:"✅ Done"},{v:"issue",l:"⚠️ Issue"}]} style={{minWidth:100}}/>
         {delTask&&<button onClick={()=>delTask(t.id)} style={{padding:"5px 8px",borderRadius:8,border:"none",background:C.rBg,color:C.red,fontFamily:F.b,fontSize:10,fontWeight:600,cursor:"pointer"}}>🗑️</button>}
       </div></div>}
   </div>);
@@ -197,11 +215,11 @@ function AddTF({prop,onAdd,onClose,L}){
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
       <input placeholder={L.taskTitle+" (EN)"} value={f.title} onChange={e=>sF({...f,title:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
       <input placeholder={L.taskTitle+" (HI)"} value={f.titleHi} onChange={e=>sF({...f,titleHi:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
-      <select value={f.dept} onChange={e=>sF({...f,dept:e.target.value,assignedTo:""})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>{Object.entries(prop?.depts||{}).map(([k,d])=><option key={k} value={k}>{d.i} {d.n}</option>)}</select>
-      <select value={f.assignedTo} onChange={e=>sF({...f,assignedTo:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}><option value="">{L.selectPerson}</option>{ms.map(m=><option key={m.id} value={m.id}>{m.n}</option>)}</select>
-      <select value={f.area} onChange={e=>sF({...f,area:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>{(prop?.areas||[]).map(a=><option key={a.id} value={a.id}>{a.i} {a.n}</option>)}</select>
-      <select value={f.priority} onChange={e=>sF({...f,priority:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}><option value="high">🔴</option><option value="medium">🟡</option><option value="low">🟢</option></select>
-      <select value={f.cat} onChange={e=>sF({...f,cat:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}><option value="daily">{L.daily}</option><option value="weekly">{L.weekly}</option><option value="monthly">{L.monthly}</option></select>
+      <SearchSelect value={f.dept} onChange={v=>sF({...f,dept:v,assignedTo:""})} options={Object.entries(prop?.depts||{}).map(([k,d])=>({v:k,l:`${d.i} ${d.n}`}))} style={{width:"100%"}}/>
+      <SearchSelect value={f.assignedTo} onChange={v=>sF({...f,assignedTo:v})} options={[{v:"",l:L.selectPerson},...ms.map(m=>({v:m.id,l:m.n}))]} style={{width:"100%"}}/>
+      <SearchSelect value={f.area} onChange={v=>sF({...f,area:v})} options={(prop?.areas||[]).map(a=>({v:a.id,l:`${a.i} ${a.n}`}))} style={{width:"100%"}}/>
+      <SearchSelect value={f.priority} onChange={v=>sF({...f,priority:v})} options={[{v:"high",l:"🔴 High"},{v:"medium",l:"🟡 Medium"},{v:"low",l:"🟢 Low"}]} style={{width:"100%"}}/>
+      <SearchSelect value={f.cat} onChange={v=>sF({...f,cat:v})} options={[{v:"daily",l:L.daily},{v:"weekly",l:L.weekly},{v:"monthly",l:L.monthly}]} style={{width:"100%"}}/>
       <input placeholder="Time" value={f.timeBlock} onChange={e=>sF({...f,timeBlock:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}/>
       <textarea placeholder={L.desc+" (EN)"} value={f.desc} onChange={e=>sF({...f,desc:e.target.value})} style={{gridColumn:"1/-1",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:40,resize:"vertical"}}/>
     </div>
@@ -213,8 +231,8 @@ function AddTF({prop,onAdd,onClose,L}){
 function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allS,dirs}){
   const isSA=u.role==="sa";const isA=pm?false:(u.role==="sa"||u.role==="a");
   // Pending count for assigned tasks
-  const pendDirs=isSA?dirs.filter(d=>d.status==="sent"||d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&(d.status==="sent"||d.status==="approval_req")).length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"SOP Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const pendDirs=isSA?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&d.status==="sent").length;
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"SOP Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
@@ -232,7 +250,7 @@ function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,set
           <span style={{fontSize:9,fontWeight:700,color:pm?C.blue:C.tl}}>👁️ {pm?L.previewOff:L.preview}</span>
           <button onClick={()=>{if(pm){setPM(false);setView("dashboard");}else{setPM(true);setView("mytasks");}}} style={{width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:pm?C.blue:C.border,position:"relative"}}><div style={{width:16,height:16,borderRadius:"50%",background:C.white,position:"absolute",top:2,left:pm?18:2,transition:"left 0.2s"}}/></button>
         </div>
-        {pm&&<select value={pAs} onChange={e=>{setPAs(e.target.value);setView("mytasks");}} style={{width:"100%",padding:"5px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:9,marginTop:3}}>{allS.map(s=><option key={s.id} value={s.id}>{s.n}-{s.pn}</option>)}</select>}
+        {pm&&<SearchSelect value={pAs} onChange={v=>{setPAs(v);setView("mytasks");}} options={allS.map(s=>({v:s.id,l:`${s.n}-${s.pn}`}))} style={{width:"100%",marginTop:3}}/>}
       </div>}
     </div>
     <div style={{padding:"8px 6px",borderTop:`1px solid ${C.border}`}}>
@@ -358,13 +376,8 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     {showNew&&isSA&&<div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:16}}>
       <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>➕ {L.newDirective}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-        <select value={newTo} onChange={e=>setNewTo(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>
-          {ADMIN_TARGETS.map(t=><option key={t.id} value={t.id}>{t.name} — {t.prop}</option>)}
-        </select>
-        <select value={newProp} onChange={e=>setNewProp(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>
-          <option value="all">All Properties</option>
-          {Object.entries(PROPS).map(([k,p])=><option key={k} value={k}>{p.icon} {p.sn}</option>)}
-        </select>
+        <SearchSelect value={newTo} onChange={setNewTo} options={ADMIN_TARGETS.map(t=>({v:t.id,l:`${t.name} — ${t.prop}`}))} style={{width:"100%"}}/>
+        <SearchSelect value={newProp} onChange={setNewProp} options={[{v:"all",l:"All Properties"},...Object.entries(PROPS).map(([k,p])=>({v:k,l:`${p.icon} ${p.sn}`}))]} style={{width:"100%"}}/>
       </div>
       <textarea placeholder={L.writeTask} value={newText} onChange={e=>setNewText(e.target.value)} style={{width:"100%",padding:12,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:8}}/>
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
@@ -585,7 +598,6 @@ export default function App(){
         {view==="members"&&<MembersView user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
       </>):(<>
         {view==="mytasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="mytasks" L={L} lang={lang}/>}
-        {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
         {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
         {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}

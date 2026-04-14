@@ -1,6 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
+
+function SearchSelect({value,onChange,options,style:cs,placeholder}){
+  const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
+  useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
+  const fil=options.filter(o=>String(o.l).toLowerCase().includes(q.toLowerCase()));
+  const cur=options.find(o=>String(o.v)===String(value));
+  return(<div ref={ref} style={{position:"relative",...cs}}>
+    <button onClick={()=>{setOpen(p=>!p);setQ("");}} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"#fff",fontFamily:F.b,fontSize:12,color:C.text,cursor:"pointer",outline:"none",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
+      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cur?.l||placeholder||"Select..."}</span>
+      <span style={{fontSize:9,color:C.tl,flexShrink:0}}>▾</span>
+    </button>
+    {open&&<div style={{position:"absolute",top:"100%",left:0,zIndex:9999,minWidth:"100%",background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,0.15)",marginTop:2,overflow:"hidden"}}>
+      <div style={{padding:5,borderBottom:`1px solid ${C.border}`}}><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search..." style={{width:"100%",padding:"5px 7px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:11,outline:"none",boxSizing:"border-box"}}/></div>
+      <div style={{maxHeight:180,overflowY:"auto"}}>{fil.map(o=><div key={o.v} onMouseDown={()=>{onChange(o.v);setOpen(false);setQ("");}} style={{padding:"7px 10px",cursor:"pointer",fontSize:12,fontFamily:F.b,background:String(o.v)===String(value)?C.maroonSoft:"transparent",color:String(o.v)===String(value)?C.maroon:C.text,fontWeight:String(o.v)===String(value)?600:400}}>{o.l}</div>)}
+      {fil.length===0&&<div style={{padding:10,fontSize:11,color:C.tl,textAlign:"center"}}>No results</div>}
+      </div>
+    </div>}
+  </div>);
+}
 
 // Default security setup per property (pre-loaded into roster)
 const DEFAULT_SECURITY = {
@@ -99,12 +118,10 @@ function EditModal({ entry, onSave, onClose, prop, L }) {
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard / Staff</label>
-            <select value={form.staff_id || "third-party"} onChange={e => {
-              const m = secMembers.find(x => x.id === e.target.value);
-              setForm({ ...form, staff_id: e.target.value, staff_name: m?.n || "", source: e.target.value === "third-party" ? "third-party" : "ambria" });
-            }} style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
-              {secMembers.map(m => <option key={m.id} value={m.id}>{m.n}</option>)}
-            </select>
+            <SearchSelect value={form.staff_id || "third-party"} onChange={v => {
+              const m = secMembers.find(x => x.id === v);
+              setForm({ ...form, staff_id: v, staff_name: m?.n || "", source: v === "third-party" ? "third-party" : "ambria" });
+            }} options={secMembers.map(m => ({ v: m.id, l: m.n }))} style={{ width: "100%" }}/>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div>
