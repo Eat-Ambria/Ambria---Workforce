@@ -189,17 +189,17 @@ function TC({task:t,uTask,delTask,depts,areas,user:u,allM,L,lang}){
 
 // ═══ ADD TASK ═══
 function AddTF({prop,onAdd,onClose,L}){
-  const[f,sF]=useState({title:"",titleHi:"",dept:Object.keys(prop.depts)[0],area:prop.areas[0]?.id,assignedTo:"",priority:"medium",cat:"daily",dur:"1h",desc:"",descHi:"",timeBlock:"9:00-10:00"});
-  const ms=prop.depts[f.dept]?.m||[];
+  const[f,sF]=useState({title:"",titleHi:"",dept:Object.keys(prop?.depts||{})[0]||"h",area:prop?.areas?.[0]?.id,assignedTo:"",priority:"medium",cat:"daily",dur:"1h",desc:"",descHi:"",timeBlock:"9:00-10:00"});
+  const ms=prop?.depts?.[f.dept]?.m||[];
   const sub=()=>{if(!f.title||!f.assignedTo)return;const m=ms.find(x=>x.id===f.assignedTo);onAdd({id:`${prop.id}_c_${Date.now()}`,prop:prop.id,...f,assigneeName:m?.n||"?",status:"pending",notes:"",completedAt:null,completedBy:"",photos:[],isTeam:false});onClose();};
   return(<div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:16}}>
     <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,marginBottom:12}}>➕ {L.addTask}</div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
       <input placeholder={L.taskTitle+" (EN)"} value={f.title} onChange={e=>sF({...f,title:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
       <input placeholder={L.taskTitle+" (HI)"} value={f.titleHi} onChange={e=>sF({...f,titleHi:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
-      <select value={f.dept} onChange={e=>sF({...f,dept:e.target.value,assignedTo:""})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>{Object.entries(prop.depts).map(([k,d])=><option key={k} value={k}>{d.i} {d.n}</option>)}</select>
+      <select value={f.dept} onChange={e=>sF({...f,dept:e.target.value,assignedTo:""})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>{Object.entries(prop?.depts||{}).map(([k,d])=><option key={k} value={k}>{d.i} {d.n}</option>)}</select>
       <select value={f.assignedTo} onChange={e=>sF({...f,assignedTo:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}><option value="">{L.selectPerson}</option>{ms.map(m=><option key={m.id} value={m.id}>{m.n}</option>)}</select>
-      <select value={f.area} onChange={e=>sF({...f,area:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>{prop.areas.map(a=><option key={a.id} value={a.id}>{a.i} {a.n}</option>)}</select>
+      <select value={f.area} onChange={e=>sF({...f,area:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>{(prop?.areas||[]).map(a=><option key={a.id} value={a.id}>{a.i} {a.n}</option>)}</select>
       <select value={f.priority} onChange={e=>sF({...f,priority:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}><option value="high">🔴</option><option value="medium">🟡</option><option value="low">🟢</option></select>
       <select value={f.cat} onChange={e=>sF({...f,cat:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}><option value="daily">{L.daily}</option><option value="weekly">{L.weekly}</option><option value="monthly">{L.monthly}</option></select>
       <input placeholder="Time" value={f.timeBlock} onChange={e=>sF({...f,timeBlock:e.target.value})} style={{padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}/>
@@ -253,7 +253,7 @@ function NPanel({ns,onClose,onClr,L,onClickNotif}){return(<div style={{position:
 
 function AttView({user:u,att,setAtt,prop,L}){
   const isA=u.role==="sa"||u.role==="a";const tk=td.toISOString().split("T")[0];const mr=att.find(a=>a.uid===u.id&&a.date===tk);
-  const allM=Object.entries(prop.depts).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
+  const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
   const attRef=useRef(null);
   const doCheckIn=()=>{attRef.current?.click();};
   const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(!mr)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ev.target.result,coPhoto:null}]);else if(!mr.co)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ev.target.result}:a));};r.readAsDataURL(f);e.target.value="";};
@@ -274,7 +274,7 @@ function AttView({user:u,att,setAtt,prop,L}){
 function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
   const[cv,setCV]=useState("daily");const[fD,sFD]=useState("all");const[fS,sFS]=useState("all");const[fC,sFC]=useState("all");const[sa,setSA]=useState(false);
   const isA=u.role==="sa"||u.role==="a";
-  const allM=Object.entries(prop.depts).flatMap(([d,dept])=>dept.m.map(m=>({...m,dept:d,dn:dept.n,di:dept.i})));
+  const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dept:d,dn:dept.n,di:dept.i})));
   const uT=useCallback((id,up)=>{setTasks(prev=>prev.map(t=>t.id===id?{...t,...up}:t));},[setTasks]);
   const dT=useCallback((id)=>{setTasks(prev=>prev.filter(t=>t.id!==id));},[setTasks]);
 
@@ -302,15 +302,15 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
     </div>}
     {vt==="mytasks"&&!isA&&<div style={{background:C.maroonSoft,borderRadius:8,padding:"7px 12px",marginBottom:10,fontSize:11}}>{L.steps}</div>}
     {sa&&isA&&<AddTF prop={prop} onAdd={(t)=>setTasks(prev=>[...prev,t])} onClose={()=>setSA(false)} L={L}/>}
-    {vt==="tasks"&&<div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}><Sel2 value={fD} onChange={sFD} options={[{v:"all",l:"All"},...Object.entries(prop.depts).map(([k,d])=>({v:k,l:`${d.i} ${d.n}`}))]}/><Sel2 value={fS} onChange={sFS} options={[{v:"all",l:"All"},{v:"pending",l:"⏳"},{v:"completed",l:"✅"},{v:"issue",l:"⚠️"}]}/><Sel2 value={fC} onChange={sFC} options={[{v:"all",l:"All"},{v:"daily",l:L.daily},{v:"weekly",l:L.weekly},{v:"monthly",l:L.monthly}]}/></div>}
+    {vt==="tasks"&&<div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}><Sel2 value={fD} onChange={sFD} options={[{v:"all",l:"All"},...Object.entries(prop?.depts||{}).map(([k,d])=>({v:k,l:`${d.i} ${d.n}`}))]}/><Sel2 value={fS} onChange={sFS} options={[{v:"all",l:"All"},{v:"pending",l:"⏳"},{v:"completed",l:"✅"},{v:"issue",l:"⚠️"}]}/><Sel2 value={fC} onChange={sFC} options={[{v:"all",l:"All"},{v:"daily",l:L.daily},{v:"weekly",l:L.weekly},{v:"monthly",l:L.monthly}]}/></div>}
     {cO.filter(c=>gr[c]).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8}}><span style={{width:4,height:12,borderRadius:2,background:cC[cat]}}/><h3 style={{fontFamily:F.d,fontSize:14,fontWeight:700,margin:0}}>{cL[cat]}</h3><Bdg color={cC[cat]} bg={`${cC[cat]}15`}>{gr[cat].length}</Bdg></div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>{gr[cat].map(task=><TC key={task.id} task={task} uTask={uT} delTask={isA?dT:null} depts={prop.depts} areas={prop.areas} user={u} allM={allM} L={L} lang={lang}/>)}</div></div>))}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>{gr[cat].map(task=><TC key={task.id} task={task} uTask={uT} delTask={isA?dT:null} depts={prop?.depts||{}} areas={prop?.areas||[]} user={u} allM={allM} L={L} lang={lang}/>)}</div></div>))}
     {fl.length===0&&<div style={{background:C.white,borderRadius:12,padding:24,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:24}}>🎉</div><div style={{fontFamily:F.d,fontSize:14,fontWeight:700,marginTop:4}}>{L.noTasks}</div></div>}
   </div>);
 }
 
-function TeamV({tasks,prop,L}){return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 10px"}}>{L.team} - {prop.sn}</h1>
-  {Object.entries(prop.depts).map(([k,d])=>(<div key={k} style={{background:C.white,borderRadius:12,padding:12,border:`1px solid ${C.border}`,marginBottom:10}}>
+function TeamV({tasks,prop,L}){return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 10px"}}>{L.team} - {prop?.sn}</h1>
+  {Object.entries(prop?.depts||{}).map(([k,d])=>(<div key={k} style={{background:C.white,borderRadius:12,padding:12,border:`1px solid ${C.border}`,marginBottom:10}}>
     <div style={{fontFamily:F.d,fontSize:14,fontWeight:700,marginBottom:8}}>{d.i} {d.n}</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6}}>{d.m.map(m=>{const mt=tasks.filter(t=>t.assignedTo===m.id),md=mt.filter(t=>t.status==="completed").length;
       return(<div key={m.id} style={{padding:8,background:d.bg,borderRadius:8,borderLeft:`3px solid ${d.c}`}}><div style={{fontWeight:600,fontSize:11,marginBottom:3}}>{m.n}</div><div style={{display:"flex",gap:3}}><Bdg color={C.green} bg={C.gBg}>✅{md}</Bdg><Bdg color={C.yellow} bg={C.yBg}>⏳{mt.filter(t=>t.status==="pending").length}</Bdg></div></div>);})}</div></div>))}</div>);}
@@ -548,13 +548,15 @@ export default function App(){
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
-  if(!user)return <LoginScreen onLogin={(u2)=>{setUser(u2);if(u2.prop!=="all")sAP(u2.prop);sV(u2.role==="e"?"mytasks":"dashboard");}} lang={lang} setLang={setLang}/>;
+  if(!user)return <LoginScreen onLogin={(u2)=>{setUser(u2);if(u2.prop&&u2.prop!=="all")sAP(u2.prop);sV(u2.role==="e"?"mytasks":"dashboard");}} lang={lang} setLang={setLang}/>;
 
   const ps=allS.find(s=>s.id===pAs);
   const eU=pm&&user.role==="sa"&&ps?{id:ps.id,name:ps.n,role:"e",prop:ps.pid}:user;
   const isA=eU.role==="sa"||eU.role==="a";
   const eP=pm&&ps?ps.pid:aP;
-  const prop=PROPS[eP];const tasks=tS[eP]||[];
+  console.log("PROPS keys:", Object.keys(PROPS));
+  console.log("Looking up property:", eP);
+  const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){if(o.status!=="completed"&&n2.status==="completed")setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!=="issue"&&n2.status==="issue")setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);}});return{...prev,[eP]:nt};});};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>

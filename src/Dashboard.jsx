@@ -33,7 +33,7 @@ function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
 
 // ─── Absent Widget ───────────────────────────────────────────────────────────
 function AbsentWidget({ att, leaves, prop, today, L }) {
-  const allStaff = Object.values(prop.depts).flatMap(d => d.m);
+  const allStaff = Object.values(prop?.depts||{}).flatMap(d => d.m);
   const checkedInIds = att.filter(a => a.date === today).map(a => a.uid);
   const onLeaveIds = leaves
     .filter(l => l.status === "approved" && l.start_date <= today && l.end_date >= today)
@@ -145,7 +145,7 @@ function CriticalPanel({ tasks, L }) {
 
 // ─── Staff Performance ────────────────────────────────────────────────────────
 function StaffPerf({ tasks, prop, L }) {
-  const allM = Object.values(prop.depts).flatMap(d => d.m.map(m => ({ ...m, dc: d.c, dn: d.n })));
+  const allM = Object.values(prop?.depts||{}).flatMap(d => d.m.map(m => ({ ...m, dc: d.c, dn: d.n })));
   const perf = allM.map(m => {
     const mt = tasks.filter(t => t.assignedTo === m.id);
     const done = mt.filter(t => t.status === "completed").length;
@@ -228,7 +228,7 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
       .then(({ data }) => { if (data) setLeaves(data); });
   }, [today]);
 
-  const deptList = Object.entries(prop.depts).map(([key, d]) => {
+  const deptList = Object.entries(prop?.depts||{}).map(([key, d]) => {
     const dt = tasks.filter(t => t.dept === key);
     const done = dt.filter(t => t.status === "completed").length;
     return { key, ...d, done, total: dt.length, pct: dt.length ? Math.round((done / dt.length) * 100) : 0 };

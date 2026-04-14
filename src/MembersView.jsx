@@ -139,7 +139,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   const allByProp = {};
   Object.entries(PROPS).forEach(([pk, p]) => {
     allByProp[pk] = { prop: p, members: [] };
-    Object.entries(p.depts).forEach(([dk, d]) => {
+    Object.entries(p?.depts||{}).forEach(([dk, d]) => {
       d.m.forEach(m => {
         const dbInfo = dbUsers[m.id] || {};
         const isRemoved = removedIds.includes(m.id) || dbInfo.is_active === false;

@@ -15,7 +15,7 @@ export default function AreasView({ tasks, prop, lang }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 }}>
-        {prop.areas.map(a => {
+        {(prop?.areas||[]).map(a => {
           const at = tasks.filter(t => t.area === a.id);
           const ad = at.filter(t => t.status === "completed").length;
           const ai = at.filter(t => t.status === "issue").length;
@@ -93,7 +93,7 @@ export default function AreasView({ tasks, prop, lang }) {
           {[
             {
               label: "100% Complete",
-              count: prop.areas.filter(a => {
+              count: (prop?.areas||[]).filter(a => {
                 const at = tasks.filter(t => t.area === a.id);
                 return at.length > 0 && at.every(t => t.status === "completed");
               }).length,
@@ -101,7 +101,7 @@ export default function AreasView({ tasks, prop, lang }) {
             },
             {
               label: "In Progress",
-              count: prop.areas.filter(a => {
+              count: (prop?.areas||[]).filter(a => {
                 const at = tasks.filter(t => t.area === a.id);
                 const done = at.filter(t => t.status === "completed").length;
                 return at.length > 0 && done > 0 && done < at.length;
@@ -110,7 +110,7 @@ export default function AreasView({ tasks, prop, lang }) {
             },
             {
               label: "Has Issues",
-              count: prop.areas.filter(a => tasks.some(t => t.area === a.id && t.status === "issue")).length,
+              count: (prop?.areas||[]).filter(a => tasks.some(t => t.area === a.id && t.status === "issue")).length,
               color: C.red, bg: C.rBg, icon: "⚠️"
             },
           ].map(s => (

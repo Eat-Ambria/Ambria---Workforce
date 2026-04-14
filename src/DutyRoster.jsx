@@ -70,7 +70,7 @@ function ShiftCard({ entry, onEdit, isAdmin, L }) {
 }
 
 function EditModal({ entry, onSave, onClose, prop, L }) {
-  const allMembers = Object.values(prop.depts).flatMap(d => d.m);
+  const allMembers = Object.values(prop?.depts||{}).flatMap(d => d.m);
   const [form, setForm] = useState({
     staff_name: entry.staff_name || "",
     staff_id: entry.staff_id || "",
@@ -83,7 +83,7 @@ function EditModal({ entry, onSave, onClose, prop, L }) {
   });
 
   const secMembers = [
-    ...prop.depts.s?.m || [],
+    ...prop?.depts?.s?.m || [],
     { id: "third-party", n: "Third Party Guard" },
   ];
 
@@ -212,7 +212,7 @@ export default function DutyRoster({ prop, user, lang }) {
   const nightSlots = defaults.filter(d => d.shift === "night");
 
   // Also show all staff from other depts for duty assignment
-  const allStaff = Object.values(prop.depts).flatMap(d =>
+  const allStaff = Object.values(prop?.depts||{}).flatMap(d =>
     d.m.map(m => ({ ...m, deptName: d.n, deptIcon: d.i }))
   );
 

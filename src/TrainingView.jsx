@@ -105,7 +105,7 @@ export default function TrainingView({ user, prop, lang }) {
   const myPct = allVideos.length ? Math.round((myWatched / allVideos.length) * 100) : 0;
 
   // Staff progress summary (admin)
-  const allStaff = Object.values(prop.depts).flatMap(d => d.m.map(m => ({ ...m, deptName: d.n })));
+  const allStaff = Object.values(prop?.depts||{}).flatMap(d => d.m.map(m => ({ ...m, deptName: d.n })));
   const staffSummary = allStaff.map(m => {
     const watched = staffProgress.filter(r => r.staff_id === m.id).length;
     return { ...m, watched, total: allVideos.length, pct: allVideos.length ? Math.round((watched / allVideos.length) * 100) : 0 };
