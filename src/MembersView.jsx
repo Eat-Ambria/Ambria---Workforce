@@ -102,15 +102,25 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       });
   }, []);
 
-  const addMember = () => {
+  const addMember = async () => {
     if (!fName.trim() || !fUser.trim()) return;
-    const id = "cm_" + Date.now();
-    setCustomMembers(prev => [...prev, {
-      id, n: fName.trim(), u: fUser.trim().toLowerCase(),
-      p: fPass || fUser.trim() + "@123",
-      prop: fProp, dept: fDept, role: "e",
-      joining_date: fJoining || null, is_active: true
-    }]);
+    const uname = fUser.trim().toLowerCase();
+    const pass = fPass || uname + "@123";
+    const id = `${fProp}_${uname}`;
+    const newM = { id, n: fName.trim(), u: uname, p: pass, prop: fProp, dept: fDept, role: "e", joining_date: fJoining || null, is_active: true };
+    const { error } = await supabase.from("users").insert({
+      id, username: uname, password: pass, name: fName.trim(),
+      role: "e", property: fProp, department: fDept,
+      joining_date: fJoining || null, is_active: true,
+    });
+    if (error) {
+      // ID conflict — use timestamp fallback
+      const altId = `${fProp}_${uname}_${Date.now()}`;
+      await supabase.from("users").insert({ ...newM, id: altId, username: altId });
+      setCustomMembers(prev => [...prev, { ...newM, id: altId }]);
+    } else {
+      setCustomMembers(prev => [...prev, newM]);
+    }
     setFName(""); setFUser(""); setFPass(""); setFJoining(""); setShowAdd(false);
   };
 

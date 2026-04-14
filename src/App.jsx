@@ -104,6 +104,9 @@ const ALL_T={};Object.keys(PROPS).forEach(k=>{ALL_T[k]=buildTasks(k);});
 const td=new Date();const dN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];const mN=["January","February","March","April","May","June","July","August","September","October","November","December"];
 function dIn(y,m){return new Date(y,m+1,0).getDate();}function gFD(y,m){return new Date(y,m,1).getDay();}
 
+// ═══ SUPABASE HELPERS ═══
+const syncTask=(task)=>{supabase.from("tasks").upsert({task_key:task.id,property:task.prop,date:new Date().toISOString().split("T")[0],status:task.status,notes:task.notes||null,completed_at:task.completedAt||null,completed_by:task.completedBy||null,photos:task.photos||[]},{onConflict:"task_key,date"}).then(({error})=>{if(error)console.error("task sync:",error.message);});};
+
 // ═══ UI ═══
 function Bdg({children,color=C.tl,bg=C.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
 function SL2({s,L}){const m={pending:{l:L.pending,c:C.yellow,b:C.yBg},in_progress:{l:L.inProgress,c:C.blue,b:C.bBg},completed:{l:L.done,c:C.green,b:C.gBg},issue:{l:L.issue,c:C.red,b:C.rBg}};const v=m[s]||m.pending;return <Bdg color={v.c} bg={v.b}>{v.l}</Bdg>;}
@@ -130,10 +133,8 @@ function Btn2({children,onClick,primary,small,style:cs}){return <button onClick=
 
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang}){
-  const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loaded,setLoaded]=useState(false);const[loading,setLoading]=useState(false);
-  // Load saved credentials on mount
-  if(!loaded){setLoaded(true);try{window.storage?.get("ambria_cred").then(r=>{if(r?.value){const c=JSON.parse(r.value);sU(c.u||"");sP(c.p||"");setRem(true);}}).catch(()=>{});}catch(e){}}
-  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("*").eq("username",u.trim()).eq("password",p).single();console.log("[Login] Supabase response:",{data,error});if(error||!data){sE(L.invalidLogin);}else{if(rem)try{window.storage?.set("ambria_cred",JSON.stringify({u:u.trim(),p}));}catch(e){}else try{window.storage?.delete("ambria_cred");}catch(e){}onLogin(data);}}catch(e){console.log("[Login] Exception:",e);sE(L.invalidLogin);}finally{setLoading(false);}};
+  const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
+  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("*").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:11,cursor:"pointer",fontWeight:600,color:C.maroon}}>{lang==="en"?"हिंदी":"English"}</button></div>
@@ -273,8 +274,13 @@ function AttView({user:u,att,setAtt,prop,L}){
   const isA=u.role==="sa"||u.role==="a";const tk=td.toISOString().split("T")[0];const mr=att.find(a=>a.uid===u.id&&a.date===tk);
   const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
   const attRef=useRef(null);
+  useEffect(()=>{
+    supabase.from("attendance").select("*").eq("property",prop.id).eq("date",tk).then(({data})=>{
+      if(data&&data.length>0)setAtt(data.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:r.check_in_photo||null,coPhoto:r.check_out_photo||null})));
+    });
+  },[prop.id]);
   const doCheckIn=()=>{attRef.current?.click();};
-  const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(!mr)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ev.target.result,coPhoto:null}]);else if(!mr.co)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ev.target.result}:a));};r.readAsDataURL(f);e.target.value="";};
+  const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});const ph=ev.target.result;if(!mr){const{error}=await supabase.from("attendance").insert({user_id:u.id,user_name:u.name,property:prop.id,date:tk,check_in:tm,check_in_photo:ph});if(!error)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ph,coPhoto:null}]);}else if(!mr.co){const{error}=await supabase.from("attendance").update({check_out:tm,check_out_photo:ph}).eq("user_id",u.id).eq("date",tk);if(!error)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ph}:a));}};r.readAsDataURL(f);e.target.value="";};
   return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 12px"}}>🕐 {L.attendance} - {prop.sn}</h1>
     <input ref={attRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{display:"none"}}/>
     {u.role==="e"&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:16}}><div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{L.today} - {tk}</div>
@@ -355,11 +361,12 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const[nDue,setNDue]=useState("");
   const[filterTo,setFilterTo]=useState("all");
 
-  const sendTask=()=>{if(!newText.trim())return;
+  const sendTask=async()=>{if(!newText.trim())return;
     const tgt=ADMIN_TARGETS.find(t=>t.id===newTo);
-    const newDir={id:"at_"+Date.now(),from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:new Date().toISOString(),createdTime:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date().toLocaleDateString("en-IN")};
+    const{data,error}=await supabase.from("assigned_tasks").insert({from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo:nPh,status:"sent",due_date:nDue||null}).select().single();
+    if(error){console.error("sendTask:",error.message);return;}
+    const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
     setDirs(prev=>[newDir,...prev]);
-    // Notify the TARGET person, not the creator
     setNs(p=>[{type:"newTask",task:"📝 New task: "+newText.trim().slice(0,40),by:u.name,prop:newProp,time:newDir.createdTime,forUser:newTo},...p]);
     setNewText("");setNPh(null);setNDue("");setShowNew(false);
   };
@@ -426,40 +433,65 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const dueFmt=dir.dueDate?new Date(dir.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"";
 
   // MARK COMPLETE — photo optional, note optional
-  const handleComplete=()=>{
+  const handleComplete=async()=>{
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
     const dt=new Date().toLocaleDateString("en-IN");
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:cPhoto||null,replies:[...d.replies,{id:"r_"+Date.now(),by:u.name,text:"✅ "+L.markComplete+(cNote.trim()?" — "+cNote.trim():""),photo:cPhoto||null,type:"completed",time:tm,date:dt}]}:d));
-    // Notify SA (task creator) about completion
+    const replyText="✅ "+L.markComplete+(cNote.trim()?" — "+cNote.trim():"");
+    const[,{data:repRow}]=await Promise.all([
+      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:cPhoto||null}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,photo:cPhoto||null,type:"completed"}).select().single()
+    ]);
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:cPhoto||null,type:"completed",time:tm,date:dt};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:cPhoto||null,replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"completed",task:"✅ Completed: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.from},...p]);
     setCNote("");setCPhoto(null);setShowComplete(false);
   };
 
   // SEND FOR APPROVAL — optional
-  const sendApproval=()=>{
+  const sendApproval=async()=>{
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approval_req",replies:[...d.replies,{id:"r_"+Date.now(),by:u.name,text:"🔔 "+L.reqApproval,type:"approval_req",time:tm,date:new Date().toLocaleDateString("en-IN")}]}:d));
+    const replyText="🔔 "+L.reqApproval;
+    const[,{data:repRow}]=await Promise.all([
+      supabase.from("assigned_tasks").update({status:"approval_req"}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,type:"approval_req"}).select().single()
+    ]);
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"approval_req",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approval_req",replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"approval",task:"🔔 Approval: "+dir.text.slice(0,30)+"...",by:u.name,prop:dir.prop,time:tm,dirId:dir.id},...p]);
   };
 
   // REPLY
-  const addReply=()=>{
+  const addReply=async()=>{
     if(!rText.trim()&&!rPhoto)return;
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,replies:[...d.replies,{id:"r_"+Date.now(),by:u.name,text:rText.trim(),photo:rPhoto,type:"reply",time:tm,date:new Date().toLocaleDateString("en-IN")}]}:d));
+    const{data:repRow}=await supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:rText.trim(),photo:rPhoto,type:"reply"}).select().single();
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:rText.trim(),photo:rPhoto,type:"reply",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,replies:[...d.replies,newReply]}:d));
     setRText("");setRPhoto(null);setShowReply(false);
   };
 
   // SA: OK / NOT OK
-  const handleOk=()=>{
+  const handleOk=async()=>{
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approved",replies:[...d.replies,{id:"r_"+Date.now(),by:u.name,text:"✅ OK — Approved",type:"approved",time:tm,date:new Date().toLocaleDateString("en-IN")}]}:d));
+    const replyText="✅ OK — Approved";
+    const[,{data:repRow}]=await Promise.all([
+      supabase.from("assigned_tasks").update({status:"approved"}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,type:"approved"}).select().single()
+    ]);
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"approved",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approved",replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"approved",task:"✅ Approved: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.to},...p]);
   };
-  const handleNotOk=()=>{
+  const handleNotOk=async()=>{
     if(!remarks.trim()){setShowRemarks(true);return;}
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"rejected",remarksSA:remarks.trim(),replies:[...d.replies,{id:"r_"+Date.now(),by:u.name,text:"❌ Not OK: "+remarks.trim(),type:"rejected",time:tm,date:new Date().toLocaleDateString("en-IN")}]}:d));
+    const replyText="❌ Not OK: "+remarks.trim();
+    const[,{data:repRow}]=await Promise.all([
+      supabase.from("assigned_tasks").update({status:"rejected",remarks_sa:remarks.trim()}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,type:"rejected"}).select().single()
+    ]);
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"rejected",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"rejected",remarksSA:remarks.trim(),replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"rejected",task:"❌ Not OK: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.to},...p]);
     setRemarks("");setShowRemarks(false);
   };
@@ -479,7 +511,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         </div>
       </div>
       <Bdg color={st.c} bg={st.b}>{st.l}</Bdg>
-      {isSA&&<button onClick={()=>setDirs(prev=>prev.filter(d=>d.id!==dir.id))} style={{width:22,height:22,borderRadius:6,border:"none",cursor:"pointer",background:C.rBg,color:C.red,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>}
+      {isSA&&<button onClick={async()=>{await supabase.from("assigned_tasks").delete().eq("id",dir.id);setDirs(prev=>prev.filter(d=>d.id!==dir.id));}} style={{width:22,height:22,borderRadius:6,border:"none",cursor:"pointer",background:C.rBg,color:C.red,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>}
     </div>
 
     {/* BODY */}
@@ -557,12 +589,47 @@ function PropBar({ap,setAP,user:u}){
 
 // ═══ APP ═══
 export default function App(){
-  const[lang,setLang]=useState("en");const[user,setUser]=useState(null);const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);
+  const[lang,setLang]=useState("en");const[user,setUser]=useState(null);const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
+  // ═══ LOAD ALL DATA FROM SUPABASE AFTER LOGIN ═══
+  useEffect(()=>{
+    if(!user)return;
+    const today=new Date().toISOString().split("T")[0];
+    setLoading(true);
+    (async()=>{
+      try{
+        // 1. Task status overrides for today (re-hydrate template tasks with saved state)
+        const props=user.prop==="all"?Object.keys(PROPS):[user.prop||"pp"];
+        for(const pid of props){
+          const{data:td}=await supabase.from("tasks").select("task_key,status,notes,completed_at,completed_by,photos").eq("property",pid).eq("date",today);
+          if(td&&td.length>0){const ov={};td.forEach(r=>{ov[r.task_key]=r;});sTS(prev=>({...prev,[pid]:(prev[pid]||[]).map(t=>{const o=ov[t.id];if(!o)return t;return{...t,status:o.status||t.status,notes:o.notes||t.notes,completedAt:o.completed_at||null,completedBy:o.completed_by||"",photos:o.photos||[]};})}))}
+        }
+        // 2. Assigned tasks + replies
+        let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
+        if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
+        const[{data:atData},{data:repData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at")]);
+        if(atData){
+          const repMap={};
+          (repData||[]).forEach(r=>{if(!repMap[r.task_id])repMap[r.task_id]=[];repMap[r.task_id].push({id:r.id,by:r.from_name,text:r.text,photo:r.photo,type:r.type,time:new Date(r.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),date:new Date(r.created_at).toLocaleDateString("en-IN")});});
+          setDirs(atData.map(t=>({id:t.id,from:t.from_user,fromName:t.from_name,to:t.to_user,toName:t.to_name,toColor:t.to_color,prop:t.property,text:t.text,photo:t.photo,status:t.status,replies:repMap[t.id]||[],dueDate:t.due_date,completedAt:t.completed_at,completionNote:t.completion_note||"",completionPhoto:t.completion_photo,remarksSA:t.remarks_sa||"",createdAt:t.created_at,createdTime:new Date(t.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(t.created_at).toLocaleDateString("en-IN")})));
+        }
+        // 3. Custom members from users table (those not in PROPS template)
+        const allTemplateIds=new Set(allS.map(m=>m.id));
+        const{data:allUsers}=await supabase.from("users").select("*");
+        if(allUsers){
+          const extra=allUsers.filter(u=>!allTemplateIds.has(u.id)&&u.role==="e");
+          setCM(extra.map(u=>({id:u.id,n:u.name,u:u.username,p:u.password,prop:u.property,dept:u.department,role:"e",joining_date:u.joining_date,is_active:u.is_active!==false})));
+          const inactive=allUsers.filter(u=>u.is_active===false).map(u=>u.id);
+          setRI(inactive);
+        }
+      }catch(e){console.error("Load error:",e);}
+      finally{setLoading(false);}
+    })();
+  },[user?.id]);
+
   if(!user)return <LoginScreen onLogin={(u2)=>{
-    // DB has 'property' column; normalize to 'prop' so all app code works uniformly
     const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
@@ -573,12 +640,11 @@ export default function App(){
   const eU=pm&&user.role==="sa"&&ps?{id:ps.id,name:ps.n,role:"e",prop:ps.pid}:user;
   const isA=eU.role==="sa"||eU.role==="a";
   const eP=pm&&ps?ps.pid:aP;
-  console.log("PROPS keys:", Object.keys(PROPS));
-  console.log("Looking up property:", eP);
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
-  const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){if(o.status!=="completed"&&n2.status==="completed")setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!=="issue"&&n2.status==="issue")setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);}});return{...prev,[eP]:nt};});};
+  const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){if(o.status!=="completed"&&n2.status==="completed")setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!=="issue"&&n2.status==="issue")setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
+    {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon}}>Ambria</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
     <Sidebar view={view} setView={sV} user={user} onLogout={()=>{setUser(null);setPM(false);sV("dashboard");}} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allS={allS} dirs={dirs}/>
     {sN&&<NPanel ns={ns} onClose={()=>setSN(false)} onClr={()=>{setNs([]);setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div style={{marginLeft:185,padding:"0 18px 18px",minHeight:"100vh"}}>
