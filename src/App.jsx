@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react";
+import { supabase } from "./supabase.js";
 
 const C={maroon:"#7B1E2F",maroonLight:"#9A2E42",maroonSoft:"#F9F0F2",accent:"#C4956A",white:"#FFF",bg:"#FAFAFA",text:"#2D2D2D",tl:"#7A7A7A",border:"#EDEDED",green:"#2E8B57",gBg:"#EBF5F0",blue:"#3B6FC0",bBg:"#EBF1FA",yellow:"#C68A1D",yBg:"#FDF6E8",red:"#C0392B",rBg:"#FBEAE8"};
 const lnk=document.createElement("link");lnk.href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap";lnk.rel="stylesheet";document.head.appendChild(lnk);
@@ -158,10 +159,10 @@ function Btn2({children,onClick,primary,small,style:cs}){return <button onClick=
 
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang}){
-  const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loaded,setLoaded]=useState(false);
+  const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loaded,setLoaded]=useState(false);const[loading,setLoading]=useState(false);
   // Load saved credentials on mount
   if(!loaded){setLoaded(true);try{window.storage?.get("ambria_cred").then(r=>{if(r?.value){const c=JSON.parse(r.value);sU(c.u||"");sP(c.p||"");setRem(true);}}).catch(()=>{});}catch(e){}}
-  const go=()=>{const usr=USERS.find(x=>x.u.toLowerCase()===u.toLowerCase().trim()&&x.p===p);if(usr){sE("");if(rem)try{window.storage?.set("ambria_cred",JSON.stringify({u:u.trim(),p}));}catch(e){}else try{window.storage?.delete("ambria_cred");}catch(e){}onLogin(usr);}else sE(L.invalidLogin);};
+  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("*").eq("u",u.toLowerCase().trim()).single();if(error||!data||data.p!==p){sE(L.invalidLogin);}else{if(rem)try{window.storage?.set("ambria_cred",JSON.stringify({u:u.trim(),p}));}catch(e){}else try{window.storage?.delete("ambria_cred");}catch(e){}onLogin(data);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:11,cursor:"pointer",fontWeight:600,color:C.maroon}}>{lang==="en"?"हिंदी":"English"}</button></div>
@@ -170,7 +171,7 @@ function LoginScreen({onLogin,lang,setLang}){
       <div style={{marginBottom:12}}><label style={{fontSize:12,fontWeight:600,marginBottom:5,display:"block"}}>{L.password}</label><div style={{position:"relative"}}><input type={sh?"text":"password"} value={p} onChange={e=>sP(e.target.value)} placeholder={L.enterPass} onKeyDown={e=>{if(e.key==="Enter")go();}} style={{width:"100%",padding:"12px 16px",paddingRight:44,borderRadius:10,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:14,outline:"none",boxSizing:"border-box",background:C.bg}}/><button onClick={()=>sSh(!sh)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",cursor:"pointer",fontSize:16}}>{sh?"🙈":"👁️"}</button></div></div>
       <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,cursor:"pointer",fontSize:12,color:C.tl}}><div onClick={()=>setRem(!rem)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${rem?C.maroon:C.border}`,background:rem?C.maroon:C.white,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{rem&&<span style={{color:C.white,fontSize:11,fontWeight:700}}>✓</span>}</div>{lang==="hi"?"पासवर्ड याद रखें":"Remember me"}</label>
       {err&&<div style={{background:C.rBg,color:C.red,padding:"10px",borderRadius:8,fontSize:12,marginBottom:14}}>{err}</div>}
-      <button onClick={go} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:15,fontWeight:700,cursor:"pointer"}}>{L.login}</button>
+      <button onClick={go} disabled={loading} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:loading?"#9A2E42":C.maroon,color:C.white,fontFamily:F.b,fontSize:15,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.8:1}}>{loading?"...":L.login}</button>
     </div></div>);
 }
 
