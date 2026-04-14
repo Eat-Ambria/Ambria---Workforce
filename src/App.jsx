@@ -1,66 +1,19 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
+import { C, F, LANGS, PROPS, USERS } from "./constants.js";
+import Dashboard from "./Dashboard.jsx";
+import DutyRoster from "./DutyRoster.jsx";
+import LeaveManager from "./LeaveManager.jsx";
+import ChemicalGuide from "./ChemicalGuide.jsx";
+import AreasView from "./AreasView.jsx";
+import TrainingView from "./TrainingView.jsx";
+import MembersView from "./MembersView.jsx";
 
-const C={maroon:"#7B1E2F",maroonLight:"#9A2E42",maroonSoft:"#F9F0F2",accent:"#C4956A",white:"#FFF",bg:"#FAFAFA",text:"#2D2D2D",tl:"#7A7A7A",border:"#EDEDED",green:"#2E8B57",gBg:"#EBF5F0",blue:"#3B6FC0",bBg:"#EBF1FA",yellow:"#C68A1D",yBg:"#FDF6E8",red:"#C0392B",rBg:"#FBEAE8"};
+
 const lnk=document.createElement("link");lnk.href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap";lnk.rel="stylesheet";document.head.appendChild(lnk);
-const F={b:"'Outfit',sans-serif",d:"'Cormorant Garamond',serif"};
 
-const L_EN={myTasks:"My Tasks",calendar:"Calendar",dashboard:"Dashboard",allTasks:"All Tasks",team:"Team",areas:"Areas",attendance:"Attendance",login:"Sign In",logout:"Logout",username:"Username",password:"Password",enterUser:"Enter username",enterPass:"Enter password",invalidLogin:"Invalid credentials",contactSuper:"Contact supervisor",checkIn:"Check In",checkOut:"Check Out",checkedIn:"Checked In",notCheckedIn:"Not checked in",done:"Done",pending:"Pending",issue:"Issue",inProgress:"In Progress",total:"Total",photos:"Photos",issues:"Issues",sop:"SOP Instructions",uploadPhoto:"Open Camera & Take Photo",photoNeeded:"Photo required",retakePhoto:"Retake (blurry?)",comment:"Comment",send:"Send",reassign:"Reassign",addTask:"Add Task",save:"Save",cancel:"Cancel",del:"Delete",taskTitle:"Task title",selectPerson:"Assign to",duration:"Duration",desc:"Description",daily:"Daily",weekly:"Weekly",monthly:"Monthly",high:"High",medium:"Medium",low:"Low",notif:"Notifications",noNotif:"No notifications",clearAll:"Clear",superAdmin:"Super Admin",admin:"Admin",staff:"Staff",noTasks:"No tasks",head:"Head",depts:"Departments",hi:"हिंदी",en:"English",preview:"Preview Staff",previewOff:"Back to Admin",previewAs:"Previewing as",previewDesc:"Staff phone view",steps:"1. Open 📖 → 2. 📸 Photo → 3. ☐ Done",teamTask:"Team",today:"Today",
-  adminWork:"Admin",secWork:"Security",allWork:"All Depts",directives:"Assigned Tasks",newDirective:"New Task",sendTo:"Send to",writeTask:"Write task details...",reply:"Reply",approve:"OK",reject:"Not OK",reqApproval:"Send for Approval",approved:"Approved",rejected:"Not OK - See Remarks",awaitApproval:"Awaiting Approval",directive:"Task from",replyHere:"Type reply...",addPhoto:"Add Photo",noDirectives:"No tasks assigned yet",remarks:"Remarks",okApproval:"OK ✅",notOk:"Not OK ❌",writeRemarks:"Write remarks...",markComplete:"Mark Complete",completedWork:"Completed",dueDate:"Target Date",overdue:"Overdue",dueOn:"Due",completionNote:"Add completion note...",completionPhoto:"Take photo of completed work",members:"Members",addMember:"Add Member",removeMember:"Remove",memberName:"Name",memberDept:"Department",memberProp:"Property"};
-const L_HI={myTasks:"मेरे काम",calendar:"कैलेंडर",dashboard:"डैशबोर्ड",allTasks:"सभी काम",team:"टीम",areas:"एरिया",attendance:"हाज़िरी",login:"लॉगिन",logout:"लॉगआउट",username:"यूज़रनेम",password:"पासवर्ड",enterUser:"यूज़रनेम डालें",enterPass:"पासवर्ड डालें",invalidLogin:"गलत जानकारी",contactSuper:"सुपरवाइज़र से संपर्क",checkIn:"चेक इन",checkOut:"चेक आउट",checkedIn:"चेक इन हुआ",notCheckedIn:"चेक इन नहीं",done:"पूरा",pending:"बाकी",issue:"समस्या",inProgress:"चल रहा",total:"कुल",photos:"फ़ोटो",issues:"समस्याएं",sop:"काम के निर्देश",uploadPhoto:"कैमरा खोलें फ़ोटो लें",photoNeeded:"फ़ोटो ज़रूरी",retakePhoto:"दोबारा लें (धुंधली?)",comment:"टिप्पणी",send:"भेजें",reassign:"दूसरे को दें",addTask:"नया काम",save:"सेव",cancel:"रद्द",del:"हटाएं",taskTitle:"काम का नाम",selectPerson:"किसको दें",duration:"समय",desc:"विवरण",daily:"रोज़ाना",weekly:"हफ़्ते",monthly:"महीने",high:"ज़रूरी",medium:"सामान्य",low:"कम",notif:"सूचनाएं",noNotif:"कोई सूचना नहीं",clearAll:"हटाएं",superAdmin:"सुपर एडमिन",admin:"एडमिन",staff:"कर्मचारी",noTasks:"कोई काम नहीं",head:"प्रमुख",depts:"विभाग",hi:"हिंदी",en:"English",preview:"कर्मचारी दृश्य",previewOff:"एडमिन वापस",previewAs:"देख रहे हैं",previewDesc:"फ़ोन दृश्य",steps:"1. 📖 खोलें → 2. 📸 फ़ोटो → 3. ☐ पूरा",teamTask:"टीम",today:"आज",
-  adminWork:"प्रशासन",secWork:"सुरक्षा",allWork:"सभी विभाग",directives:"दिए गए काम",newDirective:"नया काम दें",sendTo:"भेजें",writeTask:"काम का विवरण लिखें...",reply:"जवाब",approve:"ठीक है",reject:"ठीक नहीं",reqApproval:"मंज़ूरी भेजें",approved:"मंज़ूर",rejected:"ठीक नहीं - टिप्पणी देखें",awaitApproval:"मंज़ूरी की प्रतीक्षा",directive:"काम",replyHere:"जवाब लिखें...",addPhoto:"फ़ोटो जोड़ें",noDirectives:"कोई काम नहीं दिया",remarks:"टिप्पणी",okApproval:"ठीक है ✅",notOk:"ठीक नहीं ❌",writeRemarks:"टिप्पणी लिखें...",markComplete:"पूरा करें",completedWork:"पूरा हुआ",dueDate:"लक्ष्य तिथि",overdue:"देरी",dueOn:"तक",completionNote:"पूरा करने की टिप्पणी...",completionPhoto:"पूरे काम की फ़ोटो लें",members:"सदस्य",addMember:"सदस्य जोड़ें",removeMember:"हटाएं",memberName:"नाम",memberDept:"विभाग",memberProp:"प्रॉपर्टी"};
-const LANGS={en:L_EN,hi:L_HI};
 
-const USERS=[
-  {id:"abhishek",u:"abhishek",p:"ambria@2026",name:"Abhishek",role:"sa",prop:"all"},
-  {id:"vicky",u:"vicky",p:"vicky@123",name:"Vicky Arya",role:"a",prop:"all"},
-  {id:"pp_sonu",u:"sonu",p:"sonu@123",name:"Sonu Mali",role:"a",prop:"pp"},
-  {id:"ex_mahesh",u:"mahesh",p:"mahesh@123",name:"Mahesh",role:"a",prop:"ex"},
-  {id:"mk_rahees",u:"rahees",p:"rahees@123",name:"Rahees",role:"a",prop:"mk"},
-  {id:"pp_pawan",u:"pawan",p:"pawan@123",name:"Pawan",role:"e",prop:"pp"},{id:"pp_dayashankar",u:"dayashankar",p:"daya@123",name:"Dayashankar",role:"e",prop:"pp"},{id:"pp_sunil",u:"sunil",p:"sunil@123",name:"Sunil",role:"e",prop:"pp"},
-  {id:"pp_poonam",u:"poonam",p:"poonam@123",name:"Poonam",role:"e",prop:"pp"},{id:"pp_neeru",u:"neeru",p:"neeru@123",name:"Neeru",role:"e",prop:"pp"},{id:"pp_umesh",u:"umesh",p:"umesh@123",name:"Umesh",role:"e",prop:"pp"},{id:"pp_dinesh",u:"dinesh",p:"dinesh@123",name:"Dinesh",role:"e",prop:"pp"},{id:"pp_lalita",u:"lalita",p:"lalita@123",name:"Lalita",role:"e",prop:"pp"},
-  {id:"ex_sunita",u:"sunita",p:"sunita@123",name:"Sunita",role:"e",prop:"ex"},{id:"ex_brijesh",u:"brijesh",p:"brijesh@123",name:"Brijesh",role:"e",prop:"ex"},{id:"ex_ragini",u:"ragini",p:"ragini@123",name:"Ragini",role:"e",prop:"ex"},{id:"ex_rani",u:"rani",p:"rani@123",name:"Rani",role:"e",prop:"ex"},
-  {id:"ex_sonu2",u:"sonu2",p:"sonu2@123",name:"Sonu 2",role:"e",prop:"ex"},{id:"ex_dhruv",u:"dhruv",p:"dhruv@123",name:"Dhruv",role:"e",prop:"ex"},{id:"ex_kamlesh",u:"kamlesh",p:"kamlesh@123",name:"Kamlesh",role:"e",prop:"ex"},
-  {id:"mk_sadna",u:"sadna",p:"sadna@123",name:"Sadna",role:"e",prop:"mk"},{id:"mk_lovekush",u:"lovekush",p:"lovekush@123",name:"Lovekush",role:"e",prop:"mk"},{id:"mk_akash",u:"akash",p:"akash@123",name:"Akash",role:"e",prop:"mk"},{id:"mk_ajay",u:"ajay",p:"ajay@123",name:"Ajay",role:"e",prop:"mk"},
-  {id:"mk_mukesh",u:"mukesh",p:"mukesh@123",name:"Mukesh",role:"e",prop:"mk"},{id:"mk_tulsi",u:"tulsi",p:"tulsi@123",name:"Tulsi",role:"e",prop:"mk"},{id:"mk_akash_h",u:"akash_h",p:"akash@123",name:"Akash(H)",role:"e",prop:"mk"},
-  {id:"rs_suresh",u:"suresh",p:"suresh@123",name:"Suresh",role:"e",prop:"rs"},{id:"rs_roma",u:"roma",p:"roma@123",name:"Roma",role:"e",prop:"rs"},{id:"rs_anita",u:"anita",p:"anita@123",name:"Anita",role:"e",prop:"rs"},{id:"rs_arjun",u:"arjun",p:"arjun@123",name:"Arjun",role:"e",prop:"rs"},{id:"rs_vinay",u:"vinay",p:"vinay@123",name:"Vinay",role:"e",prop:"rs"},
-  {id:"rs_ramu",u:"ramu",p:"ramu@123",name:"Ramu",role:"e",prop:"rs"},
-  {id:"sandeep",u:"sandeep",p:"sandeep@123",name:"Sandeep",role:"a",prop:"all"},
-  {id:"rs_santosh",u:"santosh",p:"santosh@123",name:"Santosh",role:"e",prop:"rs"},
-  {id:"ex_bhupender",u:"bhupender",p:"bhupender@123",name:"Bhupender",role:"e",prop:"ex"},
-  {id:"mk_ajay_s",u:"ajay_s",p:"ajay@123",name:"Ajay (Sec)",role:"e",prop:"mk"},
-];
 
-const PROPS={
-  pp:{id:"pp",name:"Ambria Pushpanjali",sn:"Pushpanjali",icon:"🏛️",loc:"Dwarka",tag:"3 Acres · 1500 Guests",
-    specs:{Land:"3 Acres",Banquet:"14K sqft",Lawn:"40K sqft",Parking:"125+"},
-    areas:[{id:"bq",n:"Banquet Hall",s:"14,000 sqft",i:"🏛️"},{id:"lw",n:"Grand Lawn",s:"40,000 sqft",i:"🌿"},{id:"wk",n:"Walkway",s:"120 ft",i:"🛤️"},{id:"vl",n:"Villa",s:"4 rooms",i:"🏠"},{id:"of",n:"Offices",s:"5",i:"🏢"},{id:"vw",n:"Villa WC",s:"7",i:"🚿"},{id:"gw",n:"Guest WC",s:"M+F",i:"🚻"},{id:"pk",n:"Parking",s:"125+",i:"🅿️"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
-    depts:{h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Sonu Mali",m:[{id:"pp_pawan",n:"Pawan"},{id:"pp_dayashankar",n:"Dayashankar"},{id:"pp_sunil",n:"Sunil"}]},
-      k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Poonam",m:[{id:"pp_poonam",n:"Poonam"},{id:"pp_neeru",n:"Neeru"},{id:"pp_umesh",n:"Umesh"},{id:"pp_dinesh",n:"Dinesh"},{id:"pp_lalita",n:"Lalita"}]},
-      a:{n:"Admin",i:"📋",c:C.maroon,bg:C.maroonSoft,hd:"Sonu Mali",m:[{id:"pp_sonu",n:"Sonu Mali"}]},
-      s:{n:"Security",i:"🛡️",c:"#6B21A8",bg:"#6B21A815",hd:"Sandeep",m:[{id:"sandeep",n:"Sandeep"}]}},sh:"Sonu Mali"},
-  ex:{id:"ex",name:"Ambria Exotica",sn:"Exotica",icon:"🌴",loc:"Dwarka",tag:"4 Acres · Aura & Valencia",
-    specs:{Land:"4 Acres","Aura":"8.5K+27K","Valencia":"12K+8K",Parking:"300-350"},
-    areas:[{id:"ag",n:"Aura Glass",s:"8,500 sqft",i:"🏛️"},{id:"al",n:"Aura Lawn",s:"27,000 sqft",i:"🌿"},{id:"vg",n:"Valencia Glass",s:"12,000 sqft",i:"✨"},{id:"vl2",n:"Valencia Lawn",s:"8,000 sqft",i:"🌳"},{id:"vp",n:"Poolside",s:"2,000 sqft",i:"🏊"},{id:"wk",n:"Walkway",s:"20K sqft",i:"🛤️"},{id:"pk",n:"Parking",s:"300-350",i:"🅿️"},{id:"wc",n:"Restrooms",s:"",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
-    depts:{h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Mahesh",m:[{id:"ex_sonu2",n:"Sonu 2"},{id:"ex_dhruv",n:"Dhruv"},{id:"ex_kamlesh",n:"Kamlesh"}]},
-      k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Mahesh",m:[{id:"ex_sunita",n:"Sunita"},{id:"ex_brijesh",n:"Brijesh"},{id:"ex_ragini",n:"Ragini"},{id:"ex_rani",n:"Rani"}]},
-      a:{n:"Admin",i:"📋",c:C.maroon,bg:C.maroonSoft,hd:"Mahesh",m:[{id:"ex_mahesh",n:"Mahesh"}]},
-      s:{n:"Security",i:"🛡️",c:"#6B21A8",bg:"#6B21A815",hd:"Sandeep",m:[{id:"ex_bhupender",n:"Bhupender"}]}},sh:"Mahesh"},
-  mk:{id:"mk",name:"Ambria Manaktala",sn:"Manaktala",icon:"✨",loc:"Kapashera",tag:"3 Acres · Two Venues",
-    specs:{Land:"3 Acres",Emerald:"10K+27K",Alstonia:"16K",Parking:"250+"},
-    areas:[{id:"eg",n:"Emerald Glass",s:"10,000 sqft",i:"🏛️"},{id:"el",n:"Emerald Lawn",s:"27,000 sqft",i:"🌿"},{id:"ao",n:"Alstonia Lawn",s:"16,000 sqft",i:"🌳"},{id:"hn",n:"Hanger",s:"8,000 sqft",i:"🏗️"},{id:"b1",n:"Banquet",s:"10,000 sqft",i:"🎪"},{id:"dr",n:"Driveway",s:"400 ft",i:"🛤️"},{id:"pk",n:"Parking",s:"250+",i:"🅿️"},{id:"wc",n:"Restrooms",s:"",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
-    depts:{h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Rahees",m:[{id:"mk_mukesh",n:"Mukesh"},{id:"mk_tulsi",n:"Tulsi"},{id:"mk_akash_h",n:"Akash"}]},
-      k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Rahees",m:[{id:"mk_sadna",n:"Sadna"},{id:"mk_lovekush",n:"Lovekush"},{id:"mk_akash",n:"Akash"},{id:"mk_ajay",n:"Ajay"}]},
-      a:{n:"Admin",i:"📋",c:C.maroon,bg:C.maroonSoft,hd:"Rahees",m:[{id:"mk_rahees",n:"Rahees"}]},
-      s:{n:"Security",i:"🛡️",c:"#6B21A8",bg:"#6B21A815",hd:"Sandeep",m:[{id:"mk_ajay_s",n:"Ajay (Sec)"}]}},sh:"Rahees"},
-  rs:{id:"rs",name:"Ambria Restro",sn:"Restro",icon:"🍽️",loc:"Palam Vihar",tag:"0.75 Acre · Restro · Cafe",
-    specs:{Land:"0.75 Acre",Glass:"8K sqft",Restro:"800 sqft",Parking:"100+"},
-    areas:[{id:"gl",n:"Glasshouse",s:"8,000 sqft",i:"🏛️"},{id:"lw",n:"Lawn",s:"1,500 sqft",i:"🌿"},{id:"re",n:"Restro",s:"800 sqft",i:"🍽️"},{id:"ca",n:"Cafe",s:"417 sqft",i:"☕"},{id:"rt",n:"Rooftop",s:"417 sqft",i:"🌇"},{id:"pk",n:"Parking",s:"100+",i:"🅿️"},{id:"ki",n:"Kitchen",s:"",i:"👨‍🍳"},{id:"wc",n:"Washrooms",s:"",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
-    depts:{h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Vicky Arya",m:[{id:"rs_ramu",n:"Ramu"}]},
-      k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Vicky Arya",m:[{id:"rs_suresh",n:"Suresh"},{id:"rs_roma",n:"Roma"},{id:"rs_anita",n:"Anita"},{id:"rs_arjun",n:"Arjun"},{id:"rs_vinay",n:"Vinay"}]},
-      a:{n:"Admin",i:"📋",c:C.maroon,bg:C.maroonSoft,hd:"Vicky Arya",m:[{id:"vicky",n:"Vicky Arya"}]},
-      s:{n:"Security",i:"🛡️",c:"#6B21A8",bg:"#6B21A815",hd:"Sandeep",m:[{id:"rs_santosh",n:"Santosh"}]}},sh:"Vicky Arya"},
-};
 
 // ═══ TASK DATA — [dept,cat,title,titleHi,areaKey,pri,dur,desc,descHi,time,memberIdx(-1=team)] ═══
 const TASK_DEFS = {
@@ -261,7 +214,7 @@ function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,set
   const isSA=u.role==="sa";const isA=pm?false:(u.role==="sa"||u.role==="a");
   // Pending count for assigned tasks
   const pendDirs=isSA?dirs.filter(d=>d.status==="sent"||d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&(d.status==="sent"||d.status==="approval_req")).length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"SOP Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"training",i:"🎓",l:"Training"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"att",i:"🕐",l:L.attendance},{id:"training",i:"🎓",l:"Training"}];
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"SOP Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
@@ -318,72 +271,6 @@ function AttView({user:u,att,setAtt,prop,L}){
   </div>);
 }
 
-function Dash({tasks,prop,L}){
-  const[deptF,setDeptF]=useState("all");
-  const isSec=(t)=>t.dept==="s";
-  const ft=deptF==="all"?tasks:deptF==="s"?tasks.filter(t=>t.dept==="s"):tasks.filter(t=>t.dept===deptF);
-  const tt=ft.length,dn=ft.filter(t=>t.status==="completed").length,pd=ft.filter(t=>t.status==="pending").length,is=ft.filter(t=>t.status==="issue").length,pc=tt?Math.round((dn/tt)*100):0;
-  const dS=Object.entries(prop.depts).filter(([k])=>deptF==="all"||k===deptF).map(([k,d])=>{const dt=tasks.filter(t=>t.dept===k),dd=dt.filter(t=>t.status==="completed").length;return{k,...d,tt:dt.length,dn:dd,pc:dt.length?Math.round((dd/dt.length)*100):0};});
-  return(<div>
-    <div style={{marginBottom:14}}><h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:"0 0 2px"}}>{prop.name}</h1><p style={{fontSize:11,color:C.tl,margin:0}}>{td.toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})} · {prop.sh}</p></div>
-    {/* DEPT TOGGLE */}
-    <div style={{display:"flex",gap:3,marginBottom:14,background:C.maroonSoft,borderRadius:10,padding:3,width:"fit-content"}}>
-      {[["all",L.allWork,"📊"],["h","Horticulture","🌱"],["k","Housekeeping","🧹"],["a",L.adminWork,"📋"],["s","Security","🛡️"]].map(([v,l,ic])=><button key={v} onClick={()=>setDeptF(v)} style={{padding:"7px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,background:deptF===v?C.maroon:"transparent",color:deptF===v?C.white:C.maroon}}>{ic} {l}</button>)}
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>{[{l:L.total,v:tt,c:C.maroon,ic:"📋"},{l:L.done,v:dn,c:C.green,ic:"✅"},{l:L.pending,v:pd,c:C.yellow,ic:"⏳"},{l:L.issues,v:is,c:C.red,ic:"⚠️"}].map(s=>(<div key={s.l} style={{background:C.white,borderRadius:12,padding:12,border:`1px solid ${C.border}`}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9,color:C.tl,fontWeight:600}}>{s.l}</span><span style={{fontSize:11}}>{s.ic}</span></div><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:s.c}}>{s.v}</div></div>))}</div>
-    <div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:12}}>
-      <div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,textAlign:"center"}}><div style={{position:"relative",width:80,height:80,margin:"0 auto 6px"}}><svg viewBox="0 0 36 36" style={{width:"100%",height:"100%",transform:"rotate(-90deg)"}}><circle cx="18" cy="18" r="15" fill="none" stroke={C.border} strokeWidth="2.5"/><circle cx="18" cy="18" r="15" fill="none" stroke={C.maroon} strokeWidth="2.5" strokeDasharray={`${pc*0.942} 100`} strokeLinecap="round"/></svg><div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)"}}><div style={{fontFamily:F.d,fontSize:18,fontWeight:700,color:C.maroon}}>{pc}%</div></div></div><div style={{fontSize:10,color:C.tl}}>{dn}/{tt}</div></div>
-      <div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`}}><h3 style={{fontFamily:F.d,fontSize:13,margin:"0 0 8px",color:C.maroon}}>{L.depts}</h3>{dS.map(d=>(<div key={d.k} style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><span style={{fontSize:11}}>{d.i} {d.n}</span><span style={{fontSize:10,fontWeight:600}}>{d.dn}/{d.tt}</span></div><div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${d.pc}%`,background:d.c,borderRadius:2}}/></div></div>))}</div>
-    </div>
-    {/* ═══ OVERVIEW — only on "All" tab ═══ */}
-    {deptF==="all"&&<div style={{marginTop:16}}>
-      {/* CRITICAL ACTIONS */}
-      {(is>0||pd>tt*0.7)&&<div style={{background:C.rBg,borderRadius:12,padding:14,border:`1px solid #f0c8c4`,marginBottom:12}}>
-        <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.red,marginBottom:8}}>🚨 Critical Actions</div>
-        <div style={{display:"flex",flexDirection:"column",gap:5}}>
-          {is>0&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}><span>⚠️</span><span><strong>{is} issue{is>1?"s":""} reported</strong> — check All Tasks → ⚠️ filter</span></div>}
-          {pd>tt*0.7&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}><span>⏳</span><span><strong>{Math.round((pd/tt)*100)}% pending</strong> — team may need follow-up</span></div>}
-          {pc<30&&tt>0&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}><span>📉</span><span><strong>Only {pc}% done</strong> — day behind schedule</span></div>}
-        </div>
-      </div>}
-      {/* APP MODULES OVERVIEW */}
-      <div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:12}}>
-        <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>📱 App Overview — {prop.sn}</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(135px,1fr))",gap:8}}>
-          {[{i:"✅",n:"Daily SOPs",v:tasks.filter(t=>t.cat==="daily").length+" tasks",s:"9AM-6PM schedule"},{i:"📅",n:"Weekly Tasks",v:tasks.filter(t=>t.cat==="weekly").length+" tasks",s:"Deep clean, audits"},{i:"📆",n:"Monthly Tasks",v:tasks.filter(t=>t.cat==="monthly").length+" tasks",s:"Overhauls, reports"},{i:"👥",n:"Team Size",v:Object.values(prop.depts).reduce((a,d)=>a+d.m.length,0)+" staff",s:"Across all depts"},{i:"🏗️",n:"Venue Areas",v:prop.areas.length+" areas",s:"Tracked & assigned"},{i:"📝",n:"Assigned Tasks",v:"SA → Team",s:"Task + approval flow"},{i:"🎓",n:"Training",v:"Videos + Guide",s:"4 depts + chemicals"},{i:"🕐",n:"Attendance",v:"Check in/out",s:"Daily tracking"}].map((m,i)=>(<div key={i} style={{padding:8,background:C.bg,borderRadius:8,borderLeft:`3px solid ${C.maroon}`}}>
-            <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{m.i} {m.n}</div>
-            <div style={{fontSize:11,fontWeight:600,color:C.maroon}}>{m.v}</div>
-            <div style={{fontSize:9,color:C.tl}}>{m.s}</div>
-          </div>))}
-        </div>
-      </div>
-      {/* TIPS */}
-      <div style={{background:"#FFF7ED",borderRadius:12,padding:14,border:`1px solid #f0dcc8`,marginBottom:12}}>
-        <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.accent,marginBottom:8}}>💡 Daily Tips & Best Practices</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {[{t:"📸 Photo Compliance",d:"Every task must have photo proof — builds accountability"},{t:"🕐 Morning Walk First",d:"Start with full property inspection before individual tasks"},{t:"🧪 Right Chemical",d:"Check Chemical Guide before using any cleaning agent"},{t:"🔒 End-of-Day Lockup",d:"Rooms locked, ACs off, taps closed, lights off"},{t:"📋 Report Issues Now",d:"Report broken items, leaks, pests immediately — don't wait"},{t:"👥 Team Tasks",d:"Every member completes and photographs separately"}].map((tip,i)=>(<div key={i} style={{padding:8,background:C.white,borderRadius:8}}>
-            <div style={{fontSize:11,fontWeight:700,marginBottom:2}}>{tip.t}</div>
-            <div style={{fontSize:9,color:C.tl,lineHeight:1.4}}>{tip.d}</div>
-          </div>))}
-        </div>
-      </div>
-      {/* SUGGESTIONS — dynamic */}
-      <div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.green,marginBottom:8}}>📈 Suggestions & Insights</div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {pc===100&&<div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:C.gBg,borderRadius:8}}><span>🏆</span><div style={{fontSize:11}}><strong>All tasks complete!</strong> Share this with the team</div></div>}
-          {pc>=70&&pc<100&&<div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:C.gBg,borderRadius:8}}><span>👍</span><div style={{fontSize:11}}><strong>Good progress — {pc}%</strong> Push remaining {pd} to hit 100%</div></div>}
-          {pc<70&&tt>0&&<div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:C.yBg,borderRadius:8}}><span>⚡</span><div style={{fontSize:11}}><strong>Behind — {pc}%</strong> Mid-day check with leads needed</div></div>}
-          <div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:C.gBg,borderRadius:8}}><span>🌱</span><div style={{fontSize:11}}><strong>Horticulture:</strong> {tasks.filter(t=>t.dept==="h"&&t.status==="completed").length}/{tasks.filter(t=>t.dept==="h").length} — Evening watering critical</div></div>
-          <div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:C.bBg,borderRadius:8}}><span>🧹</span><div style={{fontSize:11}}><strong>Housekeeping:</strong> {tasks.filter(t=>t.dept==="k"&&t.status==="completed").length}/{tasks.filter(t=>t.dept==="k").length} — WC recheck at 3:30 PM</div></div>
-          <div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:C.bg,borderRadius:8}}><span>📋</span><div style={{fontSize:11}}><strong>Admin:</strong> {tasks.filter(t=>t.dept==="a"&&t.status==="completed").length}/{tasks.filter(t=>t.dept==="a").length} — Daily report to Vicky before 6 PM</div></div>
-          <div style={{display:"flex",gap:6,alignItems:"center",padding:8,background:"#6B21A815",borderRadius:8}}><span>🛡️</span><div style={{fontSize:11}}><strong>Security:</strong> {tasks.filter(t=>isSec(t)&&t.status==="completed").length}/{tasks.filter(t=>isSec(t)).length} — CCTV & fire exits weekly</div></div>
-        </div>
-      </div>
-    </div>}
-    </div>);
-}
-
 function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
   const[cv,setCV]=useState("daily");const[fD,sFD]=useState("all");const[fS,sFS]=useState("all");const[fC,sFC]=useState("all");const[sa,setSA]=useState(false);
   const isA=u.role==="sa"||u.role==="a";
@@ -428,16 +315,6 @@ function TeamV({tasks,prop,L}){return(<div><h1 style={{fontFamily:F.d,fontSize:2
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6}}>{d.m.map(m=>{const mt=tasks.filter(t=>t.assignedTo===m.id),md=mt.filter(t=>t.status==="completed").length;
       return(<div key={m.id} style={{padding:8,background:d.bg,borderRadius:8,borderLeft:`3px solid ${d.c}`}}><div style={{fontWeight:600,fontSize:11,marginBottom:3}}>{m.n}</div><div style={{display:"flex",gap:3}}><Bdg color={C.green} bg={C.gBg}>✅{md}</Bdg><Bdg color={C.yellow} bg={C.yBg}>⏳{mt.filter(t=>t.status==="pending").length}</Bdg></div></div>);})}</div></div>))}</div>);}
 
-function AreasV({tasks,prop,L}){return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 4px"}}>{L.areas} - {prop.sn}</h1>
-  <p style={{fontSize:10,color:C.tl,margin:"0 0 10px"}}>Green = all SOPs done · Yellow = in progress · Red = issues</p>
-  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:8}}>{prop.areas.map(a=>{const at=tasks.filter(t=>t.area===a.id),ad=at.filter(t=>t.status==="completed").length,ai=at.filter(t=>t.status==="issue").length,pc=at.length?Math.round((ad/at.length)*100):0;const allDone=pc===100&&at.length>0;const hasIssue=ai>0;
-    return(<div key={a.id} style={{background:allDone?C.gBg:hasIssue?C.rBg:C.white,borderRadius:10,padding:10,border:`2px solid ${allDone?C.green:hasIssue?C.red:pc>50?C.yellow:C.border}`,position:"relative"}}>
-      {allDone&&<div style={{position:"absolute",top:6,right:6,background:C.green,color:C.white,borderRadius:10,padding:"1px 6px",fontSize:8,fontWeight:700}}>SOP ✓</div>}
-      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}><span style={{fontSize:14}}>{a.i}</span><span style={{fontWeight:600,fontSize:11}}>{a.n}</span></div>
-      {a.s&&<div style={{fontSize:9,color:C.tl,marginBottom:4}}>{a.s}</div>}
-      <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden",marginBottom:3}}><div style={{height:"100%",width:`${pc}%`,background:allDone?C.green:hasIssue?C.red:pc>50?C.yellow:C.blue,borderRadius:2}}/></div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:9}}><span style={{color:C.green}}>✅{ad}</span><span style={{color:C.yellow}}>⏳{at.length-ad-ai}</span>{ai>0&&<span style={{color:C.red}}>⚠️{ai}</span>}<span style={{color:C.tl}}>{pc}%</span></div>
-    </div>);})}</div></div>);}
 
 // ═══ ASSIGNED TASKS — SA creates tasks for Admins ═══
 const ADMIN_TARGETS=[
@@ -659,110 +536,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   </div>);
 }
 
-const TRAIN=[
-  {d:"🧹 HK",c:C.blue,v:[{t:"Housekeeping Training",h:"हाउसकीपिंग",y:"hotel+housekeeping+training+hindi",ic:"🏨"},{t:"Washroom Cleaning",h:"शौचालय सफ़ाई",y:"washroom+cleaning+SOP+hindi",ic:"🚽"},{t:"Floor Mopping",h:"फ़र्श पोछा",y:"floor+mopping+hindi",ic:"🧹"},{t:"Bed Making",h:"बिस्तर",y:"hotel+bed+making+hindi",ic:"🛏️"},{t:"Chemical Safety",h:"केमिकल",y:"cleaning+chemical+safety+hindi",ic:"🧪"}]},
-  {d:"🌱 Hort",c:C.green,v:[{t:"Lawn Care",h:"लॉन केयर",y:"lawn+care+hindi",ic:"🌿"},{t:"Hedge Trim",h:"हेज कटाई",y:"hedge+trimming+hindi",ic:"✂️"},{t:"Fertilizer",h:"खाद गाइड",y:"fertilizer+manure+hindi",ic:"🧑‍🌾"},{t:"Pest Control",h:"कीट नियंत्रण",y:"pest+control+garden+hindi",ic:"🪲"},{t:"Tree Pruning",h:"पेड़ कटाई",y:"tree+pruning+hindi",ic:"🌳"}]},
-  {d:"📋 Admin",c:C.maroon,v:[{t:"Facility Mgmt",h:"फैसिलिटी",y:"facility+management+hindi",ic:"🏢"},{t:"DG Set",h:"डीजी सेट",y:"DG+set+generator+hindi",ic:"⚡"},{t:"CCTV",h:"सीसीटीवी",y:"CCTV+system+hindi",ic:"📹"}]},
-  {d:"🛡️ Sec",c:"#6B21A8",v:[{t:"Fire Safety",h:"अग्नि सुरक्षा",y:"fire+safety+hindi",ic:"🔥"},{t:"First Aid",h:"प्राथमिक उपचार",y:"first+aid+CPR+hindi",ic:"🏥"},{t:"Security",h:"सुरक्षा",y:"security+guard+hindi",ic:"💂"},{t:"Extinguisher",h:"अग्निशामक",y:"fire+extinguisher+hindi",ic:"🧯"}]},
-];
 
-const CHEM_DATA=[
-  {area:"🏛️ Banquet Tiles",items:[{p:"K2 Hard Surface (Kleanfix)",u:"20ml/1L daily mop"},{p:"K20 Floor Striper",u:"10-20ml warm deep clean"},{p:"K102 All-in-One",u:"Floors walls sinks"}]},
-  {area:"🚽 Washroom",items:[{p:"K1 Bathroom Sanitizer",u:"20-50ml/1L tub tiles"},{p:"K6 Toilet Bowl Cleaner",u:"Ready — toilet urinal"},{p:"K5 Air Freshener",u:"Ready — all areas"}]},
-  {area:"🪟 Glass · 🪑 Wood · 🔧 Steel",items:[{p:"K3 Glass Cleaner",u:"20-50ml/1L mirror"},{p:"K4 Wood Maintainer",u:"Ready — furniture floor"},{p:"K7 S.S. Polish",u:"Ready — steel grills"}]},
-  {area:"🧹 Carpet · 👔 Laundry",items:[{p:"K101 Carpet Shampoo",u:"50-100ml/1L carpet sofa"},{p:"Kleanpro-L Det",u:"Fabric deep cleaning"},{p:"Kleanpro-Fab Soft",u:"Fabric softener"}]},
-  {area:"🌿 Lawn · 🌺 Flowers",items:[{p:"NPK 19:19:19",u:"Monthly balanced feed"},{p:"Urea + Neem oil",u:"Green boost + pest"},{p:"Vermicompost + Bone meal",u:"Organic + bloom"}]},
-];
-
-function TrainingView({lang}){
-  const[tab,setTab]=useState("videos");const[sd,setSd]=useState(0);const dp=TRAIN[sd];
-  const gr=["linear-gradient(135deg,#1e3a5f,#2d6ca5)","linear-gradient(135deg,#1a4d2e,#2d8f52)","linear-gradient(135deg,#5c1a2a,#9a2e42)","linear-gradient(135deg,#3b1a6b,#6b21a8)"];
-  return(<div>
-    <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:"0 0 8px"}}>🎓 Training & Knowledge</h1>
-    <div style={{display:"flex",gap:3,marginBottom:14,background:C.maroonSoft,borderRadius:10,padding:3,width:"fit-content"}}>
-      <button onClick={()=>setTab("videos")} style={{padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:700,background:tab==="videos"?C.maroon:"transparent",color:tab==="videos"?C.white:C.maroon}}>🎬 Videos</button>
-      <button onClick={()=>setTab("chem")} style={{padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:700,background:tab==="chem"?C.maroon:"transparent",color:tab==="chem"?C.white:C.maroon}}>🧪 Chemical Guide</button>
-    </div>
-    {tab==="videos"&&<div>
-      <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>{TRAIN.map((d,i)=><button key={i} onClick={()=>setSd(i)} style={{padding:"6px 12px",borderRadius:8,border:sd===i?`2px solid ${d.c}`:`1px solid ${C.border}`,background:sd===i?d.c+"15":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:sd===i?d.c:C.tl}}>{d.d}</button>)}</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:10}}>{dp.v.map((v,i)=>(<a key={i} href={"https://www.youtube.com/results?search_query="+v.y} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden",cursor:"pointer",display:"flex",flexDirection:"column"}}><div style={{background:gr[sd],padding:"14px",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}><span style={{fontSize:28}}>{v.ic}</span><div style={{position:"absolute",right:5,bottom:3,background:"rgba(255,0,0,0.9)",borderRadius:3,padding:"1px 4px"}}><span style={{color:"#fff",fontSize:7,fontWeight:700}}>▶ YT</span></div></div><div style={{padding:"7px 9px"}}><div style={{fontSize:11,fontWeight:700}}>{lang==="hi"?v.h:v.t}</div></div></a>))}</div>
-    </div>}
-    {tab==="chem"&&<div>
-      <p style={{fontSize:10,color:C.tl,margin:"0 0 8px"}}>Kleanfix Industries · kleanfix.com · +91 98189 98806</p>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>{CHEM_DATA.map((sec,si)=>(<div key={si} style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}><div style={{background:"linear-gradient(135deg,#2D2D2D,#4a4a4a)",padding:"7px 12px",color:"#fff",fontSize:12,fontWeight:700}}>{sec.area}</div><div style={{padding:"4px 10px"}}>{sec.items.map((it,ii)=>(<div key={ii} style={{padding:"4px 0",borderBottom:ii<sec.items.length-1?"1px solid #EDEDED":"none"}}><div style={{fontSize:11,fontWeight:700,color:C.maroon}}>{it.p}</div><div style={{fontSize:9,color:C.tl}}>{it.u}</div></div>))}</div></div>))}</div>
-    </div>}
-  </div>);
-}
-
-function MembersView({L,customMembers,setCustomMembers,removedIds,setRemovedIds}){
-  const[showAdd,setShowAdd]=useState(false);
-  const[fName,setFName]=useState("");const[fUser,setFUser]=useState("");const[fPass,setFPass]=useState("");
-  const[fProp,setFProp]=useState("pp");const[fDept,setFDept]=useState("h");
-  const deptNames={h:"🌱 Horticulture",k:"🧹 Housekeeping",a:"📋 Admin",s:"🛡️ Security"};
-  const addMember=()=>{
-    if(!fName.trim()||!fUser.trim())return;
-    const id="cm_"+Date.now();
-    setCustomMembers(prev=>[...prev,{id,n:fName.trim(),u:fUser.trim().toLowerCase(),p:fPass||fUser.trim()+"@123",prop:fProp,dept:fDept,role:"e"}]);
-    setFName("");setFUser("");setFPass("");setShowAdd(false);
-  };
-  const removeMember=(id)=>{
-    const isCustom=customMembers.find(m=>m.id===id);
-    if(isCustom)setCustomMembers(prev=>prev.filter(m=>m.id!==id));
-    else setRemovedIds(prev=>[...prev,id]);
-  };
-  const restoreMember=(id)=>{setRemovedIds(prev=>prev.filter(x=>x!==id));};
-  const allByProp={};
-  Object.entries(PROPS).forEach(([pk,p])=>{
-    allByProp[pk]={prop:p,members:[]};
-    Object.entries(p.depts).forEach(([dk,d])=>{
-      d.m.forEach(m=>{
-        const isRemoved=removedIds.includes(m.id);
-        allByProp[pk].members.push({...m,dept:dk,deptName:d.n,deptIcon:d.i,deptColor:d.c,isRemoved,isCustom:false});
-      });
-    });
-  });
-  customMembers.forEach(cm=>{
-    if(!allByProp[cm.prop])return;
-    const d=PROPS[cm.prop]?.depts?.[cm.dept];
-    allByProp[cm.prop].members.push({...cm,deptName:d?.n||cm.dept,deptIcon:d?.i||"",deptColor:d?.c||C.blue,isRemoved:false,isCustom:true});
-  });
-  return(<div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-      <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>👤 {L.members}</h1>
-      <Btn2 primary small onClick={()=>setShowAdd(!showAdd)}>➕ {L.addMember}</Btn2>
-    </div>
-    {showAdd&&<div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:16}}>
-      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>➕ {L.addMember}</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <input placeholder={L.memberName} value={fName} onChange={e=>setFName(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none"}}/>
-        <input placeholder="Username" value={fUser} onChange={e=>setFUser(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none"}}/>
-        <input placeholder="Password (auto: user@123)" value={fPass} onChange={e=>setFPass(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none"}}/>
-        <select value={fProp} onChange={e=>setFProp(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>
-          {Object.entries(PROPS).map(([k,p])=><option key={k} value={k}>{p.icon} {p.sn}</option>)}
-        </select>
-        <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12}}>
-          {Object.entries(deptNames).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-        </select>
-      </div>
-      <div style={{display:"flex",gap:8,marginTop:10}}><Btn2 primary onClick={addMember}>{L.save}</Btn2><Btn2 onClick={()=>setShowAdd(false)}>{L.cancel}</Btn2></div>
-    </div>}
-    {Object.entries(allByProp).map(([pk,{prop,members}])=>(<div key={pk} style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:12}}>
-      <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,marginBottom:10}}>{prop.icon} {prop.sn} <span style={{fontSize:12,fontWeight:400,color:C.tl}}>({members.filter(m=>!m.isRemoved).length} active)</span></div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-        {members.map(m=>(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:m.isRemoved?C.rBg+"44":m.isCustom?C.bBg:C.bg,borderRadius:10,borderLeft:`3px solid ${m.isRemoved?C.red:m.deptColor}`,opacity:m.isRemoved?0.5:1}}>
-          <div style={{width:30,height:30,borderRadius:"50%",background:m.isRemoved?C.red:m.deptColor,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:11}}>{m.n[0]}</div>
-          <div style={{flex:1}}>
-            <div style={{fontSize:12,fontWeight:600,textDecoration:m.isRemoved?"line-through":"none"}}>{m.n}</div>
-            <div style={{fontSize:9,color:C.tl}}>{m.deptIcon} {m.deptName} {m.isCustom&&<span style={{color:C.blue,fontWeight:600}}>NEW</span>}</div>
-          </div>
-          {m.isRemoved
-            ?<button onClick={()=>restoreMember(m.id)} style={{padding:"4px 8px",borderRadius:6,border:"none",background:C.gBg,color:C.green,fontFamily:F.b,fontSize:9,fontWeight:600,cursor:"pointer"}}>↩ Restore</button>
-            :<button onClick={()=>removeMember(m.id)} style={{padding:"4px 8px",borderRadius:6,border:"none",background:C.rBg,color:C.red,fontFamily:F.b,fontSize:9,fontWeight:600,cursor:"pointer"}}>✕ {L.removeMember}</button>}
-        </div>))}
-      </div>
-    </div>))}
-  </div>);
-}
 function PropBar({ap,setAP,user:u}){
   const av=u.prop==="all"?Object.values(PROPS):[PROPS[u.prop]].filter(Boolean);
   return(<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{av.map(p=>{const a=ap===p.id;return(<button key={p.id} onClick={()=>setAP(p.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:8,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b}}><span style={{fontSize:13}}>{p.icon}</span><span style={{fontSize:10,fontWeight:a?700:500,color:a?C.maroon:C.text}}>{p.sn}</span>{a&&<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>}</button>);})}</div>);
@@ -790,19 +564,23 @@ export default function App(){
       {pm&&ps&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {ps.n} - {ps.pn}</span></div><button onClick={()=>{setPM(false);sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
       {!pm&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
-        {view==="dashboard"&&<Dash tasks={tasks} prop={prop} L={L}/>}
+        {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV}/>}
         {view==="team"&&<TeamV tasks={tasks} prop={prop} L={L}/>}
-        {view==="areas"&&<AreasV tasks={tasks} prop={prop} L={L}/>}
+        {view==="areas"&&<AreasView tasks={tasks} prop={prop} lang={lang}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
-        {view==="members"&&<MembersView L={L} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
-        {view==="training"&&<TrainingView lang={lang}/>}
+        {view==="roster"&&<DutyRoster prop={prop} user={eU} lang={lang}/>}
+        {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
+        {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}
+        {view==="chemicals"&&<ChemicalGuide lang={lang}/>}
+        {view==="members"&&<MembersView user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
       </>):(<>
         {view==="mytasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="mytasks" L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
-        {view==="training"&&<TrainingView lang={lang}/>}
+        {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
+        {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}
       </>)}
     </div></div>);
 }
