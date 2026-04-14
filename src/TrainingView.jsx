@@ -64,12 +64,12 @@ export default function TrainingView({ user, prop, lang }) {
   // Load own progress
   useEffect(() => {
     supabase.from("training_progress")
-      .select("video_id")
-      .eq("staff_id", user.id)
+      .select("video_key")
+      .eq("user_id", user.id)
       .then(({ data }) => {
         if (data) {
           const map = {};
-          data.forEach(r => { map[r.video_id] = true; });
+          data.forEach(r => { map[r.video_key] = true; });
           setProgress(map);
         }
       });
@@ -78,7 +78,6 @@ export default function TrainingView({ user, prop, lang }) {
   // Load all staff progress (admin view)
   useEffect(() => {
     if (!isAdmin) return;
-    const propFilter = user.prop === "all" ? prop.id : user.prop;
     supabase.from("training_progress")
       .select("*")
       .then(({ data }) => { if (data) setStaffProgress(data); });
@@ -87,15 +86,15 @@ export default function TrainingView({ user, prop, lang }) {
   const markWatched = async (videoId) => {
     setSaving(videoId);
     const { error } = await supabase.from("training_progress").upsert(
-      { staff_id: user.id, staff_name: user.name, video_id: videoId, property: user.prop === "all" ? prop.id : user.prop },
-      { onConflict: "staff_id,video_id" }
+      { user_id: user.id, video_key: videoId, department: user.department || user.dept || null, completed: true, completed_at: new Date().toISOString() },
+      { onConflict: "user_id,video_key" }
     );
     if (!error) setProgress(prev => ({ ...prev, [videoId]: true }));
     setSaving(null);
   };
 
   const unmarkWatched = async (videoId) => {
-    await supabase.from("training_progress").delete().eq("staff_id", user.id).eq("video_id", videoId);
+    await supabase.from("training_progress").delete().eq("user_id", user.id).eq("video_key", videoId);
     setProgress(prev => { const n = { ...prev }; delete n[videoId]; return n; });
   };
 
@@ -107,7 +106,7 @@ export default function TrainingView({ user, prop, lang }) {
   // Staff progress summary (admin)
   const allStaff = Object.values(prop?.depts||{}).flatMap(d => d.m.map(m => ({ ...m, deptName: d.n })));
   const staffSummary = allStaff.map(m => {
-    const watched = staffProgress.filter(r => r.staff_id === m.id).length;
+    const watched = staffProgress.filter(r => r.user_id === m.id).length;
     return { ...m, watched, total: allVideos.length, pct: allVideos.length ? Math.round((watched / allVideos.length) * 100) : 0 };
   });
 

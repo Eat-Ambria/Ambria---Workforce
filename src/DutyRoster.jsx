@@ -172,7 +172,7 @@ export default function DutyRoster({ prop, user, lang }) {
       .then(({ data }) => {
         if (data && data.length > 0) {
           const map = {};
-          data.forEach(r => { map[r.slot] = r; });
+          data.forEach(r => { map[r.user_id || r.user_name] = r; });
           setRoster(map);
         }
       });
@@ -186,21 +186,19 @@ export default function DutyRoster({ prop, user, lang }) {
 
   const handleSave = async (updated) => {
     setSaving(true);
+    // duty_roster columns: id, user_id, user_name, property, shift_type, shift_start, shift_end, date, assigned_by, notes
     const row = {
-      slot: updated.slot,
       property: propId,
       date: today,
-      staff_id: updated.staff_id || null,
-      staff_name: updated.staff_name || updated.label,
-      label: updated.label,
-      source: updated.source,
-      shift: updated.shift,
-      start: updated.start,
-      end: updated.end,
+      user_id: updated.staff_id || null,
+      user_name: updated.staff_name || updated.label,
+      shift_type: updated.shift,
+      shift_start: updated.start,
+      shift_end: updated.end,
       notes: updated.notes || null,
-      created_by: user.id,
+      assigned_by: user.id,
     };
-    const { error } = await supabase.from("duty_roster").upsert(row, { onConflict: "property,date,slot" });
+    const { error } = await supabase.from("duty_roster").insert(row);
     if (!error) {
       setRoster(prev => ({ ...prev, [updated.slot]: row }));
     }

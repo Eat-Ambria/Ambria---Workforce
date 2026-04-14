@@ -538,7 +538,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
 
 
 function PropBar({ap,setAP,user:u}){
-  const av=u.prop==="all"?Object.values(PROPS):[PROPS[u.prop]].filter(Boolean);
+  const uprop=u.prop||u.property||"pp";const av=uprop==="all"?Object.values(PROPS):[PROPS[uprop]].filter(Boolean);
   return(<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{av.map(p=>{const a=ap===p.id;return(<button key={p.id} onClick={()=>setAP(p.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:8,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b}}><span style={{fontSize:13}}>{p.icon}</span><span style={{fontSize:10,fontWeight:a?700:500,color:a?C.maroon:C.text}}>{p.sn}</span>{a&&<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>}</button>);})}</div>);
 }
 
@@ -548,7 +548,13 @@ export default function App(){
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
-  if(!user)return <LoginScreen onLogin={(u2)=>{setUser(u2);if(u2.prop&&u2.prop!=="all")sAP(u2.prop);sV(u2.role==="e"?"mytasks":"dashboard");}} lang={lang} setLang={setLang}/>;
+  if(!user)return <LoginScreen onLogin={(u2)=>{
+    // DB has 'property' column; normalize to 'prop' so all app code works uniformly
+    const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
+    setUser(u3);
+    if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
+    sV(u3.role==="e"?"mytasks":"dashboard");
+  }} lang={lang} setLang={setLang}/>;
 
   const ps=allS.find(s=>s.id===pAs);
   const eU=pm&&user.role==="sa"&&ps?{id:ps.id,name:ps.n,role:"e",prop:ps.pid}:user;

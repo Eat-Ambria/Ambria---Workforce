@@ -36,8 +36,8 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
   const allStaff = Object.values(prop?.depts||{}).flatMap(d => d.m);
   const checkedInIds = att.filter(a => a.date === today).map(a => a.uid);
   const onLeaveIds = leaves
-    .filter(l => l.status === "approved" && l.start_date <= today && l.end_date >= today)
-    .map(l => l.staff_id);
+    .filter(l => l.status === "approved" && l.leave_date === today)
+    .map(l => l.user_id);
 
   const absent = allStaff.filter(m => !checkedInIds.includes(m.id) && !onLeaveIds.includes(m.id));
   const onLeaveStaff = allStaff.filter(m => onLeaveIds.includes(m.id));
@@ -223,8 +223,7 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
   useEffect(() => {
     supabase.from("leaves").select("*")
       .eq("status", "approved")
-      .lte("start_date", today)
-      .gte("end_date", today)
+      .eq("leave_date", today)
       .then(({ data }) => { if (data) setLeaves(data); });
   }, [today]);
 

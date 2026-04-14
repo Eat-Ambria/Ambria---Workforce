@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C, F, LANGS } from "./constants.js";
+
+// leaves table: id, user_id, user_name, leave_date, leave_type, reason, status, approved_by
 
 const LEAVE_TYPES = [
   { id: "casual", enLabel: "Casual", hiLabel: "आकस्मिक", color: C.blue, icon: "🏖️" },
@@ -14,16 +16,10 @@ const STATUS_MAP = {
   rejected: { label: "Rejected", hiLabel: "नामंज़ूर", color: C.red, bg: C.rBg, icon: "❌" },
 };
 
-function daysBetween(start, end) {
-  const s = new Date(start), e = new Date(end);
-  return Math.max(1, Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1);
-}
-
 function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
   const st = STATUS_MAP[leave.status] || STATUS_MAP.pending;
   const lt = LEAVE_TYPES.find(t => t.id === leave.leave_type) || LEAVE_TYPES[2];
   const isAdmin = user.role === "sa" || user.role === "a";
-  const days = daysBetween(leave.start_date, leave.end_date);
 
   return (
     <div style={{
@@ -37,29 +33,20 @@ function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
               width: 28, height: 28, borderRadius: "50%", background: lt.color,
               display: "flex", alignItems: "center", justifyContent: "center",
               color: C.white, fontSize: 10, fontWeight: 700, flexShrink: 0
-            }}>{leave.staff_name?.[0] || "?"}</div>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>{leave.staff_name}</span>
+            }}>{leave.user_name?.[0] || "?"}</div>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>{leave.user_name}</span>
             <span style={{ padding: "2px 7px", borderRadius: 5, background: lt.color + "20", color: lt.color, fontSize: 10, fontWeight: 600 }}>
               {lt.icon} {lang === "hi" ? lt.hiLabel : lt.enLabel}
             </span>
           </div>
           <div style={{ fontSize: 12, color: C.text, marginBottom: 4 }}>
-            📅 {new Date(leave.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-            {" → "}
-            {new Date(leave.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-            <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 4, background: C.bBg, color: C.blue, fontSize: 10, fontWeight: 600 }}>
-              {days} {L.dayCount}
-            </span>
+            📅 {leave.leave_date ? new Date(leave.leave_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
           </div>
           {leave.reason && (
-            <div style={{ fontSize: 10, color: C.tl, fontStyle: "italic" }}>
-              "{leave.reason}"
-            </div>
+            <div style={{ fontSize: 10, color: C.tl, fontStyle: "italic" }}>"{leave.reason}"</div>
           )}
           {leave.approved_by && (
-            <div style={{ fontSize: 9, color: C.tl, marginTop: 3 }}>
-              By: {leave.approved_by}
-            </div>
+            <div style={{ fontSize: 9, color: C.tl, marginTop: 3 }}>By: {leave.approved_by}</div>
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
@@ -95,42 +82,38 @@ export default function LeaveManager({ prop, user, lang }) {
   const [form, setForm] = useState({
     leave_type: "casual",
     reason: "",
-    start_date: today,
-    end_date: today,
+    leave_date: today,
   });
   const [submitting, setSubmitting] = useState(false);
   const [tab, setTab] = useState(isAdmin ? "pending" : "my");
 
   const loadLeaves = async () => {
     setLoading(true);
-    let q = supabase.from("leaves").select("*").order("created_at", { ascending: false });
+    // leaves table has: id, user_id, user_name, leave_date, leave_type, reason, status, approved_by
+    let q = supabase.from("leaves").select("*").order("leave_date", { ascending: false });
     if (!isAdmin) {
-      q = q.eq("staff_id", user.id);
-    } else if (user.prop !== "all") {
-      q = q.eq("property", user.prop);
+      q = q.eq("user_id", user.id);
     }
     const { data } = await q;
     if (data) setLeaves(data);
     setLoading(false);
   };
 
-  useEffect(() => { loadLeaves(); }, [user.id, prop.id]);
+  useEffect(() => { loadLeaves(); }, [user.id]);
 
   const submitLeave = async () => {
-    if (!form.start_date || !form.end_date) return;
+    if (!form.leave_date) return;
     setSubmitting(true);
     const { error } = await supabase.from("leaves").insert({
-      staff_id: user.id,
-      staff_name: user.name,
-      property: user.prop === "all" ? prop.id : user.prop,
+      user_id: user.id,
+      user_name: user.name,
+      leave_date: form.leave_date,
       leave_type: form.leave_type,
       reason: form.reason.trim(),
-      start_date: form.start_date,
-      end_date: form.end_date,
       status: "pending",
     });
     if (!error) {
-      setForm({ leave_type: "casual", reason: "", start_date: today, end_date: today });
+      setForm({ leave_type: "casual", reason: "", leave_date: today });
       setShowForm(false);
       loadLeaves();
     }
@@ -143,13 +126,15 @@ export default function LeaveManager({ prop, user, lang }) {
   };
 
   const pending = leaves.filter(l => l.status === "pending");
-  const todayLeaves = leaves.filter(l =>
-    l.status === "approved" && l.start_date <= today && l.end_date >= today
-  );
-  const myLeaves = leaves.filter(l => l.staff_id === user.id);
+  const todayLeaves = leaves.filter(l => l.status === "approved" && l.leave_date === today);
+  const myLeaves = leaves.filter(l => l.user_id === user.id);
 
   const tabs = isAdmin
-    ? [{ id: "pending", label: `${L.pendingLeaves} (${pending.length})` }, { id: "today", label: `Today On Leave (${todayLeaves.length})` }, { id: "all", label: "All Requests" }]
+    ? [
+        { id: "pending", label: `${L.pendingLeaves} (${pending.length})` },
+        { id: "today", label: `Today On Leave (${todayLeaves.length})` },
+        { id: "all", label: "All Requests" }
+      ]
     : [{ id: "my", label: L.myLeaves }];
 
   const displayed = tab === "pending" ? pending
@@ -165,7 +150,7 @@ export default function LeaveManager({ prop, user, lang }) {
           <h1 style={{ fontFamily: F.d, fontSize: 22, fontWeight: 700, color: C.maroon, margin: 0 }}>
             🏖️ {L.leaveRequest}
           </h1>
-          <p style={{ fontSize: 10, color: C.tl, margin: "3px 0 0" }}>{prop.name}</p>
+          <p style={{ fontSize: 10, color: C.tl, margin: "3px 0 0" }}>{prop?.name}</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} style={{
           padding: "8px 14px", borderRadius: 8, border: "none",
@@ -183,7 +168,7 @@ export default function LeaveManager({ prop, user, lang }) {
             📝 {L.applyLeave}
           </div>
 
-          {/* Leave type buttons */}
+          {/* Leave type */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 6 }}>{L.leaveType}</label>
             <div style={{ display: "flex", gap: 6 }}>
@@ -199,20 +184,12 @@ export default function LeaveManager({ prop, user, lang }) {
             </div>
           </div>
 
-          {/* Dates */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.fromDate}</label>
-              <input type="date" value={form.start_date} min={today}
-                onChange={e => setForm({ ...form, start_date: e.target.value })}
-                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.toDate}</label>
-              <input type="date" value={form.end_date} min={form.start_date}
-                onChange={e => setForm({ ...form, end_date: e.target.value })}
-                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
-            </div>
+          {/* Single date */}
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📅 {L.fromDate}</label>
+            <input type="date" value={form.leave_date} min={today}
+              onChange={e => setForm({ ...form, leave_date: e.target.value })}
+              style={{ padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }} />
           </div>
 
           {/* Reason */}
