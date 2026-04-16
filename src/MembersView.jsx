@@ -14,7 +14,79 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function MemberCard({ member, onDeactivate, onRestore, isAdmin, lang, L }) {
+const DEPT_NAMES = { h: "🌱 Horticulture", k: "🧹 Housekeeping", a: "📋 Admin", s: "🛡️ Security" };
+
+function EditMemberModal({ member, onSave, onClose, L }) {
+  const [form, setForm] = useState({
+    name: member.n || "",
+    joining_date: member.joining_date || "",
+    phone: member.phone || "",
+    department: member.dept || "h",
+    property: member.prop || "pp",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const updates = {
+      name: form.name.trim() || undefined,
+      joining_date: form.joining_date || null,
+      phone: form.phone.trim() || null,
+      department: form.department,
+      property: form.property,
+    };
+    await supabase.from("users").update(updates).eq("id", member.id);
+    onSave({ ...member, n: form.name.trim() || member.n, joining_date: form.joining_date || null, phone: form.phone.trim() || null, dept: form.department, prop: form.property });
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Member</div>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Full Name</label>
+            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📅 Joining Date</label>
+            <input type="date" value={form.joining_date || ""} onChange={e => setForm({ ...form, joining_date: e.target.value })}
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📱 Phone</label>
+            <input type="tel" placeholder="e.g. 9876543210" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Department</label>
+            <select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
+              {Object.entries(DEPT_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Property</label>
+            <select value={form.property} onChange={e => setForm({ ...form, property: e.target.value })}
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
+              {Object.entries(PROPS).map(([k, p]) => <option key={k} value={k}>{p.icon} {p.sn}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button onClick={save} disabled={saving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            {saving ? "Saving..." : "💾 Save"}
+          </button>
+          <button onClick={onClose} style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize: 13, cursor: "pointer" }}>{L.cancel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L }) {
   const isActive = member.is_active !== false;
   const days = daysSince(member.joining_date);
   const deptColor = member.deptColor || C.maroon;
@@ -42,6 +114,7 @@ function MemberCard({ member, onDeactivate, onRestore, isAdmin, lang, L }) {
         </div>
         <div style={{ fontSize: 9, color: C.tl }}>
           {member.deptIcon} {member.deptName}
+          {member.phone && <span style={{ marginLeft: 6 }}>📱 {member.phone}</span>}
         </div>
         <div style={{ fontSize: 9, color: C.tl, marginTop: 1 }}>
           {isActive ? (
@@ -59,17 +132,23 @@ function MemberCard({ member, onDeactivate, onRestore, isAdmin, lang, L }) {
       </div>
 
       {isAdmin && (
-        isActive ? (
-          <button onClick={() => onDeactivate(member)} style={{
-            padding: "4px 9px", borderRadius: 6, border: "none",
-            background: C.rBg, color: C.red, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer", flexShrink: 0
-          }}>✕ {L.deactivate}</button>
-        ) : (
-          <button onClick={() => onRestore(member)} style={{
-            padding: "4px 9px", borderRadius: 6, border: "none",
-            background: C.gBg, color: C.green, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer", flexShrink: 0
-          }}>↩ Restore</button>
-        )
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+          <button onClick={() => onEdit(member)} style={{
+            padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
+            background: C.bg, color: C.tl, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer"
+          }}>✏️ Edit</button>
+          {isActive ? (
+            <button onClick={() => onDeactivate(member)} style={{
+              padding: "3px 8px", borderRadius: 6, border: "none",
+              background: C.rBg, color: C.red, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer"
+            }}>✕ {L.deactivate}</button>
+          ) : (
+            <button onClick={() => onRestore(member)} style={{
+              padding: "3px 8px", borderRadius: 6, border: "none",
+              background: C.gBg, color: C.green, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer"
+            }}>↩ Restore</button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -78,7 +157,6 @@ function MemberCard({ member, onDeactivate, onRestore, isAdmin, lang, L }) {
 export default function MembersView({ user, lang, customMembers, setCustomMembers, removedIds, setRemovedIds }) {
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";
-  const deptNames = { h: "🌱 Horticulture", k: "🧹 Housekeeping", a: "📋 Admin", s: "🛡️ Security" };
 
   const [showAdd, setShowAdd] = useState(false);
   const [fName, setFName] = useState("");
@@ -87,12 +165,13 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   const [fProp, setFProp] = useState("pp");
   const [fDept, setFDept] = useState("h");
   const [fJoining, setFJoining] = useState("");
-  // DB users with joining_date / is_active
   const [dbUsers, setDbUsers] = useState({});
   const [tab, setTab] = useState("active");
+  const [filterProp, setFilterProp] = useState("all");
+  const [editingMember, setEditingMember] = useState(null);
 
   useEffect(() => {
-    supabase.from("users").select("id,joining_date,is_active,left_date")
+    supabase.from("users").select("id,joining_date,is_active,left_date,phone,name")
       .then(({ data }) => {
         if (data) {
           const map = {};
@@ -114,7 +193,6 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       joining_date: fJoining || null, is_active: true,
     });
     if (error) {
-      // ID conflict — use timestamp fallback
       const altId = `${fProp}_${uname}_${Date.now()}`;
       await supabase.from("users").insert({ id: altId, username: altId, password: pass, name: fName.trim(), role: "e", property: fProp, department: fDept, joining_date: fJoining || null, is_active: true });
       setCustomMembers(prev => [...prev, { ...newM, id: altId }]);
@@ -145,6 +223,15 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
     }
   };
 
+  const handleEditSave = (updated) => {
+    if (updated.isCustom) {
+      setCustomMembers(prev => prev.map(m => m.id === updated.id ? { ...m, n: updated.n, joining_date: updated.joining_date, phone: updated.phone, dept: updated.dept, prop: updated.prop } : m));
+    } else {
+      setDbUsers(prev => ({ ...prev, [updated.id]: { ...prev[updated.id], joining_date: updated.joining_date, phone: updated.phone, name: updated.n } }));
+    }
+    setEditingMember(null);
+  };
+
   // Build member list per property
   const allByProp = {};
   Object.entries(PROPS).forEach(([pk, p]) => {
@@ -158,6 +245,9 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
           isCustom: false, is_active: !isRemoved,
           joining_date: dbInfo.joining_date || null,
           left_date: dbInfo.left_date || null,
+          phone: dbInfo.phone || null,
+          n: dbInfo.name || m.n,
+          prop: pk,
         });
       });
     });
@@ -165,14 +255,21 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   customMembers.forEach(cm => {
     if (!allByProp[cm.prop]) return;
     const d = PROPS[cm.prop]?.depts?.[cm.dept];
+    const dbInfo = dbUsers[cm.id] || {};
     allByProp[cm.prop].members.push({
       ...cm, deptName: d?.n || cm.dept, deptIcon: d?.i || "", deptColor: d?.c || C.blue, isCustom: true,
+      phone: dbInfo.phone || cm.phone || null,
     });
   });
 
   const allMembers = Object.values(allByProp).flatMap(({ members }) => members);
   const activeCount = allMembers.filter(m => m.is_active).length;
   const pastCount = allMembers.filter(m => !m.is_active).length;
+
+  const propFilters = [
+    { id: "all", label: "All" },
+    ...Object.entries(PROPS).map(([k, p]) => ({ id: k, label: `${p.icon} ${p.sn}` })),
+  ];
 
   return (
     <div style={{ fontFamily: F.b }}>
@@ -192,6 +289,18 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
             background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 12, fontWeight: 700, cursor: "pointer"
           }}>➕ {L.addMember}</button>
         )}
+      </div>
+
+      {/* ── Property Filter ── */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
+        {propFilters.map(f => (
+          <button key={f.id} onClick={() => setFilterProp(f.id)} style={{
+            padding: "5px 12px", borderRadius: 8, cursor: "pointer", fontFamily: F.b, fontSize: 11, fontWeight: 600,
+            border: filterProp === f.id ? `2px solid ${C.maroon}` : `1px solid ${C.border}`,
+            background: filterProp === f.id ? C.maroonSoft : C.white,
+            color: filterProp === f.id ? C.maroon : C.tl,
+          }}>{f.label}</button>
+        ))}
       </div>
 
       {/* ── Add Form ── */}
@@ -216,7 +325,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
             </select>
             <select value={fDept} onChange={e => setFDept(e.target.value)}
               style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
-              {Object.entries(deptNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {Object.entries(DEPT_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -242,27 +351,40 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       </div>
 
       {/* ── Members by Property ── */}
-      {Object.entries(allByProp).map(([pk, { prop, members }]) => {
-        const filtered = members.filter(m => tab === "active" ? m.is_active : !m.is_active);
-        if (filtered.length === 0) return null;
-        return (
-          <div key={pk} style={{ background: C.white, borderRadius: 12, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-            <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
-              {prop.icon} {prop.sn}
-              <span style={{ fontSize: 12, fontWeight: 400, color: C.tl, marginLeft: 6 }}>
-                ({filtered.length} {tab === "active" ? "active" : "past"})
-              </span>
+      {Object.entries(allByProp)
+        .filter(([pk]) => filterProp === "all" || pk === filterProp)
+        .map(([pk, { prop, members }]) => {
+          const filtered = members.filter(m => tab === "active" ? m.is_active : !m.is_active);
+          if (filtered.length === 0) return null;
+          return (
+            <div key={pk} style={{ background: C.white, borderRadius: 12, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+              <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
+                {prop.icon} {prop.sn}
+                <span style={{ fontSize: 12, fontWeight: 400, color: C.tl, marginLeft: 6 }}>
+                  ({filtered.length} {tab === "active" ? "active" : "past"})
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 7 }}>
+                {filtered.map(m => (
+                  <MemberCard key={m.id} member={m}
+                    onDeactivate={handleDeactivate} onRestore={handleRestore}
+                    onEdit={setEditingMember}
+                    isAdmin={isAdmin} lang={lang} L={L} />
+                ))}
+              </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 7 }}>
-              {filtered.map(m => (
-                <MemberCard key={m.id} member={m}
-                  onDeactivate={handleDeactivate} onRestore={handleRestore}
-                  isAdmin={isAdmin} lang={lang} L={L} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+
+      {/* ── Edit Modal ── */}
+      {editingMember && (
+        <EditMemberModal
+          member={editingMember}
+          onSave={handleEditSave}
+          onClose={() => setEditingMember(null)}
+          L={L}
+        />
+      )}
     </div>
   );
 }

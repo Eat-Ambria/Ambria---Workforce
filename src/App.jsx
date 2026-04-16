@@ -234,7 +234,7 @@ function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,set
   console.log("[Sidebar] user.id:",u.id,"role:",u.role,"isA:",isA,"isSA:",isSA);
   // Pending count for assigned tasks
   const pendDirs=isSA?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&d.status==="sent").length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"SOP Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
@@ -271,28 +271,58 @@ function NPanel({ns,onClose,onClr,L,onClickNotif}){return(<div style={{position:
       {isApproval&&<div style={{fontSize:9,color:C.accent,marginTop:3,fontWeight:700}}>👆 Tap to review & approve</div>}
     </div>);})}</div></div>);}
 
+const TP_GUARDS={
+  pp:[{id:"3p_pp_d1",label:"Day Guard 1",shift:"day"},{id:"3p_pp_d2",label:"Day Guard 2",shift:"day"},{id:"3p_pp_n1",label:"Night Guard 1",shift:"night"},{id:"3p_pp_n2",label:"Night Guard 2",shift:"night"}],
+  ex:[{id:"3p_ex_d1",label:"Kitchen Day Guard",shift:"day"},{id:"3p_ex_n1",label:"Night Guard 1",shift:"night"},{id:"3p_ex_n2",label:"Night Guard 2",shift:"night"}],
+  mk:[{id:"3p_mk_n1",label:"Night Guard",shift:"night"}],
+  rs:[{id:"3p_rs_n1",label:"Night Guard",shift:"night"}],
+};
+
 function AttView({user:u,att,setAtt,prop,L}){
   const isA=u.role==="sa"||u.role==="a";const tk=td.toISOString().split("T")[0];const mr=att.find(a=>a.uid===u.id&&a.date===tk);
   const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
-  const attRef=useRef(null);
+  const attRef=useRef(null);const tpSlots=TP_GUARDS[prop.id]||[];
+  const[tpNames,setTpNames]=useState({});
   useEffect(()=>{
     supabase.from("attendance").select("*").eq("date",tk).then(({data})=>{
-      if(data&&data.length>0)setAtt(data.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));
+      if(data&&data.length>0){
+        const nm={};data.filter(r=>r.user_id.startsWith("3p_")).forEach(r=>{nm[r.user_id]=r.user_name||"";});
+        if(Object.keys(nm).length)setTpNames(p=>({...p,...nm}));
+        setAtt(data.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));
+      }
     });
   },[prop.id]);
   const doCheckIn=()=>{attRef.current?.click();};
   const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});const ph=ev.target.result;if(!mr){const{error}=await supabase.from("attendance").insert({user_id:u.id,user_name:u.name,date:tk,check_in:tm});if(!error)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ph,coPhoto:null}]);}else if(!mr.co){const{error}=await supabase.from("attendance").update({check_out:tm}).eq("user_id",u.id).eq("date",tk);if(!error)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ph}:a));}};r.readAsDataURL(f);e.target.value="";};
+  const tpMark=async(slot,present)=>{
+    const name=(tpNames[slot.id]||"").trim()||slot.label;
+    const ex=att.find(a=>a.uid===slot.id&&a.date===tk);
+    if(present){if(ex){await supabase.from("attendance").update({user_name:name,check_in:"present"}).eq("user_id",slot.id).eq("date",tk);setAtt(p=>p.map(a=>a.uid===slot.id&&a.date===tk?{...a,name,ci:"present"}:a));}else{const{error}=await supabase.from("attendance").insert({user_id:slot.id,user_name:name,date:tk,check_in:"present"});if(!error)setAtt(p=>[...p,{uid:slot.id,name,date:tk,ci:"present",co:null,ciPhoto:null,coPhoto:null}]);}}
+    else{await supabase.from("attendance").delete().eq("user_id",slot.id).eq("date",tk);setAtt(p=>p.filter(a=>!(a.uid===slot.id&&a.date===tk)));}
+  };
   return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 12px"}}>🕐 {L.attendance} - {prop.sn}</h1>
     <input ref={attRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{display:"none"}}/>
     {u.role==="e"&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:16}}><div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{L.today} - {tk}</div>
       {!mr?<Btn2 primary onClick={doCheckIn}>📸📍 {L.checkIn} (Photo)</Btn2>
       :!mr.co?<div style={{display:"flex",gap:8,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>✅ {mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>}<Btn2 onClick={doCheckIn} style={{background:C.yBg,color:C.yellow}}>📸🚪 {L.checkOut}</Btn2></div>
       :<div style={{display:"flex",gap:6,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>In:{mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:28,height:28,borderRadius:4,objectFit:"cover"}}/>}<Bdg color={C.blue} bg={C.bBg}>Out:{mr.co}</Bdg>{mr.coPhoto&&<img src={mr.coPhoto} alt="" style={{width:28,height:28,borderRadius:4,objectFit:"cover"}}/>}</div>}</div>}
-    {isA&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`}}><h3 style={{fontFamily:F.d,fontSize:14,margin:"0 0 10px",color:C.maroon}}>{tk}</h3>{allM.map(m=>{const r=att.find(a=>a.uid===m.id&&a.date===tk);return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:r?C.gBg:C.bg,borderRadius:8,marginBottom:4}}>
+    {isA&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:12}}><h3 style={{fontFamily:F.d,fontSize:14,margin:"0 0 10px",color:C.maroon}}>{tk}</h3>{allM.map(m=>{const r=att.find(a=>a.uid===m.id&&a.date===tk);return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:r?C.gBg:C.bg,borderRadius:8,marginBottom:4}}>
       <div style={{width:24,height:24,borderRadius:"50%",background:m.dc||C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:9,fontWeight:700}}>{m.n[0]}</div>
       <div style={{flex:1}}><div style={{fontSize:11,fontWeight:600}}>{m.n}</div></div>
       {r?<div style={{display:"flex",gap:3,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>{r.ci}</Bdg>{r.ciPhoto&&<img src={r.ciPhoto} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover"}}/>}{r.co?<><Bdg color={C.blue} bg={C.bBg}>{r.co}</Bdg>{r.coPhoto&&<img src={r.coPhoto} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover"}}/>}</>:<Bdg color={C.yellow} bg={C.yBg}>Working</Bdg>}</div>:<Bdg color={C.red} bg={C.rBg}>{L.notCheckedIn}</Bdg>}
     </div>);})}</div>}
+    {isA&&tpSlots.length>0&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.purple}`}}>
+      <h3 style={{fontFamily:F.d,fontSize:14,margin:"0 0 12px",color:C.purple}}>🛡️ 3rd Party Guards</h3>
+      {tpSlots.map(slot=>{const rec=att.find(a=>a.uid===slot.id&&a.date===tk);const isP=!!rec?.ci;return(<div key={slot.id} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",background:isP?C.gBg:C.bg,borderRadius:8,marginBottom:6}}>
+        <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,fontWeight:700,background:slot.shift==="day"?"#FFF7ED":"#EDE9FE",color:slot.shift==="day"?C.accent:C.purple,flexShrink:0,whiteSpace:"nowrap"}}>{slot.shift==="day"?"🌅 Day":"🌙 Night"}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:9,color:C.tl,marginBottom:3}}>{slot.label}</div>
+          <input value={tpNames[slot.id]||""} onChange={e=>setTpNames(p=>({...p,[slot.id]:e.target.value}))} placeholder="Guard name..." style={{padding:"3px 7px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:11,width:"100%",boxSizing:"border-box",outline:"none"}}/>
+        </div>
+        <button onClick={()=>tpMark(slot,true)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${isP?C.green:C.border}`,background:isP?C.green:C.bg,color:isP?C.white:C.tl,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>✓ Present</button>
+        <button onClick={()=>tpMark(slot,false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${isP?C.border:C.red}`,background:isP?C.bg:C.rBg,color:isP?C.tl:C.red,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>✗ Absent</button>
+      </div>);})}
+    </div>}
   </div>);
 }
 
@@ -314,7 +344,7 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:6}}>
-      <h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:0}}>{vt==="mytasks"?L.myTasks:"SOP Tasks"} - {prop.sn}</h1>
+      <h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:0}}>{vt==="mytasks"?L.myTasks:"Daily Tasks"} - {prop.sn}</h1>
       <div style={{display:"flex",gap:5}}>
         {<div style={{display:"flex",gap:2,background:C.maroonSoft,borderRadius:8,padding:2}}>{cO.map(v=><button key={v} onClick={()=>setCV(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,background:cv===v?C.maroon:"transparent",color:cv===v?C.white:C.maroon}}>{cL[v]}</button>)}</div>}
         {isA&&<Btn2 primary small onClick={()=>setSA(!sa)}>➕ {L.addTask}</Btn2>}
@@ -593,7 +623,7 @@ function PropBar({ap,setAP,user:u}){
 
 // ═══ APP ═══
 export default function App(){
-  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");return s?JSON.parse(s):null;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
+  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&ADMIN_TARGETS.some(t=>t.id===u.id))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
@@ -613,10 +643,11 @@ export default function App(){
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
-        console.log("[AssignedTask] Fetch — user.id:",user.id,"role:",user.role,"filter to_user?",user.role!=="sa");
+        const isEffAdmin=user.role==="sa"||user.role==="a";
+        console.log("[AT FETCH] user.id:",user.id,"user.role:",user.role,"isEffAdmin:",isEffAdmin,"filter:",isEffAdmin&&user.role!=="sa"?"to_user="+user.id:user.role==="sa"?"ALL":"to_user="+user.id);
         if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
-        console.log("[AssignedTask] Loaded",atData?.length,"tasks,",repData?.length,"replies");
+        console.log("[AT LOADED]",atData?.length,"tasks,",repData?.length,"replies. Sample to_user values:",atData?.slice(0,3).map(t=>t.to_user));
         if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
         if(atData){
           const repMap={};
@@ -639,12 +670,12 @@ export default function App(){
 
   if(!user)return <LoginScreen onLogin={(u2,rememberMe)=>{
     const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
+    if(u3.role!=="sa"&&ADMIN_TARGETS.some(t=>t.id===u3.id))u3.role="a";
+    console.log("[Login] id:",u3.id,"role:",u3.role,"isAdmin:",u3.role==="a"||u3.role==="sa");
     if(rememberMe)localStorage.setItem("ambria_user",JSON.stringify(u3));
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
-    const effAdmin=u3.role==="sa"||u3.role==="a"||ADMIN_TARGETS.some(t=>t.id===u3.id);
-    console.log("[Login] id:",u3.id,"role:",u3.role,"effAdmin:",effAdmin);
-    sV(effAdmin?"dashboard":"mytasks");
+    sV(u3.role==="e"?"mytasks":"dashboard");
   }} lang={lang} setLang={setLang}/>;
 
   const ps=allS.find(s=>s.id===pAs);

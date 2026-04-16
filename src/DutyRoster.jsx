@@ -99,6 +99,7 @@ function EditModal({ entry, onSave, onClose, prop, L }) {
     source: entry.source || "third-party",
     notes: entry.notes || "",
     label: entry.label || "",
+    guard_name: (entry.source === "third-party" && entry.staff_name && entry.staff_name !== "Third Party Guard") ? entry.staff_name : "",
   });
 
   const secMembers = [
@@ -120,9 +121,20 @@ function EditModal({ entry, onSave, onClose, prop, L }) {
             <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard / Staff</label>
             <SearchSelect value={form.staff_id || "third-party"} onChange={v => {
               const m = secMembers.find(x => x.id === v);
-              setForm({ ...form, staff_id: v, staff_name: m?.n || "", source: v === "third-party" ? "third-party" : "ambria" });
+              setForm({ ...form, staff_id: v, staff_name: m?.n || "", source: v === "third-party" ? "third-party" : "ambria", guard_name: v === "third-party" ? form.guard_name : "" });
             }} options={secMembers.map(m => ({ v: m.id, l: m.n }))} style={{ width: "100%" }}/>
           </div>
+          {(form.staff_id === "third-party" || !form.staff_id) && (
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard Name (actual name)</label>
+              <input
+                placeholder="e.g. Ramesh Kumar"
+                value={form.guard_name || ""}
+                onChange={e => setForm({ ...form, guard_name: e.target.value, staff_name: e.target.value.trim() || "Third Party Guard" })}
+                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box", outline: "none" }}
+              />
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart}</label>
