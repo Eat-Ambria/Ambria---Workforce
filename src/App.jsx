@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS, PROPS, USERS } from "./constants.js";
+import { C, F, LANGS, PROPS } from "./constants.js";
 import Dashboard from "./Dashboard.jsx";
 import DutyRoster from "./DutyRoster.jsx";
 import LeaveManager from "./LeaveManager.jsx";
@@ -134,7 +134,7 @@ function Btn2({children,onClick,primary,small,style:cs}){return <button onClick=
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang}){
   const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
-  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("*").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
+  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("*").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:11,cursor:"pointer",fontWeight:600,color:C.maroon}}>{lang==="en"?"हिंदी":"English"}</button></div>
@@ -352,6 +352,7 @@ const ADMIN_TARGETS=[
 function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const isSA=u.role==="sa";
   const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
+  console.log("[AssignedTask] View — user.id:",u.id,"isSA:",isSA,"dirs:",dirs.length,"myDirs:",myDirs.length);
   const[showNew,setShowNew]=useState(false);
   const[newTo,setNewTo]=useState(ADMIN_TARGETS[0]?.id);
   const[newText,setNewText]=useState("");
@@ -364,6 +365,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const sendTask=async()=>{if(!newText.trim())return;
     const tgt=ADMIN_TARGETS.find(t=>t.id===newTo);
     const atId="at_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
+    console.log("[AssignedTask] Creating — id:",atId,"to_user:",newTo,"from_user:",u.id);
     const{data,error}=await supabase.from("assigned_tasks").insert({id:atId,from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
     if(error){console.error("sendTask:",error.message);return;}
     const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh?.data||null,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
@@ -590,7 +592,7 @@ function PropBar({ap,setAP,user:u}){
 
 // ═══ APP ═══
 export default function App(){
-  const[lang,setLang]=useState("en");const[user,setUser]=useState(null);const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
+  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");return s?JSON.parse(s):null;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
@@ -598,6 +600,7 @@ export default function App(){
   useEffect(()=>{
     if(!user)return;
     const today=new Date().toISOString().split("T")[0];
+    console.log("[App] Loading data for user — id:",user?.id,"role:",user?.role,"prop:",user?.prop);
     setLoading(true);
     (async()=>{
       try{
@@ -609,8 +612,11 @@ export default function App(){
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
+        console.log("[AssignedTask] Fetch — user.id:",user.id,"role:",user.role,"filter to_user?",user.role!=="sa");
         if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
-        const[{data:atData},{data:repData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at")]);
+        const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
+        console.log("[AssignedTask] Loaded",atData?.length,"tasks,",repData?.length,"replies");
+        if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
         if(atData){
           const repMap={};
           (repData||[]).forEach(r=>{if(!repMap[r.task_id])repMap[r.task_id]=[];repMap[r.task_id].push({id:r.id,by:r.by_name,text:r.text,photo:r.photo_url,type:r.reply_type,time:new Date(r.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),date:new Date(r.created_at).toLocaleDateString("en-IN")});});
@@ -630,8 +636,9 @@ export default function App(){
     })();
   },[user?.id]);
 
-  if(!user)return <LoginScreen onLogin={(u2)=>{
+  if(!user)return <LoginScreen onLogin={(u2,rememberMe)=>{
     const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
+    if(rememberMe)localStorage.setItem("ambria_user",JSON.stringify(u3));
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
     sV(u3.role==="e"?"mytasks":"dashboard");
@@ -646,7 +653,7 @@ export default function App(){
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
     {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon}}>Ambria</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
-    <Sidebar view={view} setView={sV} user={user} onLogout={()=>{setUser(null);setPM(false);sV("dashboard");}} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allS={allS} dirs={dirs}/>
+    <Sidebar view={view} setView={sV} user={user} onLogout={()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);sV("dashboard");}} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allS={allS} dirs={dirs}/>
     {sN&&<NPanel ns={ns} onClose={()=>setSN(false)} onClr={()=>{setNs([]);setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div style={{marginLeft:185,padding:"0 18px 18px",minHeight:"100vh"}}>
       {pm&&ps&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {ps.n} - {ps.pn}</span></div><button onClick={()=>{setPM(false);sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}

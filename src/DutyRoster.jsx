@@ -189,7 +189,11 @@ export default function DutyRoster({ prop, user, lang }) {
       .then(({ data }) => {
         if (data && data.length > 0) {
           const map = {};
-          data.forEach(r => { map[r.user_id || r.user_name] = r; });
+          data.forEach(r => {
+            const slotMatch = (r.notes || "").match(/^__slot:([^_][^_]*?)__/);
+            const key = slotMatch ? slotMatch[1] : (r.user_id || r.user_name);
+            map[key] = r;
+          });
           setRoster(map);
         }
       });
@@ -198,7 +202,9 @@ export default function DutyRoster({ prop, user, lang }) {
   const getEntry = (slot) => {
     const saved = roster[slot];
     const def = defaults.find(d => d.slot === slot);
-    return saved ? { ...def, ...saved } : { ...def };
+    if (!saved) return { ...def };
+    const cleanNotes = (saved.notes || "").replace(/^__slot:[^_][^_]*?__\s*/, "") || null;
+    return { ...def, ...saved, notes: cleanNotes };
   };
 
   const handleSave = async (updated) => {
@@ -212,7 +218,7 @@ export default function DutyRoster({ prop, user, lang }) {
       shift_type: updated.shift,
       shift_start: updated.start,
       shift_end: updated.end,
-      notes: updated.notes || null,
+      notes: `__slot:${updated.slot}__${updated.notes ? " " + updated.notes : ""}`,
       assigned_by: user.id,
     };
     const { error } = await supabase.from("duty_roster").insert(row);
