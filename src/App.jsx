@@ -230,7 +230,8 @@ function AddTF({prop,onAdd,onClose,L}){
 
 // ═══ SIDEBAR ═══
 function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allS,dirs}){
-  const isSA=u.role==="sa";const isA=pm?false:(u.role==="sa"||u.role==="a");
+  const isSA=u.role==="sa";const isEffAdmin=u.role==="sa"||u.role==="a"||ADMIN_TARGETS.some(t=>t.id===u.id);const isA=pm?false:isEffAdmin;
+  console.log("[Sidebar] user.id:",u.id,"role:",u.role,"isA:",isA,"isSA:",isSA);
   // Pending count for assigned tasks
   const pendDirs=isSA?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&d.status==="sent").length;
   const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"SOP Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
@@ -641,12 +642,14 @@ export default function App(){
     if(rememberMe)localStorage.setItem("ambria_user",JSON.stringify(u3));
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
-    sV(u3.role==="e"?"mytasks":"dashboard");
+    const effAdmin=u3.role==="sa"||u3.role==="a"||ADMIN_TARGETS.some(t=>t.id===u3.id);
+    console.log("[Login] id:",u3.id,"role:",u3.role,"effAdmin:",effAdmin);
+    sV(effAdmin?"dashboard":"mytasks");
   }} lang={lang} setLang={setLang}/>;
 
   const ps=allS.find(s=>s.id===pAs);
   const eU=pm&&user.role==="sa"&&ps?{id:ps.id,name:ps.n,role:"e",prop:ps.pid}:user;
-  const isA=eU.role==="sa"||eU.role==="a";
+  const isA=eU.role==="sa"||eU.role==="a"||ADMIN_TARGETS.some(t=>t.id===eU.id);
   const eP=pm&&ps?ps.pid:aP;
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){if(o.status!=="completed"&&n2.status==="completed")setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!=="issue"&&n2.status==="issue")setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
