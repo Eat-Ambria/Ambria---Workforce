@@ -184,16 +184,21 @@ function EditModal({ entry, onSave, onClose, prop, L }) {
 export default function DutyRoster({ prop, user, lang }) {
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";
+  const isSA = user.role === "sa";
   const today = new Date().toISOString().split("T")[0];
+
+  // SA can switch between properties; others see their assigned property only
+  const [localPropId, setLocalPropId] = useState(prop.id);
+  const activeProp = PROPS[localPropId] || prop;
+  const propId = activeProp.id;
+  const defaults = DEFAULT_SECURITY[propId] || [];
 
   const [roster, setRoster] = useState({});
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const propId = prop.id;
-  const defaults = DEFAULT_SECURITY[propId] || [];
-
   useEffect(() => {
+    setRoster({});
     supabase.from("duty_roster")
       .select("*")
       .eq("property", propId)
@@ -221,7 +226,6 @@ export default function DutyRoster({ prop, user, lang }) {
 
   const handleSave = async (updated) => {
     setSaving(true);
-    // duty_roster columns: id, user_id, user_name, property, shift_type, shift_start, shift_end, date, assigned_by, notes
     const row = {
       property: propId,
       date: today,
@@ -244,29 +248,39 @@ export default function DutyRoster({ prop, user, lang }) {
   const daySlots = defaults.filter(d => d.shift === "day");
   const nightSlots = defaults.filter(d => d.shift === "night");
 
-  // Also show all staff from other depts for duty assignment
-  const allStaff = Object.values(prop?.depts||{}).flatMap(d =>
-    d.m.map(m => ({ ...m, deptName: d.n, deptIcon: d.i }))
-  );
-
   return (
     <div style={{ fontFamily: F.b }}>
+      {/* ── Property Selector (SA only) ── */}
+      {isSA && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
+          {Object.values(PROPS).map(p => (
+            <button key={p.id} onClick={() => setLocalPropId(p.id)} style={{
+              padding: "6px 12px", borderRadius: 8, cursor: "pointer",
+              fontFamily: F.b, fontSize: 11, fontWeight: 600,
+              border: localPropId === p.id ? `2px solid ${C.maroon}` : `1px solid ${C.border}`,
+              background: localPropId === p.id ? C.maroonSoft : C.white,
+              color: localPropId === p.id ? C.maroon : C.tl,
+            }}>{p.icon} {p.sn}</button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
           <h1 style={{ fontFamily: F.d, fontSize: 22, fontWeight: 700, color: C.maroon, margin: 0 }}>
             📋 {L.roster}
           </h1>
           <p style={{ fontSize: 10, color: C.tl, margin: "3px 0 0" }}>
-            {prop.name} · {new Date(today).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
+            {activeProp.name} · {new Date(today).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
         {saving && <div style={{ fontSize: 11, color: C.tl }}>Saving...</div>}
       </div>
 
-      {/* ── Security Shifts ── */}
+      {/* ── Security Shifts Only ── */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontFamily: F.d, fontSize: 15, fontWeight: 700, color: C.purple, marginBottom: 8 }}>
-          🛡️ Security Shifts
+          🛡️ Security Shifts — {activeProp.sn}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
@@ -275,6 +289,7 @@ export default function DutyRoster({ prop, user, lang }) {
               {daySlots.map(d => (
                 <ShiftCard key={d.slot} entry={getEntry(d.slot)} onEdit={setEditing} isAdmin={isAdmin} L={L} />
               ))}
+              {daySlots.length === 0 && <div style={{ fontSize: 11, color: C.tl, padding: "6px 0", fontStyle: "italic" }}>No day guards</div>}
             </div>
           </div>
           <div>
@@ -283,33 +298,9 @@ export default function DutyRoster({ prop, user, lang }) {
               {nightSlots.map(d => (
                 <ShiftCard key={d.slot} entry={getEntry(d.slot)} onEdit={setEditing} isAdmin={isAdmin} L={L} />
               ))}
+              {nightSlots.length === 0 && <div style={{ fontSize: 11, color: C.tl, padding: "6px 0", fontStyle: "italic" }}>No night guards</div>}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* ── All Staff Overview ── */}
-      <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14 }}>
-        <div style={{ fontFamily: F.d, fontSize: 15, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
-          👥 All Staff — {prop.sn}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
-          {allStaff.map(m => (
-            <div key={m.id} style={{
-              padding: "8px 10px", background: C.bg, borderRadius: 8,
-              borderLeft: `3px solid ${C.maroon}`, display: "flex", alignItems: "center", gap: 6
-            }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: "50%", background: C.maroon,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: C.white, fontSize: 9, fontWeight: 700, flexShrink: 0
-              }}>{m.n[0]}</div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 600 }}>{m.n}</div>
-                <div style={{ fontSize: 8, color: C.tl }}>{m.deptIcon} {m.deptName}</div>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -319,7 +310,7 @@ export default function DutyRoster({ prop, user, lang }) {
           entry={editing}
           onSave={handleSave}
           onClose={() => setEditing(null)}
-          prop={prop}
+          prop={activeProp}
           L={L}
         />
       )}

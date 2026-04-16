@@ -230,7 +230,7 @@ function AddTF({prop,onAdd,onClose,L}){
 
 // ═══ SIDEBAR ═══
 function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allS,dirs}){
-  const isSA=u.role==="sa";const isEffAdmin=u.role==="sa"||u.role==="a"||ADMIN_TARGETS.some(t=>t.id===u.id);const isA=pm?false:isEffAdmin;
+  const isSA=u.role==="sa";const isEffAdmin=u.role==="sa"||u.role==="a"||!!findAT(u);const isA=pm?false:isEffAdmin;
   console.log("[Sidebar] user.id:",u.id,"role:",u.role,"isA:",isA,"isSA:",isSA);
   // Pending count for assigned tasks
   const pendDirs=isSA?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&d.status==="sent").length;
@@ -373,17 +373,20 @@ function TeamV({tasks,prop,L}){return(<div><h1 style={{fontFamily:F.d,fontSize:2
 
 // ═══ ASSIGNED TASKS — SA creates tasks for Admins ═══
 const ADMIN_TARGETS=[
-  {id:"vicky",name:"Vicky Arya",prop:"All",color:"#8B5CF6"},
-  {id:"pp_sonu",name:"Sonu Mali",prop:"Pushpanjali",color:"#0891B2"},
-  {id:"ex_mahesh",name:"Mahesh",prop:"Exotica",color:"#D97706"},
-  {id:"mk_rahees",name:"Rahees",prop:"Manaktala",color:"#059669"},
-  {id:"sandeep",name:"Sandeep",prop:"Security-All",color:"#6B21A8"},
+  {id:"vicky",username:"vicky",name:"Vicky Arya",prop:"All",color:"#8B5CF6"},
+  {id:"pp_sonu",username:"sonu",name:"Sonu Mali",prop:"Pushpanjali",color:"#0891B2"},
+  {id:"ex_mahesh",username:"mahesh",name:"Mahesh",prop:"Exotica",color:"#D97706"},
+  {id:"mk_rahees",username:"rahees",name:"Rahees",prop:"Manaktala",color:"#059669"},
+  {id:"sandeep",username:"sandeep",name:"Sandeep",prop:"Security-All",color:"#6B21A8"},
 ];
+// Find admin target by id OR username (handles DB id mismatches)
+function findAT(u){return ADMIN_TARGETS.find(t=>t.id===u.id||(t.username&&t.username===u.username));}
 
 function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const isSA=u.role==="sa";
-  const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
-  console.log("[AssignedTask] View — user.id:",u.id,"isSA:",isSA,"dirs:",dirs.length,"myDirs:",myDirs.length);
+  const at=findAT(u);const myId=at?.id||u.id;
+  const myDirs=isSA?dirs:dirs.filter(d=>d.to===myId);
+  console.log("[AT VIEW] user.id:",u.id,"username:",u.username,"canonical myId:",myId,"isSA:",isSA,"total dirs:",dirs.length,"myDirs:",myDirs.length,"sample dir.to values:",dirs.slice(0,3).map(d=>d.to));
   const[showNew,setShowNew]=useState(false);
   const[newTo,setNewTo]=useState(ADMIN_TARGETS[0]?.id);
   const[newText,setNewText]=useState("");
@@ -454,7 +457,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const[showRemarks,setShowRemarks]=useState(false);
   const[remarks,setRemarks]=useState("");
   const cRef=useRef(null);const rRef=useRef(null);
-  const isSA=u.role==="sa";const isTarget=dir.to===u.id;
+  const isSA=u.role==="sa";const _at=findAT(u);const _myId=_at?.id||u.id;const isTarget=dir.to===_myId;
   const tgt=ADMIN_TARGETS.find(t=>t.id===dir.to);
   const mC=tgt?.color||C.blue;
 
@@ -623,7 +626,7 @@ function PropBar({ap,setAP,user:u}){
 
 // ═══ APP ═══
 export default function App(){
-  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&ADMIN_TARGETS.some(t=>t.id===u.id))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
+  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&findAT(u))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
@@ -643,9 +646,9 @@ export default function App(){
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
-        const isEffAdmin=user.role==="sa"||user.role==="a";
-        console.log("[AT FETCH] user.id:",user.id,"user.role:",user.role,"isEffAdmin:",isEffAdmin,"filter:",isEffAdmin&&user.role!=="sa"?"to_user="+user.id:user.role==="sa"?"ALL":"to_user="+user.id);
-        if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
+        const adminTgt=findAT(user);const atUserId=adminTgt?.id||user.id;
+        console.log("[AT FETCH] user.id:",user.id,"user.username:",user.username,"role:",user.role,"canonical atUserId:",atUserId,"adminTarget:",adminTgt?.id||"none");
+        if(user.role!=="sa")atQ=atQ.eq("to_user",atUserId);
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
         console.log("[AT LOADED]",atData?.length,"tasks,",repData?.length,"replies. Sample to_user values:",atData?.slice(0,3).map(t=>t.to_user));
         if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
@@ -670,8 +673,8 @@ export default function App(){
 
   if(!user)return <LoginScreen onLogin={(u2,rememberMe)=>{
     const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
-    if(u3.role!=="sa"&&ADMIN_TARGETS.some(t=>t.id===u3.id))u3.role="a";
-    console.log("[Login] id:",u3.id,"role:",u3.role,"isAdmin:",u3.role==="a"||u3.role==="sa");
+    const _at3=findAT(u3);if(u3.role!=="sa"&&_at3)u3.role="a";
+    console.log("[Login] id:",u3.id,"username:",u3.username,"role:",u3.role,"adminTarget:",_at3?.id||"none");
     if(rememberMe)localStorage.setItem("ambria_user",JSON.stringify(u3));
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
@@ -680,7 +683,7 @@ export default function App(){
 
   const ps=allS.find(s=>s.id===pAs);
   const eU=pm&&user.role==="sa"&&ps?{id:ps.id,name:ps.n,role:"e",prop:ps.pid}:user;
-  const isA=eU.role==="sa"||eU.role==="a"||ADMIN_TARGETS.some(t=>t.id===eU.id);
+  const isA=eU.role==="sa"||eU.role==="a"||!!findAT(eU);
   const eP=pm&&ps?ps.pid:aP;
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){if(o.status!=="completed"&&n2.status==="completed")setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!=="issue"&&n2.status==="issue")setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
@@ -691,7 +694,7 @@ export default function App(){
     {sN&&<NPanel ns={ns} onClose={()=>setSN(false)} onClr={()=>{setNs([]);setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div style={{marginLeft:185,padding:"0 18px 18px",minHeight:"100vh"}}>
       {pm&&ps&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {ps.n} - {ps.pn}</span></div><button onClick={()=>{setPM(false);sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
-      {!pm&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
+      {!pm&&!["members","roster"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
