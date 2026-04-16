@@ -105,7 +105,7 @@ const td=new Date();const dN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];const m
 function dIn(y,m){return new Date(y,m+1,0).getDate();}function gFD(y,m){return new Date(y,m,1).getDay();}
 
 // ═══ SUPABASE HELPERS ═══
-const syncTask=(task)=>{supabase.from("tasks").upsert({task_key:task.id,property:task.prop,date:new Date().toISOString().split("T")[0],status:task.status,notes:task.notes||null,completed_at:task.completedAt||null,completed_by:task.completedBy||null,photos:task.photos||[]},{onConflict:"task_key,date"}).then(({error})=>{if(error)console.error("task sync:",error.message);});};
+const syncTask=(task)=>{supabase.from("tasks").upsert({id:task.id,property:task.prop,task_date:new Date().toISOString().split("T")[0],status:task.status,notes:task.notes||null,completed_at:task.completedAt||null,completed_by:task.completedBy||null},{onConflict:"id"}).then(({error})=>{if(error)console.error("task sync:",error.message);});};
 
 // ═══ UI ═══
 function Bdg({children,color=C.tl,bg=C.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
@@ -275,12 +275,12 @@ function AttView({user:u,att,setAtt,prop,L}){
   const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
   const attRef=useRef(null);
   useEffect(()=>{
-    supabase.from("attendance").select("*").eq("property",prop.id).eq("date",tk).then(({data})=>{
-      if(data&&data.length>0)setAtt(data.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:r.check_in_photo||null,coPhoto:r.check_out_photo||null})));
+    supabase.from("attendance").select("*").eq("date",tk).then(({data})=>{
+      if(data&&data.length>0)setAtt(data.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));
     });
   },[prop.id]);
   const doCheckIn=()=>{attRef.current?.click();};
-  const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});const ph=ev.target.result;if(!mr){const{error}=await supabase.from("attendance").insert({user_id:u.id,user_name:u.name,property:prop.id,date:tk,check_in:tm,check_in_photo:ph});if(!error)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ph,coPhoto:null}]);}else if(!mr.co){const{error}=await supabase.from("attendance").update({check_out:tm,check_out_photo:ph}).eq("user_id",u.id).eq("date",tk);if(!error)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ph}:a));}};r.readAsDataURL(f);e.target.value="";};
+  const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});const ph=ev.target.result;if(!mr){const{error}=await supabase.from("attendance").insert({user_id:u.id,user_name:u.name,date:tk,check_in:tm});if(!error)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ph,coPhoto:null}]);}else if(!mr.co){const{error}=await supabase.from("attendance").update({check_out:tm}).eq("user_id",u.id).eq("date",tk);if(!error)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ph}:a));}};r.readAsDataURL(f);e.target.value="";};
   return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 12px"}}>🕐 {L.attendance} - {prop.sn}</h1>
     <input ref={attRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{display:"none"}}/>
     {u.role==="e"&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:16}}><div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{L.today} - {tk}</div>
@@ -363,9 +363,9 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
 
   const sendTask=async()=>{if(!newText.trim())return;
     const tgt=ADMIN_TARGETS.find(t=>t.id===newTo);
-    const{data,error}=await supabase.from("assigned_tasks").insert({from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo:nPh,status:"sent",due_date:nDue||null}).select().single();
+    const{data,error}=await supabase.from("assigned_tasks").insert({from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
     if(error){console.error("sendTask:",error.message);return;}
-    const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
+    const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh?.data||null,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
     setDirs(prev=>[newDir,...prev]);
     setNs(p=>[{type:"newTask",task:"📝 New task: "+newText.trim().slice(0,40),by:u.name,prop:newProp,time:newDir.createdTime,forUser:newTo},...p]);
     setNewText("");setNPh(null);setNDue("");setShowNew(false);
@@ -438,10 +438,10 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     const dt=new Date().toLocaleDateString("en-IN");
     const replyText="✅ "+L.markComplete+(cNote.trim()?" — "+cNote.trim():"");
     const[,{data:repRow}]=await Promise.all([
-      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:cPhoto||null}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,photo:cPhoto||null,type:"completed"}).select().single()
+      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:cPhoto?.data||null}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,photo_url:cPhoto?.data||null,reply_type:"completed"}).select().single()
     ]);
-    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:cPhoto||null,type:"completed",time:tm,date:dt};
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:cPhoto?.data||null,type:"completed",time:tm,date:dt};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:cPhoto||null,replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"completed",task:"✅ Completed: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.from},...p]);
     setCNote("");setCPhoto(null);setShowComplete(false);
@@ -453,7 +453,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     const replyText="🔔 "+L.reqApproval;
     const[,{data:repRow}]=await Promise.all([
       supabase.from("assigned_tasks").update({status:"approval_req"}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,type:"approval_req"}).select().single()
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,reply_type:"approval_req"}).select().single()
     ]);
     const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"approval_req",time:tm,date:new Date().toLocaleDateString("en-IN")};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approval_req",replies:[...d.replies,newReply]}:d));
@@ -464,8 +464,8 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const addReply=async()=>{
     if(!rText.trim()&&!rPhoto)return;
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    const{data:repRow}=await supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:rText.trim(),photo:rPhoto,type:"reply"}).select().single();
-    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:rText.trim(),photo:rPhoto,type:"reply",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    const{data:repRow}=await supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:rText.trim(),photo_url:rPhoto?.data||null,reply_type:"reply"}).select().single();
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:rText.trim(),photo:rPhoto?.data||null,type:"reply",time:tm,date:new Date().toLocaleDateString("en-IN")};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,replies:[...d.replies,newReply]}:d));
     setRText("");setRPhoto(null);setShowReply(false);
   };
@@ -476,7 +476,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     const replyText="✅ OK — Approved";
     const[,{data:repRow}]=await Promise.all([
       supabase.from("assigned_tasks").update({status:"approved"}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,type:"approved"}).select().single()
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,reply_type:"approved"}).select().single()
     ]);
     const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"approved",time:tm,date:new Date().toLocaleDateString("en-IN")};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approved",replies:[...d.replies,newReply]}:d));
@@ -488,7 +488,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     const replyText="❌ Not OK: "+remarks.trim();
     const[,{data:repRow}]=await Promise.all([
       supabase.from("assigned_tasks").update({status:"rejected",remarks_sa:remarks.trim()}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,from_user:u.id,from_name:u.name,text:replyText,type:"rejected"}).select().single()
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,reply_type:"rejected"}).select().single()
     ]);
     const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"rejected",time:tm,date:new Date().toLocaleDateString("en-IN")};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"rejected",remarksSA:remarks.trim(),replies:[...d.replies,newReply]}:d));
@@ -517,7 +517,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     {/* BODY */}
     <div style={{padding:"10px 14px"}}>
       <div style={{fontSize:13,lineHeight:1.6,marginBottom:6,textDecoration:isDone?"line-through":"none",color:isDone?C.green:C.text}}>{dir.text}</div>
-      {dir.photo&&<img src={dir.photo.data} alt="" style={{width:90,height:90,borderRadius:8,objectFit:"cover",border:`1px solid ${C.border}`,marginBottom:6}}/>}
+      {dir.photo&&<img src={dir.photo} alt="" style={{width:90,height:90,borderRadius:8,objectFit:"cover",border:`1px solid ${C.border}`,marginBottom:6}}/>}
 
       {/* REPLIES THREAD */}
       {dir.replies.length>0&&<div style={{borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:4}}>
@@ -528,7 +528,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
             <div style={{width:22,height:22,borderRadius:"50%",background:rC2,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:8,fontWeight:700,flexShrink:0}}>{r.by[0]}</div>
             <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600}}>{r.by} <span style={{fontWeight:400,color:C.tl}}>{r.time}</span></div>
               {r.text&&<div style={{fontSize:11,marginTop:2}}>{r.text}</div>}
-              {r.photo&&<img src={r.photo.data} alt="" style={{width:70,height:70,borderRadius:6,objectFit:"cover",marginTop:4}}/>}
+              {r.photo&&<img src={r.photo} alt="" style={{width:70,height:70,borderRadius:6,objectFit:"cover",marginTop:4}}/>}
             </div>
           </div>);
         })}
@@ -603,8 +603,8 @@ export default function App(){
         // 1. Task status overrides for today (re-hydrate template tasks with saved state)
         const props=user.prop==="all"?Object.keys(PROPS):[user.prop||"pp"];
         for(const pid of props){
-          const{data:td}=await supabase.from("tasks").select("task_key,status,notes,completed_at,completed_by,photos").eq("property",pid).eq("date",today);
-          if(td&&td.length>0){const ov={};td.forEach(r=>{ov[r.task_key]=r;});sTS(prev=>({...prev,[pid]:(prev[pid]||[]).map(t=>{const o=ov[t.id];if(!o)return t;return{...t,status:o.status||t.status,notes:o.notes||t.notes,completedAt:o.completed_at||null,completedBy:o.completed_by||"",photos:o.photos||[]};})}))}
+          const{data:td}=await supabase.from("tasks").select("id,status,notes,completed_at,completed_by").eq("property",pid).eq("task_date",today);
+          if(td&&td.length>0){const ov={};td.forEach(r=>{ov[r.id]=r;});sTS(prev=>({...prev,[pid]:(prev[pid]||[]).map(t=>{const o=ov[t.id];if(!o)return t;return{...t,status:o.status||t.status,notes:o.notes||t.notes,completedAt:o.completed_at||null,completedBy:o.completed_by||""};})}))}
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
@@ -612,8 +612,8 @@ export default function App(){
         const[{data:atData},{data:repData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at")]);
         if(atData){
           const repMap={};
-          (repData||[]).forEach(r=>{if(!repMap[r.task_id])repMap[r.task_id]=[];repMap[r.task_id].push({id:r.id,by:r.from_name,text:r.text,photo:r.photo,type:r.type,time:new Date(r.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),date:new Date(r.created_at).toLocaleDateString("en-IN")});});
-          setDirs(atData.map(t=>({id:t.id,from:t.from_user,fromName:t.from_name,to:t.to_user,toName:t.to_name,toColor:t.to_color,prop:t.property,text:t.text,photo:t.photo,status:t.status,replies:repMap[t.id]||[],dueDate:t.due_date,completedAt:t.completed_at,completionNote:t.completion_note||"",completionPhoto:t.completion_photo,remarksSA:t.remarks_sa||"",createdAt:t.created_at,createdTime:new Date(t.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(t.created_at).toLocaleDateString("en-IN")})));
+          (repData||[]).forEach(r=>{if(!repMap[r.task_id])repMap[r.task_id]=[];repMap[r.task_id].push({id:r.id,by:r.by_name,text:r.text,photo:r.photo_url,type:r.reply_type,time:new Date(r.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),date:new Date(r.created_at).toLocaleDateString("en-IN")});});
+          setDirs(atData.map(t=>({id:t.id,from:t.from_user,fromName:t.from_name,to:t.to_user,toName:t.to_name,toColor:t.to_color,prop:t.property,text:t.text,photo:t.photo_url,status:t.status,replies:repMap[t.id]||[],dueDate:t.due_date,completedAt:t.completed_at,completionNote:t.completion_note||"",completionPhoto:t.completion_photo,remarksSA:t.remarks_sa||"",createdAt:t.created_at,createdTime:new Date(t.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(t.created_at).toLocaleDateString("en-IN")})));
         }
         // 3. Custom members from users table (those not in PROPS template)
         const allTemplateIds=new Set(allS.map(m=>m.id));

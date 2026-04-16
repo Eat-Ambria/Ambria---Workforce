@@ -116,7 +116,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
     if (error) {
       // ID conflict — use timestamp fallback
       const altId = `${fProp}_${uname}_${Date.now()}`;
-      await supabase.from("users").insert({ ...newM, id: altId, username: altId });
+      await supabase.from("users").insert({ id: altId, username: altId, password: pass, name: fName.trim(), role: "e", property: fProp, department: fDept, joining_date: fJoining || null, is_active: true });
       setCustomMembers(prev => [...prev, { ...newM, id: altId }]);
     } else {
       setCustomMembers(prev => [...prev, newM]);
