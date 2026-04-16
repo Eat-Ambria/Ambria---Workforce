@@ -231,11 +231,12 @@ function AddTF({prop,onAdd,onClose,L}){
 // ═══ SIDEBAR ═══
 function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allS,dirs}){
   const isSA=u.role==="sa";const isEffAdmin=u.role==="sa"||u.role==="a"||!!findAT(u);const isA=pm?false:isEffAdmin;
-  console.log("[Sidebar] user.id:",u.id,"role:",u.role,"isA:",isA,"isSA:",isSA);
+  console.log("USER:",u.id,u.role,u.name);
   // Pending count for assigned tasks
   const pendDirs=isSA?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&d.status==="sent").length;
   const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA)nav.push({id:"members",i:"👤",l:L.members||"Members"});
+  console.log("NAV ITEMS:",nav.map(n=>n.id));
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
     <div style={{padding:"14px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -384,11 +385,13 @@ function findAT(u){return ADMIN_TARGETS.find(t=>t.id===u.id||(t.username&&t.user
 
 function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const isSA=u.role==="sa";
-  const at=findAT(u);const myId=at?.id||u.id;
-  const myDirs=isSA?dirs:dirs.filter(d=>d.to===myId);
-  console.log("[AT VIEW] user.id:",u.id,"username:",u.username,"canonical myId:",myId,"isSA:",isSA,"total dirs:",dirs.length,"myDirs:",myDirs.length,"sample dir.to values:",dirs.slice(0,3).map(d=>d.to));
+  // Use u.id directly — DB-fetched admin IDs and login user.id come from same row
+  const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
+  console.log("USER:",u.id,u.role,u.name);
+  console.log("[AT VIEW] u.id:",u.id,"isSA:",isSA,"total dirs:",dirs.length,"myDirs:",myDirs.length,"dir.to samples:",dirs.slice(0,5).map(d=>d.to));
   const[showNew,setShowNew]=useState(false);
-  const[newTo,setNewTo]=useState(ADMIN_TARGETS[0]?.id);
+  const[newTo,setNewTo]=useState("");
+  const[admins,setAdmins]=useState([]);
   const[newText,setNewText]=useState("");
   const[newProp,setNewProp]=useState("all");
   const nPhRef=useRef(null);
@@ -396,13 +399,29 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const[nDue,setNDue]=useState("");
   const[filterTo,setFilterTo]=useState("all");
 
-  const sendTask=async()=>{if(!newText.trim())return;
-    const tgt=ADMIN_TARGETS.find(t=>t.id===newTo);
+  // Fetch real admin IDs from Supabase so to_user = user.id (guaranteed match)
+  useEffect(()=>{
+    if(!isSA)return;
+    supabase.from("users").select("id,name,property,username").eq("role","a")
+      .then(({data,error})=>{
+        console.log("[Admins fetch from DB]",data?.length,"admins:",data?.map(a=>a.id),"error:",error?.message||"none");
+        if(data&&data.length>0){setAdmins(data);setNewTo(data[0].id);}
+        else{// DB has no role='a' users — fall back to ADMIN_TARGETS
+          const fb=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));
+          setAdmins(fb);setNewTo(fb[0].id);
+          console.log("[Admins] Fallback to ADMIN_TARGETS:",fb.map(t=>t.id));
+        }
+      });
+  },[isSA]);
+
+  const sendTask=async()=>{if(!newText.trim()||!newTo)return;
+    const tgt=admins.find(a=>a.id===newTo)||{name:newTo};
+    const tgtColor=ADMIN_TARGETS.find(t=>t.id===newTo||t.username===newTo)?.color||C.blue;
     const atId="at_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
-    console.log("[AssignedTask] Creating — id:",atId,"to_user:",newTo,"from_user:",u.id);
-    const{data,error}=await supabase.from("assigned_tasks").insert({id:atId,from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
-    if(error){console.error("sendTask:",error.message);return;}
-    const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh?.data||null,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
+    console.log("[AssignedTask] SAVING — id:",atId,"to_user:",newTo,"to_name:",tgt.name,"from_user:",u.id);
+    const{data,error}=await supabase.from("assigned_tasks").insert({id:atId,from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt.name||"",to_color:tgtColor,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
+    if(error){console.error("sendTask error:",error.message);return;}
+    const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt.name||"",toColor:tgtColor,prop:newProp,text:newText.trim(),photo:nPh?.data||null,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
     setDirs(prev=>[newDir,...prev]);
     setNs(p=>[{type:"newTask",task:"📝 New task: "+newText.trim().slice(0,40),by:u.name,prop:newProp,time:newDir.createdTime,forUser:newTo},...p]);
     setNewText("");setNPh(null);setNDue("");setShowNew(false);
@@ -420,7 +439,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     {showNew&&isSA&&<div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:16}}>
       <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>➕ {L.newDirective}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-        <SearchSelect value={newTo} onChange={setNewTo} options={ADMIN_TARGETS.map(t=>({v:t.id,l:`${t.name} — ${t.prop}`}))} style={{width:"100%"}}/>
+        <SearchSelect value={newTo} onChange={setNewTo} options={admins.map(a=>({v:a.id,l:a.name+(a.property?` — ${a.property}`:"")}))} style={{width:"100%"}}/>
         <SearchSelect value={newProp} onChange={setNewProp} options={[{v:"all",l:"All Properties"},...Object.entries(PROPS).map(([k,p])=>({v:k,l:`${p.icon} ${p.sn}`}))]} style={{width:"100%"}}/>
       </div>
       <textarea placeholder={L.writeTask} value={newText} onChange={e=>setNewText(e.target.value)} style={{width:"100%",padding:12,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:8}}/>
@@ -436,7 +455,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     {/* FILTER BY MEMBER — color coded */}
     {isSA&&<div style={{display:"flex",gap:4,marginBottom:14,flexWrap:"wrap"}}>
       <button onClick={()=>setFilterTo("all")} style={{padding:"6px 14px",borderRadius:8,border:filterTo==="all"?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:filterTo==="all"?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:C.maroon}}>All ({myDirs.length})</button>
-      {ADMIN_TARGETS.map(t=>{const cnt=myDirs.filter(d=>d.to===t.id).length;return cnt>0&&<button key={t.id} onClick={()=>setFilterTo(t.id)} style={{padding:"6px 14px",borderRadius:8,border:filterTo===t.id?`2px solid ${t.color}`:`1px solid ${C.border}`,background:filterTo===t.id?t.color+"15":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:t.color}}>{t.name} ({cnt})</button>;})}
+      {admins.map(a=>{const tgt=ADMIN_TARGETS.find(t=>t.id===a.id||t.username===a.username);const col=tgt?.color||C.blue;const cnt=myDirs.filter(d=>d.to===a.id).length;return cnt>0&&<button key={a.id} onClick={()=>setFilterTo(a.id)} style={{padding:"6px 14px",borderRadius:8,border:filterTo===a.id?`2px solid ${col}`:`1px solid ${C.border}`,background:filterTo===a.id?col+"15":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:col}}>{a.name} ({cnt})</button>;})}
     </div>}
 
     {/* TASK GRID */}
@@ -457,7 +476,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const[showRemarks,setShowRemarks]=useState(false);
   const[remarks,setRemarks]=useState("");
   const cRef=useRef(null);const rRef=useRef(null);
-  const isSA=u.role==="sa";const _at=findAT(u);const _myId=_at?.id||u.id;const isTarget=dir.to===_myId;
+  const isSA=u.role==="sa";const isTarget=dir.to===u.id;
   const tgt=ADMIN_TARGETS.find(t=>t.id===dir.to);
   const mC=tgt?.color||C.blue;
 
@@ -646,11 +665,10 @@ export default function App(){
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
-        const adminTgt=findAT(user);const atUserId=adminTgt?.id||user.id;
-        console.log("[AT FETCH] user.id:",user.id,"user.username:",user.username,"role:",user.role,"canonical atUserId:",atUserId,"adminTarget:",adminTgt?.id||"none");
-        if(user.role!=="sa")atQ=atQ.eq("to_user",atUserId);
+        console.log("FETCH assigned_tasks WHERE to_user =",user.id,"(role:",user.role+")");
+        if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
-        console.log("[AT LOADED]",atData?.length,"tasks,",repData?.length,"replies. Sample to_user values:",atData?.slice(0,3).map(t=>t.to_user));
+        console.log("FETCH assigned_tasks WHERE to_user =",user.id,"RESULT:",atData?.length,"tasks",atData);
         if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
         if(atData){
           const repMap={};
