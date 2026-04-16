@@ -105,7 +105,7 @@ const td=new Date();const dN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];const m
 function dIn(y,m){return new Date(y,m+1,0).getDate();}function gFD(y,m){return new Date(y,m,1).getDay();}
 
 // ═══ SUPABASE HELPERS ═══
-const syncTask=(task)=>{supabase.from("tasks").upsert({id:task.id,property:task.prop,task_date:new Date().toISOString().split("T")[0],status:task.status,notes:task.notes||null,completed_at:task.completedAt||null,completed_by:task.completedBy||null},{onConflict:"id"}).then(({error})=>{if(error)console.error("task sync:",error.message);});};
+const syncTask=(task)=>{const todayStr=new Date().toISOString().split("T")[0];supabase.from("tasks").upsert({id:"task_"+task.id+"_"+todayStr,property:task.prop,task_date:todayStr,status:task.status,notes:task.notes||null,completed_at:task.completedAt||null,completed_by:task.completedBy||null},{onConflict:"id"}).then(({error})=>{if(error)console.error("task sync:",error.message);});};
 
 // ═══ UI ═══
 function Bdg({children,color=C.tl,bg=C.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
@@ -363,7 +363,8 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
 
   const sendTask=async()=>{if(!newText.trim())return;
     const tgt=ADMIN_TARGETS.find(t=>t.id===newTo);
-    const{data,error}=await supabase.from("assigned_tasks").insert({from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
+    const atId="at_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
+    const{data,error}=await supabase.from("assigned_tasks").insert({id:atId,from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt?.name||"",to_color:tgt?.color||C.blue,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
     if(error){console.error("sendTask:",error.message);return;}
     const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt?.name||"",toColor:tgt?.color||C.blue,prop:newProp,text:newText.trim(),photo:nPh?.data||null,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
     setDirs(prev=>[newDir,...prev]);
@@ -604,7 +605,7 @@ export default function App(){
         const props=user.prop==="all"?Object.keys(PROPS):[user.prop||"pp"];
         for(const pid of props){
           const{data:td}=await supabase.from("tasks").select("id,status,notes,completed_at,completed_by").eq("property",pid).eq("task_date",today);
-          if(td&&td.length>0){const ov={};td.forEach(r=>{ov[r.id]=r;});sTS(prev=>({...prev,[pid]:(prev[pid]||[]).map(t=>{const o=ov[t.id];if(!o)return t;return{...t,status:o.status||t.status,notes:o.notes||t.notes,completedAt:o.completed_at||null,completedBy:o.completed_by||""};})}))}
+          if(td&&td.length>0){const ov={};td.forEach(r=>{const tid=r.id.replace(/^task_/,"").replace(/_\d{4}-\d{2}-\d{2}$/,"");ov[tid]=r;});sTS(prev=>({...prev,[pid]:(prev[pid]||[]).map(t=>{const o=ov[t.id];if(!o)return t;return{...t,status:o.status||t.status,notes:o.notes||t.notes,completedAt:o.completed_at||null,completedBy:o.completed_by||""};})}))}
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
