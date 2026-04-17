@@ -236,7 +236,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
   console.log("USER:",u.id,u.role,u.name);
   // Pending count for assigned tasks — when previewing, show previewed user's count
-  const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&d.status==="sent").length;
+  const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected")).length;
   const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA&&!pm)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   console.log("NAV ITEMS:",nav.map(n=>n.id));
@@ -438,7 +438,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     setNewText("");setNPh(null);setNDue("");setShowNew(false);
   };
 
-  const filteredDirs=(filterTo==="all"?myDirs:myDirs.filter(d=>d.to===filterTo)).sort((a,b)=>{const done=["completed","approved"];const aD=done.includes(a.status)?1:0;const bD=done.includes(b.status)?1:0;return aD-bD;});
+  const filteredDirs=(filterTo==="all"?myDirs:myDirs.filter(d=>d.to===filterTo)).sort((a,b)=>{const norm=s=>s==="approval_req"?"approval_requested":s;const aS=norm(a.status),bS=norm(b.status);if(aS==="completed"&&bS!=="completed")return 1;if(bS==="completed"&&aS!=="completed")return -1;const saPri={approval_requested:0,rejected:1,sent:2,approved:3,completed:4};const admPri={rejected:0,sent:1,approval_requested:2,approved:3,completed:4};const pri=isSA?saPri:admPri;return(pri[aS]??5)-(pri[bS]??5);});
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -491,43 +491,57 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const tgt=ADMIN_TARGETS.find(t=>t.id===dir.to||t.username===dir.to);
   const mC=tgt?.color||C.blue;
 
-  // Status map — now includes "completed"
-  const stMap={sent:{c:C.blue,b:C.bBg,l:"Pending"},completed:{c:C.green,b:C.gBg,l:L.completedWork},approval_req:{c:C.accent,b:"#FFF7ED",l:L.awaitApproval},approved:{c:C.green,b:C.gBg,l:L.approved},rejected:{c:C.red,b:C.rBg,l:L.rejected}};
-  const st=stMap[dir.status]||stMap.sent;
+  // Normalize legacy status value
+  const status=(dir.status==="approval_req")?"approval_requested":dir.status;
+  const isCompleted=status==="completed";
 
-  // Due date logic
-  const isOverdue=dir.dueDate&&new Date(dir.dueDate)<td&&dir.status==="sent";
+  const stMap={sent:{c:C.blue,b:C.bBg,l:"Pending"},approval_requested:{c:C.accent,b:"#FFF7ED",l:L.awaitApproval||"Awaiting Approval"},approved:{c:C.green,b:C.gBg,l:L.approved||"Approved ✓"},rejected:{c:C.red,b:C.rBg,l:L.rejected||"Needs Rework"},completed:{c:C.green,b:C.gBg,l:L.completedWork||"Completed"}};
+  const st=stMap[status]||stMap.sent;
+  const cardBg=status==="rejected"?"#FFF5F5":status==="approved"?C.gBg:status==="approval_requested"?"#FFFBF0":status==="completed"?C.gBg+"44":C.white;
+  const bdrC=status==="rejected"?C.red:status==="approved"?C.green:status==="approval_requested"?C.accent:status==="completed"?"#b8dcc8":C.border;
+  const topC=status==="rejected"?C.red:status==="approved"?C.green:status==="approval_requested"?C.accent:status==="completed"?C.green:mC;
+
+  const isOverdue=dir.dueDate&&new Date(dir.dueDate)<td&&status==="sent";
   const dueFmt=dir.dueDate?new Date(dir.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"";
 
-  // MARK COMPLETE — photo optional, note optional
+  // MARK COMPLETE — photo REQUIRED, tries Supabase Storage, falls back to base64
   const handleComplete=async()=>{
+    if(!cPhoto)return;
+    let photoUrl=null;
+    try{
+      const fn=`at_${dir.id}_${Date.now()}.jpg`;
+      const b64=cPhoto.data.split(",")[1];
+      const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+      const{error:upErr}=await supabase.storage.from("photos").upload(fn,bytes,{contentType:"image/jpeg",upsert:true});
+      if(!upErr){const{data:uD}=supabase.storage.from("photos").getPublicUrl(fn);photoUrl=uD.publicUrl;}
+    }catch(e){}
+    if(!photoUrl)photoUrl=cPhoto.data;
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
     const dt=new Date().toLocaleDateString("en-IN");
-    const replyText="✅ "+L.markComplete+(cNote.trim()?" — "+cNote.trim():"");
+    const replyText="✅ "+(L.markComplete||"Marked Complete")+(cNote.trim()?" — "+cNote.trim():"");
     const[,{data:repRow}]=await Promise.all([
-      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:cPhoto?.data||null}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,photo_url:cPhoto?.data||null,reply_type:"completed"}).select().single()
+      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:photoUrl}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,photo_url:photoUrl,reply_type:"completed"}).select().single()
     ]);
-    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:cPhoto?.data||null,type:"completed",time:tm,date:dt};
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:cPhoto||null,replies:[...d.replies,newReply]}:d));
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:photoUrl,type:"completed",time:tm,date:dt};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:{data:photoUrl},replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"completed",task:"✅ Completed: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.from},...p]);
     setCNote("");setCPhoto(null);setShowComplete(false);
   };
 
-  // SEND FOR APPROVAL — optional
+  // SEND FOR APPROVAL — from "sent" OR "rejected"
   const sendApproval=async()=>{
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    const replyText="🔔 "+L.reqApproval;
+    const replyText="🔔 "+(L.reqApproval||"Sent for Approval");
     const[,{data:repRow}]=await Promise.all([
-      supabase.from("assigned_tasks").update({status:"approval_req"}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,reply_type:"approval_req"}).select().single()
+      supabase.from("assigned_tasks").update({status:"approval_requested"}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,reply_type:"approval_requested"}).select().single()
     ]);
-    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"approval_req",time:tm,date:new Date().toLocaleDateString("en-IN")};
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approval_req",replies:[...d.replies,newReply]}:d));
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,type:"approval_requested",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approval_requested",replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"approval",task:"🔔 Approval: "+dir.text.slice(0,30)+"...",by:u.name,prop:dir.prop,time:tm,dirId:dir.id},...p]);
   };
 
-  // REPLY
   const addReply=async()=>{
     if(!rText.trim()&&!rPhoto)return;
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
@@ -537,10 +551,9 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     setRText("");setRPhoto(null);setShowReply(false);
   };
 
-  // SA: OK / NOT OK
   const handleOk=async()=>{
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    const replyText="✅ OK — Approved";
+    const replyText="✅ "+(L.okApproval||"Approved");
     const[,{data:repRow}]=await Promise.all([
       supabase.from("assigned_tasks").update({status:"approved"}).eq("id",dir.id),
       supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,reply_type:"approved"}).select().single()
@@ -549,6 +562,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"approved",replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"approved",task:"✅ Approved: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.to},...p]);
   };
+
   const handleNotOk=async()=>{
     if(!remarks.trim()){setShowRemarks(true);return;}
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
@@ -563,18 +577,15 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     setRemarks("");setShowRemarks(false);
   };
 
-  const isDone=dir.status==="completed"||dir.status==="approved";
-  const canAct=isTarget&&dir.status==="sent";
-
-  return(<div style={{background:isDone?C.gBg+"44":C.white,borderRadius:12,border:`1px solid ${isDone?"#b8dcc8":C.border}`,overflow:"hidden",borderTop:`4px solid ${mC}`}}>
+  return(<div style={{background:cardBg,borderRadius:12,border:`1px solid ${bdrC}`,overflow:"hidden",borderTop:`4px solid ${topC}`}}>
     {/* HEADER */}
-    <div style={{padding:"10px 14px",borderBottom:`1px solid ${isDone?"#b8dcc8":C.border}`,display:"flex",alignItems:"center",gap:8}}>
+    <div style={{padding:"10px 14px",borderBottom:`1px solid ${bdrC}`,display:"flex",alignItems:"center",gap:8}}>
       <div style={{width:30,height:30,borderRadius:"50%",background:mC,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:11,flexShrink:0}}>{dir.toName[0]}</div>
       <div style={{flex:1}}>
         <div style={{fontSize:12,fontWeight:700,color:mC}}>→ {dir.toName}</div>
         <div style={{display:"flex",gap:6,alignItems:"center",marginTop:1}}>
           <span style={{fontSize:9,color:C.tl}}>{dir.createdDate} · {dir.createdTime}</span>
-          {dueFmt&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:isOverdue?C.rBg:C.yBg,color:isOverdue?C.red:C.yellow}}>{isOverdue?"⚠️ "+L.overdue:"📅 "+L.dueOn} {dueFmt}</span>}
+          {dueFmt&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:isOverdue?C.rBg:C.yBg,color:isOverdue?C.red:C.yellow}}>{isOverdue?"⚠️ "+L.overdue:"📅 "+(L.dueOn||"Due")} {dueFmt}</span>}
         </div>
       </div>
       <Bdg color={st.c} bg={st.b}>{st.l}</Bdg>
@@ -583,14 +594,38 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
 
     {/* BODY */}
     <div style={{padding:"10px 14px"}}>
-      <div style={{fontSize:13,lineHeight:1.6,marginBottom:6,textDecoration:isDone?"line-through":"none",color:isDone?C.green:C.text}}>{dir.text}</div>
+      <div style={{fontSize:13,lineHeight:1.6,marginBottom:6,textDecoration:isCompleted?"line-through":"none",color:isCompleted?C.green:C.text}}>{dir.text}</div>
       {dir.photo&&<img src={dir.photo} alt="" style={{width:90,height:90,borderRadius:8,objectFit:"cover",border:`1px solid ${C.border}`,marginBottom:6}}/>}
+
+      {/* SA REMARKS — shown prominently when rejected */}
+      {status==="rejected"&&isTarget&&dir.remarksSA&&<div style={{background:C.rBg,border:`1px solid ${C.red}`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.red,marginBottom:3}}>❌ {L.saRemarks||"SA Feedback — Rework Required"}</div>
+        <div style={{fontSize:12,color:C.red}}>{dir.remarksSA}</div>
+      </div>}
+
+      {/* APPROVED — "complete work on ground" message */}
+      {status==="approved"&&isTarget&&<div style={{background:C.gBg,border:`1px solid ${C.green}`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.green}}>✅ {L.approvedMsg||"Approved! Complete the work on ground, then mark complete with photo proof."}</div>
+      </div>}
+
+      {/* AWAITING APPROVAL — waiting message */}
+      {status==="approval_requested"&&isTarget&&<div style={{background:"#FFF7ED",border:`1px solid ${C.accent}`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.accent}}>🔔 {L.waitingApproval||"Approval request sent. Waiting for SA review."}</div>
+      </div>}
+
+      {/* COMPLETION PROOF */}
+      {isCompleted&&<div style={{background:C.gBg,border:`1px solid #b8dcc8`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.green,marginBottom:4}}>✅ {L.completedWork||"Completed"}</div>
+        {dir.completionNote&&<div style={{fontSize:11,marginBottom:4,color:C.text}}>{dir.completionNote}</div>}
+        {dir.completionPhoto&&<img src={dir.completionPhoto.data||dir.completionPhoto} alt="" style={{width:100,height:100,borderRadius:8,objectFit:"cover",border:`1px solid #b8dcc8`}}/>}
+        {dir.completedAt&&<div style={{fontSize:9,color:C.tl,marginTop:4}}>{new Date(dir.completedAt).toLocaleString("en-IN")}</div>}
+      </div>}
 
       {/* REPLIES THREAD */}
       {dir.replies.length>0&&<div style={{borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:4}}>
         {dir.replies.map((r,i)=>{
-          const rBg=r.type==="approved"?C.gBg:r.type==="rejected"?C.rBg:r.type==="approval_req"?"#FFF7ED":r.type==="completed"?C.gBg:C.bg;
-          const rC2=r.type==="approved"?C.green:r.type==="rejected"?C.red:r.type==="approval_req"?C.accent:r.type==="completed"?C.green:C.blue;
+          const rBg=r.type==="approved"?C.gBg:r.type==="rejected"?C.rBg:r.type==="approval_requested"||r.type==="approval_req"?"#FFF7ED":r.type==="completed"?C.gBg:C.bg;
+          const rC2=r.type==="approved"?C.green:r.type==="rejected"?C.red:r.type==="approval_requested"||r.type==="approval_req"?C.accent:r.type==="completed"?C.green:C.blue;
           return(<div key={r.id||i} style={{display:"flex",gap:6,marginBottom:6,padding:8,background:rBg,borderRadius:8}}>
             <div style={{width:22,height:22,borderRadius:"50%",background:rC2,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:8,fontWeight:700,flexShrink:0}}>{r.by[0]}</div>
             <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600}}>{r.by} <span style={{fontWeight:400,color:C.tl}}>{r.time}</span></div>
@@ -601,47 +636,51 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         })}
       </div>}
 
-      {/* ═══ ACTIONS ═══ */}
-      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
-        {/* TARGET: Mark Complete (photo optional) */}
-        {canAct&&<Btn2 primary small onClick={()=>setShowComplete(!showComplete)} style={{background:C.green}}>✅ {L.markComplete}</Btn2>}
-        {/* TARGET: Send for Approval (optional) */}
-        {isTarget&&dir.status==="sent"&&<Btn2 small onClick={sendApproval} style={{background:"#FFF7ED",color:C.accent}}>🔔 {L.reqApproval}</Btn2>}
-        {/* TARGET/SA: Reply */}
-        {(isTarget||isSA)&&!isDone&&dir.status!=="rejected"&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply}</Btn2>}
-        {/* SA: OK / Not OK (only when approval requested) */}
-        {isSA&&dir.status==="approval_req"&&!showRemarks&&<>
-          <Btn2 primary small onClick={handleOk} style={{background:C.green}}>{L.okApproval}</Btn2>
-          <Btn2 small onClick={()=>setShowRemarks(true)} style={{background:C.rBg,color:C.red}}>{L.notOk}</Btn2>
+      {/* ACTIONS */}
+      {!isCompleted&&<div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>
+        {/* Admin: Send for Approval from "sent" OR "rejected" */}
+        {isTarget&&(status==="sent"||status==="rejected")&&<Btn2 small onClick={sendApproval} style={{background:"#FFF7ED",color:C.accent}}>🔔 {L.reqApproval||"Send for Approval"}</Btn2>}
+        {/* Admin: Mark Complete ONLY when approved, photo REQUIRED */}
+        {isTarget&&status==="approved"&&<Btn2 primary small onClick={()=>setShowComplete(!showComplete)} style={{background:C.green}}>📸 {L.markComplete||"Mark Complete"}</Btn2>}
+        {/* Admin: Reply only on sent or rejected */}
+        {isTarget&&(status==="sent"||status==="rejected")&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply||"Reply"}</Btn2>}
+        {/* SA: Reply on any non-completed task */}
+        {isSA&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply||"Reply"}</Btn2>}
+        {/* SA: Approve / Reject only when approval_requested */}
+        {isSA&&status==="approval_requested"&&!showRemarks&&<>
+          <Btn2 primary small onClick={handleOk} style={{background:C.green}}>✅ {L.okApproval||"Approve"}</Btn2>
+          <Btn2 small onClick={()=>setShowRemarks(true)} style={{background:C.rBg,color:C.red}}>❌ {L.notOk||"Reject"}</Btn2>
         </>}
-      </div>
-
-      {/* SA: Not OK remarks input */}
-      {isSA&&showRemarks&&<div style={{width:"100%",marginTop:8}}>
-        <textarea placeholder={L.writeRemarks} value={remarks} onChange={e=>setRemarks(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.red}`,fontFamily:F.b,fontSize:12,minHeight:50,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
-        <div style={{display:"flex",gap:6}}><Btn2 small onClick={handleNotOk} style={{background:C.rBg,color:C.red}}>❌ {L.send}</Btn2><Btn2 small onClick={()=>setShowRemarks(false)}>{L.cancel}</Btn2></div>
       </div>}
 
-      {/* MARK COMPLETE BOX — note + optional photo */}
-      {showComplete&&canAct&&<div style={{marginTop:8,padding:12,background:C.gBg,borderRadius:10,border:`1px solid #b8dcc8`}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.green,marginBottom:6}}>✅ {L.markComplete}</div>
-        <textarea placeholder={L.completionNote} value={cNote} onChange={e=>setCNote(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:40,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
-        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-          <button onClick={()=>cRef.current?.click()} style={{padding:"7px 12px",borderRadius:8,border:`1px dashed ${cPhoto?C.green:C.tl}`,background:cPhoto?C.gBg:C.bg,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:cPhoto?C.green:C.tl}}>{cPhoto?"✅ Photo taken — retake?":"📸 "+L.completionPhoto+" (optional)"}</button>
+      {/* SA: Reject — remarks input */}
+      {isSA&&showRemarks&&<div style={{width:"100%",marginTop:8}}>
+        <textarea placeholder={L.writeRemarks||"Write remarks for admin..."} value={remarks} onChange={e=>setRemarks(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.red}`,fontFamily:F.b,fontSize:12,minHeight:50,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
+        <div style={{display:"flex",gap:6}}><Btn2 small onClick={handleNotOk} style={{background:C.rBg,color:C.red}}>❌ {L.send||"Send"}</Btn2><Btn2 small onClick={()=>setShowRemarks(false)}>{L.cancel||"Cancel"}</Btn2></div>
+      </div>}
+
+      {/* MARK COMPLETE BOX — photo REQUIRED to enable submit */}
+      {showComplete&&isTarget&&status==="approved"&&<div style={{marginTop:8,padding:12,background:C.gBg,borderRadius:10,border:`1px solid #b8dcc8`}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.green,marginBottom:4}}>📸 {L.markComplete||"Mark Complete"}</div>
+        <div style={{fontSize:10,color:C.tl,marginBottom:8}}>Photo proof is <strong>required</strong> to complete this task.</div>
+        <textarea placeholder={L.completionNote||"Completion note (optional)"} value={cNote} onChange={e=>setCNote(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:40,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+          <button onClick={()=>cRef.current?.click()} style={{padding:"7px 12px",borderRadius:8,border:`2px ${cPhoto?"solid":"dashed"} ${cPhoto?C.green:C.red}`,background:cPhoto?C.gBg:"#FFF5F5",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:cPhoto?C.green:C.red}}>{cPhoto?"✅ Photo taken — retake?":"📸 Take Photo (Required)"}</button>
           {cPhoto&&<img src={cPhoto.data} alt="" style={{width:40,height:40,borderRadius:6,objectFit:"cover"}}/>}
           <input ref={cRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;const r2=new FileReader();r2.onload=ev=>setCPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
         </div>
-        <Btn2 primary small onClick={handleComplete} style={{background:C.green}}>✅ {L.markComplete}</Btn2>
+        <Btn2 primary small onClick={handleComplete} style={{background:cPhoto?C.green:"#aaa",cursor:cPhoto?"pointer":"not-allowed",opacity:cPhoto?1:0.6}}>✅ {L.markComplete||"Mark Complete"}</Btn2>
+        {!cPhoto&&<div style={{fontSize:10,color:C.red,marginTop:4}}>📸 Please take a photo to enable completion</div>}
       </div>}
 
       {/* REPLY BOX */}
       {showReply&&<div style={{marginTop:8,padding:10,background:C.bg,borderRadius:8}}>
-        <textarea placeholder={L.replyHere} value={rText} onChange={e=>setRText(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:50,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:6}}/>
+        <textarea placeholder={L.replyHere||"Write reply..."} value={rText} onChange={e=>setRText(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:50,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:6}}/>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <button onClick={()=>rRef.current?.click()} style={{padding:"6px 12px",borderRadius:6,border:`1px dashed ${C.accent}`,background:"#FFF7ED",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,color:C.accent}}>📸</button>
           {rPhoto&&<img src={rPhoto.data} alt="" style={{width:30,height:30,borderRadius:4,objectFit:"cover"}}/>}
           <input ref={rRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;const r2=new FileReader();r2.onload=ev=>setRPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
-          <Btn2 primary small onClick={addReply}>{L.send}</Btn2>
+          <Btn2 primary small onClick={addReply}>{L.send||"Send"}</Btn2>
         </div>
       </div>}
     </div>
