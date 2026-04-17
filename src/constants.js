@@ -229,7 +229,7 @@ export const USERS = [
 export const PROPS = {
   pp:{id:"pp",name:"Ambria Pushpanjali",sn:"Pushpanjali",icon:"🏛️",loc:"Dwarka",tag:"3 Acres · 1500 Guests",
     specs:{Land:"3 Acres",Banquet:"14K sqft",Lawn:"40K sqft",Parking:"125+"},
-    areas:[{id:"bq",n:"Banquet Hall",s:"14,000 sqft",i:"🏛️"},{id:"lw",n:"Grand Lawn",s:"40,000 sqft",i:"🌿"},{id:"wk",n:"Walkway",s:"120 ft",i:"🛤️"},{id:"vl",n:"Villa",s:"4 rooms",i:"🏠"},{id:"of",n:"Offices",s:"5",i:"🏢"},{id:"vw",n:"Villa WC",s:"7",i:"🚿"},{id:"gw",n:"Guest WC",s:"M+F",i:"🚻"},{id:"pk",n:"Parking",s:"125+",i:"🅿️"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
+    areas:[{id:"bq",n:"Banquet Hall",s:"14,000 sqft indoor",i:"🏛️"},{id:"lw",n:"Grand Lawn",s:"40,000 sqft",i:"🌿"},{id:"wk",n:"Walkway",s:"120 ft",i:"🛤️"},{id:"vl",n:"Villa",s:"4 rooms",i:"🏠"},{id:"of",n:"Offices",s:"5 offices",i:"🏢"},{id:"vw",n:"Villa WC",s:"7 washrooms",i:"🚿"},{id:"gw",n:"Guest WC",s:"Male + Female",i:"🚻"},{id:"pk",n:"Parking",s:"125+ cars",i:"🅿️"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
     depts:{
       h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Sonu Mali",m:[{id:"pp_pawan",n:"Pawan"},{id:"pp_dayashankar",n:"Dayashankar"},{id:"pp_sunil",n:"Sunil"}]},
       k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Poonam",m:[{id:"pp_poonam",n:"Poonam"},{id:"pp_neeru",n:"Neeru"},{id:"pp_umesh",n:"Umesh"},{id:"pp_dinesh",n:"Dinesh"},{id:"pp_lalita",n:"Lalita"}]},
@@ -238,7 +238,7 @@ export const PROPS = {
     sh:"Sonu Mali"},
   ex:{id:"ex",name:"Ambria Exotica",sn:"Exotica",icon:"🌴",loc:"Dwarka",tag:"4 Acres · Aura & Valencia",
     specs:{Land:"4 Acres","Aura":"8.5K+27K","Valencia":"12K+8K",Parking:"300-350"},
-    areas:[{id:"ag",n:"Aura Glass",s:"8,500 sqft",i:"🏛️"},{id:"al",n:"Aura Lawn",s:"27,000 sqft",i:"🌿"},{id:"vg",n:"Valencia Glass",s:"12,000 sqft",i:"✨"},{id:"vl2",n:"Valencia Lawn",s:"8,000 sqft",i:"🌳"},{id:"vp",n:"Poolside",s:"2,000 sqft",i:"🏊"},{id:"wk",n:"Walkway",s:"20K sqft",i:"🛤️"},{id:"pk",n:"Parking",s:"300-350",i:"🅿️"},{id:"wc",n:"Restrooms",s:"",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
+    areas:[{id:"ag",n:"Aura Hall",s:"8,500 sqft indoor",i:"🏛️"},{id:"al",n:"Aura Lawn",s:"27,000 sqft",i:"🌿"},{id:"vg",n:"Valencia Hall",s:"12,000 sqft indoor",i:"✨"},{id:"vl2",n:"Valencia Lawn",s:"8,000 sqft",i:"🌳"},{id:"vp",n:"Poolside",s:"2,000 sqft",i:"🏊"},{id:"wk",n:"Walkway",s:"",i:"🛤️"},{id:"pk",n:"Parking",s:"300–350 cars",i:"🅿️"},{id:"wc",n:"Restrooms",s:"10 washrooms",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
     depts:{
       h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Mahesh",m:[{id:"ex_sonu2",n:"Sonu 2"},{id:"ex_dhruv",n:"Dhruv"},{id:"ex_kamlesh",n:"Kamlesh"}]},
       k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Mahesh",m:[{id:"ex_sunita",n:"Sunita"},{id:"ex_brijesh",n:"Brijesh"},{id:"ex_ragini",n:"Ragini"},{id:"ex_rani",n:"Rani"}]},
@@ -247,7 +247,7 @@ export const PROPS = {
     sh:"Mahesh"},
   mk:{id:"mk",name:"Ambria Manaktala",sn:"Manaktala",icon:"✨",loc:"Kapashera",tag:"3 Acres · Two Venues",
     specs:{Land:"3 Acres",Emerald:"10K+27K",Alstonia:"16K",Parking:"250+"},
-    areas:[{id:"eg",n:"Emerald Glass",s:"10,000 sqft",i:"🏛️"},{id:"el",n:"Emerald Lawn",s:"27,000 sqft",i:"🌿"},{id:"ao",n:"Alstonia Lawn",s:"16,000 sqft",i:"🌳"},{id:"hn",n:"Hanger",s:"8,000 sqft",i:"🏗️"},{id:"b1",n:"Banquet",s:"10,000 sqft",i:"🎪"},{id:"dr",n:"Driveway",s:"400 ft",i:"🛤️"},{id:"pk",n:"Parking",s:"250+",i:"🅿️"},{id:"wc",n:"Restrooms",s:"",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
+    areas:[{id:"eg",n:"Emerald Hall",s:"10,000 sqft indoor",i:"🏛️"},{id:"el",n:"Emerald Lawn",s:"27,000 sqft",i:"🌿"},{id:"ao",n:"Alstonia Hall",s:"16,000 sqft indoor",i:"✨"},{id:"hn",n:"Hangar",s:"8,000 sqft",i:"🏗️"},{id:"b1",n:"Banquet",s:"10,000 sqft",i:"🎪"},{id:"dr",n:"Driveway",s:"400 ft",i:"🛤️"},{id:"pk",n:"Parking",s:"250+ cars",i:"🅿️"},{id:"wc",n:"Restrooms",s:"8 washrooms",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
     depts:{
       h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Rahees",m:[{id:"mk_mukesh",n:"Mukesh"},{id:"mk_tulsi",n:"Tulsi"},{id:"mk_akash_h",n:"Akash"}]},
       k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Rahees",m:[{id:"mk_sadna",n:"Sadna"},{id:"mk_lovekush",n:"Lovekush"},{id:"mk_akash",n:"Akash"},{id:"mk_ajay",n:"Ajay"}]},
@@ -256,7 +256,7 @@ export const PROPS = {
     sh:"Rahees"},
   rs:{id:"rs",name:"Ambria Restro",sn:"Restro",icon:"🍽️",loc:"Palam Vihar",tag:"0.75 Acre · Restro · Cafe",
     specs:{Land:"0.75 Acre",Glass:"8K sqft",Restro:"800 sqft",Parking:"100+"},
-    areas:[{id:"gl",n:"Glasshouse",s:"8,000 sqft",i:"🏛️"},{id:"lw",n:"Lawn",s:"1,500 sqft",i:"🌿"},{id:"re",n:"Restro",s:"800 sqft",i:"🍽️"},{id:"ca",n:"Cafe",s:"417 sqft",i:"☕"},{id:"rt",n:"Rooftop",s:"417 sqft",i:"🌇"},{id:"pk",n:"Parking",s:"100+",i:"🅿️"},{id:"ki",n:"Kitchen",s:"",i:"👨‍🍳"},{id:"wc",n:"Washrooms",s:"",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
+    areas:[{id:"gl",n:"Glasshouse",s:"8,000 sqft",i:"🏛️"},{id:"lw",n:"Lawn",s:"5,000 sqft",i:"🌿"},{id:"re",n:"Restro",s:"800 sqft",i:"🍽️"},{id:"ca",n:"Cafe",s:"417 sqft",i:"☕"},{id:"rt",n:"Rooftop",s:"417 sqft",i:"🌇"},{id:"pk",n:"Parking",s:"100+ cars",i:"🅿️"},{id:"ki",n:"Kitchen",s:"",i:"👨‍🍳"},{id:"wc",n:"Washrooms",s:"4 washrooms",i:"🚻"},{id:"en",n:"Entrance",s:"",i:"🚪"},{id:"gd",n:"Gardens",s:"",i:"🌺"}],
     depts:{
       h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Vicky Arya",m:[{id:"rs_ramu",n:"Ramu"}]},
       k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Vicky Arya",m:[{id:"rs_suresh",n:"Suresh"},{id:"rs_roma",n:"Roma"},{id:"rs_anita",n:"Anita"},{id:"rs_arjun",n:"Arjun"},{id:"rs_vinay",n:"Vinay"}]},

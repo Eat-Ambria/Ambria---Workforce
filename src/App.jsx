@@ -236,7 +236,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
   console.log("USER:",u.id,u.role,u.name);
   // Pending count for assigned tasks — when previewing, show previewed user's count
-  const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected")).length;
+  const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
   const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA&&!pm)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   console.log("NAV ITEMS:",nav.map(n=>n.id));
@@ -640,8 +640,8 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
       {!isCompleted&&<div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>
         {/* Admin: Send for Approval from "sent" OR "rejected" */}
         {isTarget&&(status==="sent"||status==="rejected")&&<Btn2 small onClick={sendApproval} style={{background:"#FFF7ED",color:C.accent}}>🔔 {L.reqApproval||"Send for Approval"}</Btn2>}
-        {/* Admin: Mark Complete ONLY when approved, photo REQUIRED */}
-        {isTarget&&status==="approved"&&<Btn2 primary small onClick={()=>setShowComplete(!showComplete)} style={{background:C.green}}>📸 {L.markComplete||"Mark Complete"}</Btn2>}
+        {/* Admin: Mark Complete when sent, rejected, OR approved — photo REQUIRED */}
+        {isTarget&&(status==="sent"||status==="rejected"||status==="approved")&&<Btn2 primary small onClick={()=>setShowComplete(!showComplete)} style={{background:C.green}}>📸 {L.markComplete||"Mark Complete"}</Btn2>}
         {/* Admin: Reply only on sent or rejected */}
         {isTarget&&(status==="sent"||status==="rejected")&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply||"Reply"}</Btn2>}
         {/* SA: Reply on any non-completed task */}
@@ -660,7 +660,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
       </div>}
 
       {/* MARK COMPLETE BOX — photo REQUIRED to enable submit */}
-      {showComplete&&isTarget&&status==="approved"&&<div style={{marginTop:8,padding:12,background:C.gBg,borderRadius:10,border:`1px solid #b8dcc8`}}>
+      {showComplete&&isTarget&&(status==="sent"||status==="rejected"||status==="approved")&&<div style={{marginTop:8,padding:12,background:C.gBg,borderRadius:10,border:`1px solid #b8dcc8`}}>
         <div style={{fontSize:11,fontWeight:700,color:C.green,marginBottom:4}}>📸 {L.markComplete||"Mark Complete"}</div>
         <div style={{fontSize:10,color:C.tl,marginBottom:8}}>Photo proof is <strong>required</strong> to complete this task.</div>
         <textarea placeholder={L.completionNote||"Completion note (optional)"} value={cNote} onChange={e=>setCNote(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:40,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
