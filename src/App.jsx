@@ -229,13 +229,14 @@ function AddTF({prop,onAdd,onClose,L}){
 }
 
 // ═══ SIDEBAR ═══
-function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allS,dirs}){
-  const isSA=u.role==="sa";const isEffAdmin=u.role==="sa"||u.role==="a"||!!findAT(u);const isA=pm?false:isEffAdmin;
+function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allDbUsers,dirs,aP}){
+  const eU=effectiveUser||u;
+  const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
   console.log("USER:",u.id,u.role,u.name);
-  // Pending count for assigned tasks
-  const pendDirs=isSA?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===u.id&&d.status==="sent").length;
+  // Pending count for assigned tasks — when previewing, show previewed user's count
+  const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&d.status==="sent").length;
   const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
-  if(isSA)nav.push({id:"members",i:"👤",l:L.members||"Members"});
+  if(isSA&&!pm)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   console.log("NAV ITEMS:",nav.map(n=>n.id));
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
@@ -251,9 +252,17 @@ function Sidebar({view,setView,user:u,onLogout,lang,setLang,nC,setShowN,L,pm,set
       {isSA&&<div style={{marginTop:6,padding:8,background:pm?C.bBg:C.bg,borderRadius:8,border:`1px solid ${pm?C.blue:C.border}`}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:pm?6:0}}>
           <span style={{fontSize:9,fontWeight:700,color:pm?C.blue:C.tl}}>👁️ {pm?L.previewOff:L.preview}</span>
-          <button onClick={()=>{if(pm){setPM(false);setView("dashboard");}else{setPM(true);setView("mytasks");}}} style={{width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:pm?C.blue:C.border,position:"relative"}}><div style={{width:16,height:16,borderRadius:"50%",background:C.white,position:"absolute",top:2,left:pm?18:2,transition:"left 0.2s"}}/></button>
+          <button onClick={()=>{if(pm){setPM(false);setPAs("");setView("dashboard");}else{setPM(true);setView("dashboard");}}} style={{width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:pm?C.blue:C.border,position:"relative"}}><div style={{width:16,height:16,borderRadius:"50%",background:C.white,position:"absolute",top:2,left:pm?18:2,transition:"left 0.2s"}}/></button>
         </div>
-        {pm&&<SearchSelect value={pAs} onChange={v=>{setPAs(v);setView("mytasks");}} options={allS.map(s=>({v:s.id,l:`${s.n}-${s.pn}`}))} style={{width:"100%",marginTop:3}}/>}
+        {pm&&<SearchSelect value={pAs} onChange={v=>{
+          const pu=allDbUsers.find(u=>u.id===v);
+          setPAs(v);
+          const puIsAdmin=pu&&(pu.role==="a"||ADMIN_TARGETS.some(t=>t.id===v));
+          setView(puIsAdmin?"dashboard":"mytasks");
+        }} options={[
+          ...(allDbUsers.filter(u=>u.role==="a"||ADMIN_TARGETS.some(t=>t.id===u.id)).map(u=>({v:u.id,l:`👑 ${u.name} — ${PROPS[u.property]?.sn||u.property||"All"}`}))),
+          ...(allDbUsers.filter(u=>u.role==="e"&&!ADMIN_TARGETS.some(t=>t.id===u.id)).map(u=>({v:u.id,l:`${u.name} — ${PROPS[u.property]?.sn||u.property||"?"}`})))
+        ]} style={{width:"100%",marginTop:3}} placeholder="Select user to preview..."/> }
       </div>}
     </div>
     <div style={{padding:"8px 6px",borderTop:`1px solid ${C.border}`}}>
@@ -645,7 +654,7 @@ function PropBar({ap,setAP,user:u}){
 
 // ═══ APP ═══
 export default function App(){
-  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&findAT(u))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("pp_poonam");const[dirs,setDirs]=useState([]);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
+  const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&findAT(u))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("");const[allDbUsers,setAllDbUsers]=useState([]);const[dirs,setDirs]=useState([]);const[atLoaded,setAtLoaded]=useState(false);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
@@ -654,7 +663,7 @@ export default function App(){
     if(!user)return;
     const today=new Date().toISOString().split("T")[0];
     console.log("[App] Loading data for user — id:",user?.id,"role:",user?.role,"prop:",user?.prop);
-    setLoading(true);
+    setLoading(true);setAtLoaded(false);
     (async()=>{
       try{
         // 1. Task status overrides for today (re-hydrate template tasks with saved state)
@@ -668,13 +677,20 @@ export default function App(){
         console.log("FETCH assigned_tasks WHERE to_user =",user.id,"(role:",user.role+")");
         if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
-        console.log("FETCH assigned_tasks WHERE to_user =",user.id,"RESULT:",atData?.length,"tasks",atData);
+        // ═══ DEBUG: assigned tasks ═══
+        console.log("=== ASSIGNED TASKS DEBUG ===");
+        console.log("Current user ID:",user.id);
+        console.log("Current user role:",user.role);
+        console.log("ALL assigned_tasks in DB:",atData?.length,atData);
+        if(atData&&atData.length>0){console.log("to_user values:",atData.map(t=>t.to_user));console.log("Tasks for this user:",atData.filter(t=>t.to_user===user.id));}
+        console.log("=== END DEBUG ===");
         if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
         if(atData){
           const repMap={};
           (repData||[]).forEach(r=>{if(!repMap[r.task_id])repMap[r.task_id]=[];repMap[r.task_id].push({id:r.id,by:r.by_name,text:r.text,photo:r.photo_url,type:r.reply_type,time:new Date(r.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),date:new Date(r.created_at).toLocaleDateString("en-IN")});});
           setDirs(atData.map(t=>({id:t.id,from:t.from_user,fromName:t.from_name,to:t.to_user,toName:t.to_name,toColor:t.to_color,prop:t.property,text:t.text,photo:t.photo_url,status:t.status,replies:repMap[t.id]||[],dueDate:t.due_date,completedAt:t.completed_at,completionNote:t.completion_note||"",completionPhoto:t.completion_photo,remarksSA:t.remarks_sa||"",createdAt:t.created_at,createdTime:new Date(t.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(t.created_at).toLocaleDateString("en-IN")})));
         }
+        setAtLoaded(true);
         // 3. Custom members from users table (those not in PROPS template)
         const allTemplateIds=new Set(allS.map(m=>m.id));
         const{data:allUsers}=await supabase.from("users").select("*");
@@ -683,6 +699,7 @@ export default function App(){
           setCM(extra.map(u=>({id:u.id,n:u.name,u:u.username,p:u.password,prop:u.property,dept:u.department,role:"e",joining_date:u.joining_date,is_active:u.is_active!==false})));
           const inactive=allUsers.filter(u=>u.is_active===false).map(u=>u.id);
           setRI(inactive);
+          setAllDbUsers(allUsers.filter(u=>u.is_active!==false&&u.role!=="sa"));
         }
       }catch(e){console.error("Load error:",e);}
       finally{setLoading(false);}
@@ -699,24 +716,29 @@ export default function App(){
     sV(u3.role==="e"?"mytasks":"dashboard");
   }} lang={lang} setLang={setLang}/>;
 
-  const ps=allS.find(s=>s.id===pAs);
-  const eU=pm&&user.role==="sa"&&ps?{id:ps.id,name:ps.n,role:"e",prop:ps.pid}:user;
+  // Preview mode: resolve preview user from DB first, fallback to allS template
+  let previewDbUser=null;
+  if(pm&&user.role==="sa"&&pAs){
+    previewDbUser=allDbUsers.find(u=>u.id===pAs);
+    if(!previewDbUser){const s=allS.find(x=>x.id===pAs);if(s)previewDbUser={id:s.id,name:s.n,role:"e",property:s.pid,department:s.dept,username:s.u||""};}
+  }
+  const eU=previewDbUser?{id:previewDbUser.id,name:previewDbUser.name,role:previewDbUser.role||"e",prop:previewDbUser.property||"pp",department:previewDbUser.department,username:previewDbUser.username}:user;
   const isA=eU.role==="sa"||eU.role==="a"||!!findAT(eU);
-  const eP=pm&&ps?ps.pid:aP;
+  const eP=previewDbUser?(eU.prop==="all"?"pp":eU.prop):aP;
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){if(o.status!=="completed"&&n2.status==="completed")setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!=="issue"&&n2.status==="issue")setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})},...p]);if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
     {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon}}>Ambria</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
-    <Sidebar view={view} setView={sV} user={user} onLogout={()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);sV("dashboard");}} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allS={allS} dirs={dirs}/>
+    <Sidebar view={view} setView={sV} user={user} effectiveUser={eU} onLogout={()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");}} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allDbUsers={allDbUsers} dirs={dirs} aP={aP}/>
     {sN&&<NPanel ns={ns} onClose={()=>setSN(false)} onClr={()=>{setNs([]);setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div style={{marginLeft:185,padding:"0 18px 18px",minHeight:"100vh"}}>
-      {pm&&ps&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {ps.n} - {ps.pn}</span></div><button onClick={()=>{setPM(false);sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
+      {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
       {!pm&&!["members","roster"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
-        {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV}/>}
+        {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
         {view==="team"&&<TeamV tasks={tasks} prop={prop} L={L}/>}
         {view==="areas"&&<AreasView tasks={tasks} prop={prop} lang={lang}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
