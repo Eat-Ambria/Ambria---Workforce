@@ -105,6 +105,7 @@ export const L_EN = {
   trainingComplete:"Complete", trainingPct:"Completion %",
   watchVideo:"Watch Video",
   valetPlan:"Valet Planning",
+  vendorDir:"Vendors",
 };
 
 export const L_HI = {
@@ -180,6 +181,7 @@ export const L_HI = {
   trainingComplete:"पूर्ण", trainingPct:"पूर्णता %",
   watchVideo:"वीडियो देखें",
   valetPlan:"वैलेट प्लानिंग",
+  vendorDir:"वेंडर",
 };
 
 export const LANGS = { en: L_EN, hi: L_HI };

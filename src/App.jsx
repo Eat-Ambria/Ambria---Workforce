@@ -9,6 +9,7 @@ import AreasView from "./AreasView.jsx";
 import TrainingView from "./TrainingView.jsx";
 import MembersView from "./MembersView.jsx";
 import ValetPlanning from "./ValetPlanning.jsx";
+import VendorDirectory from "./VendorDirectory.jsx";
 
 
 const lnk=document.createElement("link");lnk.href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap";lnk.rel="stylesheet";document.head.appendChild(lnk);
@@ -236,7 +237,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   console.log("USER:",u.id,u.role,u.name);
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&d.status==="sent").length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA&&!pm)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   console.log("NAV ITEMS:",nav.map(n=>n.id));
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
@@ -749,6 +750,7 @@ export default function App(){
         {view==="chemicals"&&<ChemicalGuide lang={lang}/>}
         {view==="members"&&<MembersView user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
         {view==="valet"&&<ValetPlanning user={eU} lang={lang}/>}
+        {view==="vendors"&&<VendorDirectory user={eU} lang={lang}/>}
       </>):(<>
         {view==="mytasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="mytasks" L={L} lang={lang}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}

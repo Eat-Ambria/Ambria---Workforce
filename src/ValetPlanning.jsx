@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { C, F } from "./constants.js";
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "./supabase.js";
+import { C, F, PROPS } from "./constants.js";
 
-// ─── VALET ALLOCATION DATA ──────────────────────────────────────────────────
-// Each venue: array of { pax, keyMan, driver, guard, rider, gunMan, bouncer }
+// ─── STAFF CALCULATOR DATA ───────────────────────────────────────────────────
 const VALET_DATA = {
   pp: [
     { pax:100,  keyMan:1, driver:3,  guard:0, rider:0, gunMan:0, bouncer:0 },
@@ -56,435 +56,575 @@ const VENUE_CFG = {
 };
 
 const ROLE_META = {
-  keyMan:  { label:"Key Man",  labelHi:"की मैन",   icon:"🔑" },
-  driver:  { label:"Driver",   labelHi:"ड्राइवर",  icon:"🚗" },
-  guard:   { label:"Guard",    labelHi:"गार्ड",    icon:"🛡️" },
-  rider:   { label:"Rider",    labelHi:"राइडर",    icon:"🏍️" },
-  gunMan:  { label:"Gun Man",  labelHi:"गन मैन",   icon:"🔫" },
-  bouncer: { label:"Bouncer",  labelHi:"बाउंसर",  icon:"💪" },
+  keyMan:  { label:"Key Man",  labelHi:"की मैन",  icon:"🔑" },
+  driver:  { label:"Driver",   labelHi:"ड्राइवर", icon:"🚗" },
+  guard:   { label:"Guard",    labelHi:"गार्ड",   icon:"🛡️" },
+  rider:   { label:"Rider",    labelHi:"राइडर",   icon:"🏍️" },
+  gunMan:  { label:"Gun Man",  labelHi:"गन मैन",  icon:"🔫" },
+  bouncer: { label:"Bouncer",  labelHi:"बाउंसर", icon:"💪" },
 };
 
-const LABELS = {
-  en: {
-    title:"Valet Planning",
-    venue:"Venue", pax:"Expected Guests (Pax)",
-    totalStaff:"Total Valet Staff", staffBreakdown:"Staff Breakdown",
-    carEstimate:"Car Estimate",
-    carsFor4:"4 per car (family)", carsFor3:"3 per car (avg)", carsFor2:"2 per car (couple/VIP)",
-    estimatedCars:"Estimated Cars",
-    costEstimator:"Cost Estimator", toggleCost:"Show Cost Estimate",
-    hideCost:"Hide Cost Estimate",
-    ratePerEvent:"Rate (₹/event)",
-    totalCost:"Estimated Total Cost",
-    refTable:"Full Reference Table", paxRow:"Pax",
-    guests:"guests", cars:"cars", total:"Total",
-    interpolated:"(interpolated)", exact:"(exact)",
-    note:"Staff counts rounded up — always better to have more than less.",
-    noteHi:"स्टाफ की संख्या ऊपर की ओर गोल की गई है — ज़्यादा बेहतर है कम से।",
-  },
-  hi: {
-    title:"वैलेट प्लानिंग",
-    venue:"वेन्यू", pax:"अपेक्षित मेहमान (पैक्स)",
-    totalStaff:"कुल वैलेट स्टाफ", staffBreakdown:"स्टाफ विवरण",
-    carEstimate:"कार अनुमान",
-    carsFor4:"4 प्रति कार (परिवार)", carsFor3:"3 प्रति कार (औसत)", carsFor2:"2 प्रति कार (कपल/VIP)",
-    estimatedCars:"अनुमानित कारें",
-    costEstimator:"लागत अनुमान", toggleCost:"लागत अनुमान दिखाएं",
-    hideCost:"लागत छुपाएं",
-    ratePerEvent:"रेट (₹/इवेंट)",
-    totalCost:"कुल अनुमानित लागत",
-    refTable:"पूरी संदर्भ तालिका", paxRow:"पैक्स",
-    guests:"मेहमान", cars:"कारें", total:"कुल",
-    interpolated:"(अनुमानित)", exact:"(सटीक)",
-    note:"Staff counts rounded up — always better to have more than less.",
-    noteHi:"स्टाफ की संख्या ऊपर की ओर गोल की गई है — ज़्यादा बेहतर है कम से।",
-  },
-};
+// ─── CALENDAR HELPERS ────────────────────────────────────────────────────────
+const MN_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MN_HI = ["जनवरी","फ़रवरी","मार्च","अप्रैल","मई","जून","जुलाई","अगस्त","सितंबर","अक्टूबर","नवंबर","दिसंबर"];
+const DY_EN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DY_HI = ["रवि","सोम","मंगल","बुध","गुरु","शुक्र","शनि"];
 
-// ─── LINEAR INTERPOLATION HELPER ─────────────────────────────────────────────
-function interpolate(data, pax) {
-  // Clamp to data range
-  const minPt = data[0];
-  const maxPt = data[data.length - 1];
-  if (pax <= minPt.pax) return { ...minPt, isExact: true };
-  if (pax >= maxPt.pax) return { ...maxPt, isExact: true };
-
-  // Find exact match
-  const exact = data.find(d => d.pax === pax);
-  if (exact) return { ...exact, isExact: true };
-
-  // Find surrounding points
-  let lo = data[0], hi = data[data.length - 1];
-  for (let i = 0; i < data.length - 1; i++) {
-    if (data[i].pax <= pax && data[i + 1].pax >= pax) {
-      lo = data[i]; hi = data[i + 1]; break;
-    }
-  }
-
-  const t = (pax - lo.pax) / (hi.pax - lo.pax);
-  const roles = ["keyMan","driver","guard","rider","gunMan","bouncer"];
-  const result = { pax, isExact: false };
-  roles.forEach(r => {
-    result[r] = Math.ceil(lo[r] + t * (hi[r] - lo[r]));
-  });
-  return result;
+function dIM(y,m){return new Date(y,m+1,0).getDate();}
+function fDM(y,m){return new Date(y,m,1).getDay();}
+function toDS(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
+function fmtD(ds){
+  if(!ds)return "";
+  const [y,mo,d]=ds.split("-");
+  return `${parseInt(d)} ${MN_EN[parseInt(mo)-1].slice(0,3)} ${y}`;
 }
+function fmtT(t){if(!t)return "";const[h,m]=t.split(":");const hr=parseInt(h);return `${hr>12?hr-12:hr}:${m} ${hr>=12?"PM":"AM"}`;}
 
-// ─── ROLE CARD ────────────────────────────────────────────────────────────────
-function RoleCard({ roleKey, count, lang }) {
-  const meta = ROLE_META[roleKey];
-  const label = lang === "hi" ? meta.labelHi : meta.label;
-  return (
-    <div style={{
-      display:"flex", alignItems:"center", gap:10,
-      padding:"12px 14px", background:C.white, borderRadius:10,
-      border:`1px solid ${C.border}`, boxShadow:"0 1px 4px rgba(0,0,0,0.06)",
-    }}>
-      <div style={{
-        width:38, height:38, borderRadius:10,
-        background:C.maroonSoft, display:"flex", alignItems:"center",
-        justifyContent:"center", fontSize:18, flexShrink:0,
-      }}>{meta.icon}</div>
-      <div style={{ flex:1 }}>
-        <div style={{ fontSize:11, color:C.tl, fontFamily:F.b, fontWeight:500 }}>{label}</div>
-        <div style={{ fontSize:22, fontWeight:700, fontFamily:F.d, color:C.maroon, lineHeight:1.1 }}>{count}</div>
+const STATUS={
+  planned:   {l:"Planned",   lH:"नियोजित", c:C.yellow, bg:C.yBg},
+  confirmed: {l:"Confirmed", lH:"पुष्टि",  c:C.green,  bg:C.gBg},
+  completed: {l:"Completed", lH:"पूर्ण",   c:C.tl,     bg:"#EFEFEF"},
+};
+
+const PROP_OPTS=[
+  {v:"all",l:"All"},
+  {v:"pp", l:"Pushpanjali"},
+  {v:"ex", l:"Exotica"},
+  {v:"mk", l:"Manaktala"},
+  {v:"rs", l:"Restro"},
+];
+
+// ─── BOOKING FORM ─────────────────────────────────────────────────────────────
+function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
+  const defProp = user.prop==="all"?"pp":(user.prop||"pp");
+  const [f,sF]=useState(init||{
+    property:defProp, event_date:prefillDate||"", event_name:"",
+    expected_cars:"", valets_needed:"", vendor_name:"", vendor_phone:"",
+    shift_start:"18:00", shift_end:"23:30", notes:"", status:"planned",
+  });
+  const isEdit=!!init?.id;
+  const inp=(k,v)=>sF(p=>({...p,[k]:v}));
+
+  const save=()=>{
+    if(!f.event_date||!f.property)return;
+    onSave({...f,expected_cars:parseInt(f.expected_cars)||0,valets_needed:parseInt(f.valets_needed)||0,created_by:f.created_by||user.id});
+  };
+
+  const F2={width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:C.bg};
+  const Lb={fontSize:11,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
+
+  return(
+    <div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:14}}>
+      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:12}}>
+        {isEdit?"✏️ Edit Booking":"➕ New Valet Booking"}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+        <div>
+          <label style={Lb}>{lang==="hi"?"वेन्यू":"Property"}</label>
+          <select value={f.property} onChange={e=>inp("property",e.target.value)} style={F2}>
+            {PROP_OPTS.filter(p=>p.v!=="all").map(p=><option key={p.v} value={p.v}>{PROPS[p.v]?.icon} {p.l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={Lb}>{lang==="hi"?"तारीख":"Event Date"}</label>
+          <input type="date" value={f.event_date} onChange={e=>inp("event_date",e.target.value)} style={F2}/>
+        </div>
+        <div style={{gridColumn:"1/-1"}}>
+          <label style={Lb}>{lang==="hi"?"इवेंट नाम":"Event Name"}</label>
+          <input value={f.event_name} onChange={e=>inp("event_name",e.target.value)} placeholder="e.g. Sharma Wedding, Corporate Event" style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>🚗 {lang==="hi"?"अनुमानित कारें":"Expected Cars"}</label>
+          <input type="number" min={0} value={f.expected_cars} onChange={e=>inp("expected_cars",e.target.value)} style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>👤 {lang==="hi"?"वैलेट स्टाफ":"Valets Needed"}</label>
+          <input type="number" min={0} value={f.valets_needed} onChange={e=>inp("valets_needed",e.target.value)} style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>🏢 {lang==="hi"?"वेंडर नाम":"Vendor Name"}</label>
+          <input value={f.vendor_name} onChange={e=>inp("vendor_name",e.target.value)} placeholder="Valet company name" style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>📞 {lang==="hi"?"वेंडर फ़ोन":"Vendor Phone"}</label>
+          <input type="tel" value={f.vendor_phone} onChange={e=>inp("vendor_phone",e.target.value)} placeholder="+91 99999 99999" style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>⏰ {lang==="hi"?"शिफ्ट शुरू":"Shift Start"}</label>
+          <input type="time" value={f.shift_start} onChange={e=>inp("shift_start",e.target.value)} style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>⏰ {lang==="hi"?"शिफ्ट खत्म":"Shift End"}</label>
+          <input type="time" value={f.shift_end} onChange={e=>inp("shift_end",e.target.value)} style={F2}/>
+        </div>
+        <div>
+          <label style={Lb}>{lang==="hi"?"स्थिति":"Status"}</label>
+          <select value={f.status} onChange={e=>inp("status",e.target.value)} style={F2}>
+            {Object.entries(STATUS).map(([k,v])=><option key={k} value={k}>{lang==="hi"?v.lH:v.l}</option>)}
+          </select>
+        </div>
+        <div style={{gridColumn:"1/-1"}}>
+          <label style={Lb}>{lang==="hi"?"नोट्स":"Notes"}</label>
+          <textarea value={f.notes} onChange={e=>inp("notes",e.target.value)} placeholder="Any special instructions..." rows={2}
+            style={{...F2,resize:"vertical"}}/>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+          {isEdit?"💾 Update":"✅ Save Booking"}
+        </button>
+        <button onClick={onCancel} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,color:C.text,fontFamily:F.b,fontSize:13,cursor:"pointer"}}>
+          {lang==="hi"?"रद्द":"Cancel"}
+        </button>
       </div>
     </div>
   );
 }
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-export default function ValetPlanning({ user, lang }) {
-  const L = LABELS[lang] || LABELS.en;
+// ─── CALENDAR VIEW ────────────────────────────────────────────────────────────
+function CalendarView({user, lang}){
+  const today=new Date();
+  const [yr,setYr]=useState(today.getFullYear());
+  const [mo,setMo]=useState(today.getMonth());
+  const [bookings,setBk]=useState([]);
+  const [loading,setLd]=useState(false);
+  const [selDate,setSD]=useState(null);
+  const [showForm,setSF]=useState(false);
+  const [editB,setEB]=useState(null);
+  const [prefDate,setPD]=useState(null);
+  const [propF,setPF]=useState(user.prop==="all"?"all":(user.prop||"pp"));
+  const todayStr=toDS(today.getFullYear(),today.getMonth(),today.getDate());
 
-  // Determine default venue from user's property
-  const defaultVenue = (() => {
-    const p = user?.prop || user?.property || "pp";
-    return VENUE_CFG[p] ? p : "pp";
-  })();
+  const load=useCallback(async()=>{
+    setLd(true);
+    const y=String(yr),m=String(mo+1).padStart(2,"0");
+    const s=`${y}-${m}-01`, e=`${y}-${m}-${String(dIM(yr,mo)).padStart(2,"0")}`;
+    let q=supabase.from("valet_bookings").select("*").gte("event_date",s).lte("event_date",e).order("event_date");
+    if(propF!=="all")q=q.eq("property",propF);
+    const{data}=await q;
+    setBk(data||[]);
+    setLd(false);
+  },[yr,mo,propF]);
 
-  const [venue, setVenue] = useState(defaultVenue);
-  const [pax, setPax] = useState(300);
-  const [showCost, setShowCost] = useState(false);
-  const [rates, setRates] = useState({ keyMan:1500, driver:1200, guard:1000, rider:800, gunMan:2000, bouncer:1500 });
+  useEffect(()=>{load();},[load]);
 
-  const cfg = VENUE_CFG[venue];
-  const data = VALET_DATA[venue];
+  const save=async(f)=>{
+    if(f.id){
+      await supabase.from("valet_bookings").update({
+        property:f.property,event_date:f.event_date,event_name:f.event_name||null,
+        expected_cars:f.expected_cars,valets_needed:f.valets_needed,
+        vendor_name:f.vendor_name||null,vendor_phone:f.vendor_phone||null,
+        shift_start:f.shift_start||null,shift_end:f.shift_end||null,
+        notes:f.notes||null,status:f.status,
+      }).eq("id",f.id);
+    } else {
+      await supabase.from("valet_bookings").insert({
+        property:f.property,event_date:f.event_date,event_name:f.event_name||null,
+        expected_cars:f.expected_cars,valets_needed:f.valets_needed,
+        vendor_name:f.vendor_name||null,vendor_phone:f.vendor_phone||null,
+        shift_start:f.shift_start||null,shift_end:f.shift_end||null,
+        notes:f.notes||null,status:f.status,created_by:f.created_by,
+      });
+    }
+    setSF(false);setEB(null);setPD(null);load();
+  };
 
-  // Clamp pax to venue range whenever venue changes
-  const clampedPax = Math.min(Math.max(pax, cfg.min), cfg.max);
-  const allocation = interpolate(data, clampedPax);
-  const roles = ["keyMan","driver","guard","rider","gunMan","bouncer"];
-  const activeRoles = roles.filter(r => allocation[r] > 0);
-  const totalStaff = roles.reduce((s, r) => s + (allocation[r] || 0), 0);
+  const del=async(id)=>{
+    await supabase.from("valet_bookings").delete().eq("id",id);
+    load();
+  };
 
-  const cars4 = Math.ceil(clampedPax / 4);
-  const cars3 = Math.ceil(clampedPax / 3);
-  const cars2 = Math.ceil(clampedPax / 2);
+  const byDate={};
+  bookings.forEach(b=>{if(!byDate[b.event_date])byDate[b.event_date]=[];byDate[b.event_date].push(b);});
 
-  const totalCost = roles.reduce((s, r) => s + (allocation[r] || 0) * (rates[r] || 0), 0);
+  const prevM=()=>{if(mo===0){setMo(11);setYr(y=>y-1);}else setMo(m=>m-1);};
+  const nextM=()=>{if(mo===11){setMo(0);setYr(y=>y+1);}else setMo(m=>m+1);};
+  const days=dIM(yr,mo);const firstDay=fDM(yr,mo);
+  const cells=[];
+  for(let i=0;i<firstDay;i++)cells.push(null);
+  for(let d=1;d<=days;d++)cells.push(d);
+  const mns=lang==="hi"?MN_HI:MN_EN;
+  const dys=lang==="hi"?DY_HI:DY_EN;
 
-  // Slider gradient fill
-  const pct = ((clampedPax - cfg.min) / (cfg.max - cfg.min)) * 100;
+  return(
+    <div>
+      {/* Setup notice */}
+      <div style={{background:"#FFF7ED",border:`1px solid ${C.accent}`,borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:11,fontFamily:F.b,color:C.accent}}>
+        <strong>⚠️ First-time setup:</strong> Run the <code style={{background:"rgba(0,0,0,0.06)",padding:"1px 4px",borderRadius:3}}>valet_bookings</code> SQL in Supabase SQL Editor — see the note at the bottom of this page.
+      </div>
 
-  return (
-    <div style={{ maxWidth:680, margin:"0 auto" }}>
-      {/* ── Header */}
-      <div style={{ marginBottom:20 }}>
-        <h1 style={{ fontFamily:F.d, fontSize:24, fontWeight:700, color:C.maroon, margin:"0 0 4px" }}>
-          🚗 {L.title}
-        </h1>
-        <div style={{ fontSize:11, color:C.tl, fontFamily:F.b }}>
-          {lang==="hi" ? L.noteHi : L.note}
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
+        {/* Month Nav */}
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={prevM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+          <span style={{fontFamily:F.d,fontSize:17,fontWeight:700,color:C.maroon,minWidth:150,textAlign:"center"}}>{mns[mo]} {yr}</span>
+          <button onClick={nextM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+        </div>
+        {/* Add button */}
+        <button onClick={()=>{setPD(null);setEB(null);setSF(true);}}
+          style={{padding:"7px 14px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+          ➕ {lang==="hi"?"नई बुकिंग":"New Booking"}
+        </button>
+      </div>
+
+      {/* Property filter */}
+      <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
+        {PROP_OPTS.map(p=>(
+          <button key={p.v} onClick={()=>setPF(p.v)}
+            style={{padding:"5px 10px",borderRadius:7,border:propF===p.v?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:propF===p.v?C.maroonSoft:C.white,fontFamily:F.b,fontSize:10,fontWeight:propF===p.v?700:400,color:propF===p.v?C.maroon:C.tl,cursor:"pointer"}}>
+            {p.v!=="all"&&PROPS[p.v]?.icon+" "}{p.v==="all"?"All":PROPS[p.v]?.sn}
+          </button>
+        ))}
+        {loading&&<span style={{fontSize:10,color:C.tl,fontFamily:F.b,alignSelf:"center"}}>Loading...</span>}
+      </div>
+
+      {/* Booking form */}
+      {showForm&&<BookingForm init={editB} prefillDate={prefDate} onSave={save} onCancel={()=>{setSF(false);setEB(null);setPD(null);}} user={user} lang={lang}/>}
+
+      {/* Calendar grid */}
+      <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        {/* Day headers */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:C.maroonSoft,borderBottom:`1px solid ${C.border}`}}>
+          {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:10,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{d}</div>)}
+        </div>
+        {/* Cells */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+          {cells.map((day,idx)=>{
+            if(!day)return<div key={`e${idx}`} style={{minHeight:62,background:"#F9F9F9",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}/>;
+            const ds=toDS(yr,mo,day);
+            const dayBks=byDate[ds]||[];
+            const isToday=ds===todayStr;
+            const isSel=ds===selDate;
+            return(
+              <div key={day} onClick={()=>setSD(isSel?null:ds)}
+                style={{minHeight:62,padding:"4px 3px 3px 5px",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:isSel?C.maroonSoft:C.white,position:"relative",transition:"background 0.1s"}}>
+                <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:10,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>
+                  {day}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                  {dayBks.slice(0,2).map(b=>(
+                    <div key={b.id} style={{fontSize:8,fontFamily:F.b,fontWeight:600,padding:"1px 3px",borderRadius:3,background:STATUS[b.status]?.bg||C.yBg,color:STATUS[b.status]?.c||C.yellow,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
+                      {PROPS[b.property]?.icon}{b.event_name?" "+b.event_name.slice(0,8):""}
+                    </div>
+                  ))}
+                  {dayBks.length>2&&<div style={{fontSize:7,color:C.tl,fontFamily:F.b}}>+{dayBks.length-2}</div>}
+                </div>
+                {/* Quick-add "+" on hover — always visible on mobile */}
+                <button onClick={e=>{e.stopPropagation();setPD(ds);setEB(null);setSF(true);}}
+                  style={{position:"absolute",top:2,right:2,width:14,height:14,borderRadius:3,border:`1px solid ${C.border}`,background:C.white,color:C.tl,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,opacity:0.6}}>+</button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* ── Venue Tabs */}
-      <div style={{ display:"flex", gap:6, marginBottom:18, flexWrap:"wrap" }}>
-        {Object.entries(VENUE_CFG).map(([k, v]) => {
-          const active = venue === k;
-          return (
-            <button key={k} onClick={() => { setVenue(k); setPax(v.min + Math.round((v.max - v.min) * 0.3 / v.step) * v.step); }}
-              style={{
-                display:"flex", alignItems:"center", gap:5,
-                padding:"8px 14px", borderRadius:10,
-                border: active ? `2px solid ${C.maroon}` : `1px solid ${C.border}`,
-                background: active ? C.maroonSoft : C.white,
-                cursor:"pointer", fontFamily:F.b, fontSize:12,
-                fontWeight: active ? 700 : 400,
-                color: active ? C.maroon : C.tl,
-                boxShadow: active ? `0 2px 8px ${C.maroon}22` : "none",
-              }}>
-              <span style={{ fontSize:15 }}>{v.icon}</span>
-              <span>{v.name}</span>
+      {/* Day panel */}
+      {selDate&&(
+        <div style={{background:C.white,borderRadius:14,border:`2px solid ${C.maroon}`,padding:14,marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>📅 {fmtD(selDate)}</div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>{setPD(selDate);setEB(null);setSF(true);}}
+                style={{padding:"5px 12px",borderRadius:7,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                ➕ {lang==="hi"?"जोड़ें":"Add"}
+              </button>
+              <button onClick={()=>setSD(null)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
+          </div>
+          {(byDate[selDate]||[]).length===0
+            ?<div style={{textAlign:"center",padding:"14px 0",color:C.tl,fontSize:12,fontFamily:F.b}}>No bookings — click ➕ to add one</div>
+            :(byDate[selDate]||[]).map(b=>{
+                const st=STATUS[b.status]||STATUS.planned;
+                return(
+                  <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:8,borderLeft:`4px solid ${st.c}`,border:`1px solid ${C.border}`,borderLeftWidth:4,borderLeftColor:st.c}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:4}}>
+                          {PROPS[b.property]?.icon} {b.event_name||"Event"} <span style={{fontSize:10,color:C.tl,fontWeight:400}}>— {PROPS[b.property]?.sn}</span>
+                        </div>
+                        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+                          <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:st.bg,color:st.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?st.lH:st.l}</span>
+                          {b.expected_cars>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>🚗 {b.expected_cars} cars</span>}
+                          {b.valets_needed>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.maroonSoft,color:C.maroon,fontFamily:F.b}}>👤 {b.valets_needed} valets</span>}
+                          {(b.shift_start||b.shift_end)&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>⏰ {fmtT(b.shift_start)}–{fmtT(b.shift_end)}</span>}
+                        </div>
+                        {b.vendor_name&&(
+                          <div style={{fontSize:11,color:C.tl,fontFamily:F.b,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                            <span>🏢 {b.vendor_name}</span>
+                            {b.vendor_phone&&<a href={`tel:${b.vendor_phone}`} style={{color:C.blue,fontWeight:600,textDecoration:"none"}}>📞 {b.vendor_phone}</a>}
+                          </div>
+                        )}
+                        {b.notes&&<div style={{fontSize:10,color:C.tl,marginTop:3,fontStyle:"italic"}}>{b.notes}</div>}
+                      </div>
+                      <div style={{display:"flex",gap:4,flexShrink:0}}>
+                        <button onClick={()=>{setEB(b);setPD(null);setSF(true);}} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:11}}>✏️</button>
+                        <button onClick={()=>{if(window.confirm("Delete this booking?"))del(b.id);}} style={{padding:"5px 8px",borderRadius:6,border:"none",background:C.rBg,cursor:"pointer",fontSize:11,color:C.red}}>🗑️</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+          }
+        </div>
+      )}
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",padding:"6px 0",marginBottom:8}}>
+        {Object.entries(STATUS).map(([k,v])=>(
+          <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
+            <div style={{width:10,height:10,borderRadius:2,background:v.bg,border:`2px solid ${v.c}`}}/>
+            <span style={{fontSize:10,fontFamily:F.b,color:C.tl}}>{lang==="hi"?v.lH:v.l}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* SQL setup block */}
+      <details style={{marginTop:12}}>
+        <summary style={{cursor:"pointer",fontSize:11,fontFamily:F.b,color:C.tl,padding:"6px 0"}}>🛠️ Supabase Setup SQL (run once)</summary>
+        <pre style={{background:"#1E1E1E",color:"#D4D4D4",padding:14,borderRadius:8,fontSize:10,overflowX:"auto",marginTop:6,lineHeight:1.6}}>{`CREATE TABLE valet_bookings (
+  id SERIAL PRIMARY KEY,
+  property TEXT NOT NULL,
+  event_date DATE NOT NULL,
+  event_name TEXT,
+  expected_cars INTEGER DEFAULT 0,
+  valets_needed INTEGER DEFAULT 0,
+  vendor_name TEXT,
+  vendor_phone TEXT,
+  shift_start TIME,
+  shift_end TIME,
+  notes TEXT,
+  status TEXT DEFAULT 'planned',
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE valet_bookings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all" ON valet_bookings
+  FOR ALL USING (true) WITH CHECK (true);`}</pre>
+      </details>
+    </div>
+  );
+}
+
+// ─── STAFF CALCULATOR ─────────────────────────────────────────────────────────
+function interpolate(data,pax){
+  const minPt=data[0],maxPt=data[data.length-1];
+  if(pax<=minPt.pax)return{...minPt,isExact:true};
+  if(pax>=maxPt.pax)return{...maxPt,isExact:true};
+  const ex=data.find(d=>d.pax===pax);
+  if(ex)return{...ex,isExact:true};
+  let lo=data[0],hi=data[data.length-1];
+  for(let i=0;i<data.length-1;i++){if(data[i].pax<=pax&&data[i+1].pax>=pax){lo=data[i];hi=data[i+1];break;}}
+  const t=(pax-lo.pax)/(hi.pax-lo.pax);
+  const roles=["keyMan","driver","guard","rider","gunMan","bouncer"];
+  const result={pax,isExact:false};
+  roles.forEach(r=>{result[r]=Math.ceil(lo[r]+t*(hi[r]-lo[r]));});
+  return result;
+}
+
+function RoleCard({roleKey,count,lang}){
+  const meta=ROLE_META[roleKey];
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:C.white,borderRadius:10,border:`1px solid ${C.border}`,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
+      <div style={{width:36,height:36,borderRadius:9,background:C.maroonSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{meta.icon}</div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:10,color:C.tl,fontFamily:F.b,fontWeight:500}}>{lang==="hi"?meta.labelHi:meta.label}</div>
+        <div style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1.1}}>{count}</div>
+      </div>
+    </div>
+  );
+}
+
+function StaffCalculator({user, lang}){
+  const defVenue=VENUE_CFG[user.prop]?user.prop:"pp";
+  const [venue,setVenue]=useState(defVenue);
+  const [pax,setPax]=useState(300);
+  const [showCost,setShowCost]=useState(false);
+  const [rates,setRates]=useState({keyMan:1500,driver:1200,guard:1000,rider:800,gunMan:2000,bouncer:1500});
+
+  const cfg=VENUE_CFG[venue];
+  const data=VALET_DATA[venue];
+  const clamped=Math.min(Math.max(pax,cfg.min),cfg.max);
+  const alloc=interpolate(data,clamped);
+  const roles=["keyMan","driver","guard","rider","gunMan","bouncer"];
+  const active=roles.filter(r=>alloc[r]>0);
+  const total=roles.reduce((s,r)=>s+(alloc[r]||0),0);
+  const pct=((clamped-cfg.min)/(cfg.max-cfg.min))*100;
+  const totalCost=roles.reduce((s,r)=>s+(alloc[r]||0)*(rates[r]||0),0);
+  const L=lang==="hi";
+
+  return(
+    <div style={{maxWidth:680,margin:"0 auto"}}>
+      <div style={{fontSize:11,color:C.tl,fontFamily:F.b,marginBottom:16}}>{L?"स्टाफ की संख्या ऊपर की ओर गोल की गई है।":"Staff counts rounded up — always better to have more than less."}</div>
+
+      {/* Venue Tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {Object.entries(VENUE_CFG).map(([k,v])=>{
+          const a=venue===k;
+          return(
+            <button key={k} onClick={()=>{setVenue(k);setPax(v.min+Math.round((v.max-v.min)*0.3/v.step)*v.step);}}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:10,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:a?700:400,color:a?C.maroon:C.tl}}>
+              <span style={{fontSize:14}}>{v.icon}</span><span>{v.name}</span>
             </button>
           );
         })}
       </div>
 
-      {/* ── PAX SLIDER */}
-      <div style={{
-        background:C.white, borderRadius:14, padding:"18px 18px 20px",
-        border:`1px solid ${C.border}`, marginBottom:16,
-        boxShadow:"0 2px 10px rgba(0,0,0,0.06)",
-      }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:12 }}>
-          <div style={{ fontSize:12, fontWeight:600, color:C.tl, fontFamily:F.b }}>{L.pax}</div>
-          <div style={{
-            fontSize:32, fontWeight:700, fontFamily:F.d, color:C.maroon,
-            lineHeight:1, display:"flex", alignItems:"baseline", gap:4,
-          }}>
-            {clampedPax}
-            <span style={{ fontSize:12, color:C.tl, fontWeight:400 }}>{L.guests}</span>
+      {/* PAX Slider */}
+      <div style={{background:C.white,borderRadius:14,padding:"16px 18px 18px",border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.tl,fontFamily:F.b}}>{L?"अपेक्षित मेहमान":"Expected Guests (Pax)"}</div>
+          <div style={{fontSize:30,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1,display:"flex",alignItems:"baseline",gap:4}}>
+            {clamped}<span style={{fontSize:11,color:C.tl,fontWeight:400}}>{L?"मेहमान":"guests"}</span>
           </div>
         </div>
-
-        {/* Custom styled range slider */}
-        <div style={{ position:"relative", height:6, borderRadius:3, background:C.border, marginBottom:8 }}>
-          <div style={{
-            position:"absolute", left:0, top:0, height:"100%",
-            width:`${pct}%`, borderRadius:3,
-            background:`linear-gradient(90deg,${C.maroon},${C.maroonLight})`,
-          }}/>
+        <div style={{position:"relative",height:4,borderRadius:2,background:C.border,marginBottom:6}}>
+          <div style={{position:"absolute",left:0,top:0,height:"100%",width:`${pct}%`,borderRadius:2,background:`linear-gradient(90deg,${C.maroon},${C.maroonLight})`}}/>
         </div>
-        <input type="range"
-          min={cfg.min} max={cfg.max} step={cfg.step}
-          value={clampedPax}
-          onChange={e => setPax(Number(e.target.value))}
-          style={{
-            width:"100%", margin:"0 0 6px",
-            WebkitAppearance:"none", appearance:"none",
-            height:20, background:"transparent", cursor:"pointer", outline:"none",
-          }}
-        />
-        <style>{`
-          input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;box-shadow:0 2px 6px ${C.maroon}55;margin-top:-9px;}
-          input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;border:none;box-shadow:0 2px 6px ${C.maroon}55;}
-          input[type=range]::-webkit-slider-runnable-track{height:4px;background:transparent;}
-          input[type=range]::-moz-range-track{height:4px;background:transparent;}
-        `}</style>
-
-        {/* Tick marks */}
-        <div style={{ display:"flex", justifyContent:"space-between", marginTop:2 }}>
-          {data.map(d => (
-            <div key={d.pax} style={{
-              fontSize:8, color: d.pax === clampedPax ? C.maroon : C.tl,
-              fontWeight: d.pax === clampedPax ? 700 : 400, fontFamily:F.b,
-            }}>{d.pax >= 1000 ? "1K" : d.pax}</div>
-          ))}
+        <input type="range" min={cfg.min} max={cfg.max} step={cfg.step} value={clamped} onChange={e=>setPax(Number(e.target.value))}
+          style={{width:"100%",margin:"0 0 4px",WebkitAppearance:"none",appearance:"none",height:20,background:"transparent",cursor:"pointer",outline:"none"}}/>
+        <style>{`input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;box-shadow:0 2px 6px ${C.maroon}44;margin-top:-9px;}input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;border:none;}input[type=range]::-webkit-slider-runnable-track{height:4px;background:transparent;}input[type=range]::-moz-range-track{height:4px;background:transparent;}`}</style>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:2,marginBottom:10}}>
+          {data.map(d=><div key={d.pax} style={{fontSize:8,color:d.pax===clamped?C.maroon:C.tl,fontWeight:d.pax===clamped?700:400,fontFamily:F.b}}>{d.pax>=1000?"1K":d.pax}</div>)}
         </div>
-
-        {/* Quick-pick PAX buttons */}
-        <div style={{ display:"flex", gap:4, marginTop:12, flexWrap:"wrap" }}>
-          {data.map(d => (
-            <button key={d.pax} onClick={() => setPax(d.pax)}
-              style={{
-                padding:"4px 10px", borderRadius:6, border:"none", cursor:"pointer",
-                fontFamily:F.b, fontSize:10, fontWeight:600,
-                background: clampedPax === d.pax ? C.maroon : C.bg,
-                color: clampedPax === d.pax ? C.white : C.tl,
-              }}>{d.pax}</button>
-          ))}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {data.map(d=><button key={d.pax} onClick={()=>setPax(d.pax)} style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,background:clamped===d.pax?C.maroon:C.bg,color:clamped===d.pax?C.white:C.tl}}>{d.pax}</button>)}
         </div>
       </div>
 
-      {/* ── RESULTS CARD */}
-      <div style={{
-        background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,
-        borderRadius:14, padding:"18px 18px 14px",
-        marginBottom:16, boxShadow:`0 4px 16px ${C.maroon}44`,
-      }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+      {/* Results hero */}
+      <div style={{background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,borderRadius:14,padding:"16px 18px 14px",marginBottom:14,boxShadow:`0 4px 16px ${C.maroon}33`}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)", fontFamily:F.b, fontWeight:600, textTransform:"uppercase", letterSpacing:1 }}>
-              {cfg.icon} {cfg.name} · {clampedPax} {L.guests}
-            </div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)", fontFamily:F.b, marginTop:2 }}>
-              {allocation.isExact ? L.exact : L.interpolated}
-            </div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontFamily:F.b,fontWeight:600}}>{cfg.icon} {cfg.name} · {clamped} {L?"मेहमान":"guests"}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:F.b,marginTop:2}}>{alloc.isExact?(L?"(सटीक)":"(exact)"):(L?"(अनुमानित)":"(interpolated)")}</div>
           </div>
-          <div style={{ textAlign:"right" }}>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)", fontFamily:F.b }}>{L.totalStaff}</div>
-            <div style={{ fontSize:52, fontWeight:700, fontFamily:F.d, color:"#fff", lineHeight:1 }}>{totalStaff}</div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",fontFamily:F.b}}>{L?"कुल वैलेट स्टाफ":"Total Valet Staff"}</div>
+            <div style={{fontSize:48,fontWeight:700,fontFamily:F.d,color:"#fff",lineHeight:1}}>{total}</div>
           </div>
         </div>
-
-        {/* Staff role pills */}
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-          {activeRoles.map(r => (
-            <div key={r} style={{
-              display:"flex", alignItems:"center", gap:4,
-              padding:"5px 10px", borderRadius:8,
-              background:"rgba(255,255,255,0.15)",
-              backdropFilter:"blur(4px)",
-            }}>
-              <span style={{ fontSize:13 }}>{ROLE_META[r].icon}</span>
-              <span style={{ fontSize:11, fontWeight:700, color:"#fff", fontFamily:F.b }}>
-                {allocation[r]} {lang==="hi" ? ROLE_META[r].labelHi : ROLE_META[r].label}
-              </span>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          {active.map(r=>(
+            <div key={r} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:7,background:"rgba(255,255,255,0.15)"}}>
+              <span style={{fontSize:12}}>{ROLE_META[r].icon}</span>
+              <span style={{fontSize:11,fontWeight:700,color:"#fff",fontFamily:F.b}}>{alloc[r]} {L?ROLE_META[r].labelHi:ROLE_META[r].label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── STAFF BREAKDOWN CARDS */}
-      {activeRoles.length > 0 && (
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.tl, fontFamily:F.b, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>
-            {L.staffBreakdown}
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:8 }}>
-            {activeRoles.map(r => (
-              <RoleCard key={r} roleKey={r} count={allocation[r]} lang={lang} />
+      {/* Role cards */}
+      {active.length>0&&<div style={{marginBottom:14}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"स्टाफ विवरण":"Staff Breakdown"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
+          {active.map(r=><RoleCard key={r} roleKey={r} count={alloc[r]} lang={lang}/>)}
+        </div>
+      </div>}
+
+      {/* Car estimates */}
+      <div style={{background:C.white,borderRadius:14,padding:14,border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:10}}>🚘 {L?"कार अनुमान":"Car Estimate"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          {[{n:4,cars:Math.ceil(clamped/4),label:L?"4/कार (परिवार)":"4 per car (family)",bg:"#EBF5F0",c:C.green},{n:3,cars:Math.ceil(clamped/3),label:L?"3/कार (औसत)":"3 per car (avg)",bg:C.bBg,c:C.blue},{n:2,cars:Math.ceil(clamped/2),label:L?"2/कार (VIP)":"2 per car (VIP)",bg:C.maroonSoft,c:C.maroon}].map(x=>(
+            <div key={x.n} style={{textAlign:"center",padding:"12px 6px",background:x.bg,borderRadius:10}}>
+              <div style={{fontSize:26,fontWeight:700,fontFamily:F.d,color:x.c,lineHeight:1}}>{x.cars}</div>
+              <div style={{fontSize:9,color:x.c,fontFamily:F.b,fontWeight:600,marginTop:2}}>{L?"कारें":"cars"}</div>
+              <div style={{fontSize:9,color:C.tl,fontFamily:F.b,marginTop:4,lineHeight:1.3}}>{x.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Cost estimator */}
+      <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,marginBottom:14,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        <button onClick={()=>setShowCost(!showCost)} style={{width:"100%",padding:"12px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",fontFamily:F.b,fontSize:13,fontWeight:600,color:C.maroon}}>
+          <span>💰 {showCost?(L?"लागत छुपाएं":"Hide Cost"):(L?"लागत अनुमान":"Show Cost Estimate")}</span>
+          <span style={{fontSize:11,color:C.tl}}>{showCost?"▲":"▼"}</span>
+        </button>
+        {showCost&&<div style={{padding:"0 16px 14px",borderTop:`1px solid ${C.border}`}}>
+          <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
+            {active.map(r=>(
+              <div key={r} style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:14}}>{ROLE_META[r].icon}</span>
+                <span style={{flex:1,fontSize:12,fontFamily:F.b,fontWeight:500}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}<span style={{color:C.tl,fontWeight:400}}> × {alloc[r]}</span></span>
+                <div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:11,color:C.tl}}>₹</span><input type="number" min={0} step={100} value={rates[r]} onChange={e=>setRates(p=>({...p,[r]:Number(e.target.value)}))} style={{width:76,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,textAlign:"right",outline:"none"}}/></div>
+                <div style={{width:68,textAlign:"right",fontSize:12,fontWeight:700,color:C.maroon,fontFamily:F.b}}>₹{(alloc[r]*rates[r]).toLocaleString("en-IN")}</div>
+              </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* ── CAR ESTIMATE */}
-      <div style={{
-        background:C.white, borderRadius:14, padding:16,
-        border:`1px solid ${C.border}`, marginBottom:16,
-        boxShadow:"0 2px 10px rgba(0,0,0,0.06)",
-      }}>
-        <div style={{ fontSize:11, fontWeight:700, color:C.tl, fontFamily:F.b, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
-          🚘 {L.carEstimate}
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-          {[
-            { gpcar:4, cars:cars4, label:L.carsFor4, bg:"#EBF5F0", c:C.green },
-            { gpcar:3, cars:cars3, label:L.carsFor3, bg:C.bBg, c:C.blue },
-            { gpcar:2, cars:cars2, label:L.carsFor2, bg:C.maroonSoft, c:C.maroon },
-          ].map(({ gpcar, cars, label, bg, c }) => (
-            <div key={gpcar} style={{ textAlign:"center", padding:"12px 6px", background:bg, borderRadius:10 }}>
-              <div style={{ fontSize:28, fontWeight:700, fontFamily:F.d, color:c, lineHeight:1 }}>{cars}</div>
-              <div style={{ fontSize:9, color:c, fontFamily:F.b, fontWeight:600, marginTop:2 }}>{L.cars}</div>
-              <div style={{ fontSize:9, color:C.tl, fontFamily:F.b, marginTop:4, lineHeight:1.3 }}>{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── COST ESTIMATOR */}
-      <div style={{
-        background:C.white, borderRadius:14, border:`1px solid ${C.border}`,
-        marginBottom:16, overflow:"hidden",
-        boxShadow:"0 2px 10px rgba(0,0,0,0.06)",
-      }}>
-        <button onClick={() => setShowCost(!showCost)}
-          style={{
-            width:"100%", padding:"14px 16px", border:"none", background:"transparent",
-            cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between",
-            fontFamily:F.b, fontSize:13, fontWeight:600, color:C.maroon,
-          }}>
-          <span>💰 {showCost ? L.hideCost : L.toggleCost}</span>
-          <span style={{ fontSize:11, color:C.tl }}>{showCost ? "▲" : "▼"}</span>
-        </button>
-
-        {showCost && (
-          <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${C.border}` }}>
-            <div style={{ paddingTop:12, display:"flex", flexDirection:"column", gap:8 }}>
-              {activeRoles.map(r => (
-                <div key={r} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:14 }}>{ROLE_META[r].icon}</span>
-                  <span style={{ flex:1, fontSize:12, fontFamily:F.b, fontWeight:500 }}>
-                    {lang==="hi" ? ROLE_META[r].labelHi : ROLE_META[r].label}
-                    <span style={{ color:C.tl, fontWeight:400 }}> × {allocation[r]}</span>
-                  </span>
-                  <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                    <span style={{ fontSize:11, color:C.tl }}>₹</span>
-                    <input type="number" min={0} step={100}
-                      value={rates[r]}
-                      onChange={e => setRates(p => ({ ...p, [r]: Number(e.target.value) }))}
-                      style={{
-                        width:80, padding:"5px 8px", borderRadius:7,
-                        border:`1px solid ${C.border}`, fontFamily:F.b,
-                        fontSize:12, textAlign:"right", outline:"none",
-                      }}
-                    />
-                  </div>
-                  <div style={{ width:70, textAlign:"right", fontSize:12, fontWeight:600, color:C.maroon, fontFamily:F.b }}>
-                    ₹{(allocation[r] * rates[r]).toLocaleString("en-IN")}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{
-              marginTop:12, padding:"12px 14px", borderRadius:10,
-              background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,
-              display:"flex", justifyContent:"space-between", alignItems:"center",
-            }}>
-              <span style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:F.b }}>
-                💰 {L.totalCost}
-              </span>
-              <span style={{ fontSize:20, fontWeight:700, fontFamily:F.d, color:"#fff" }}>
-                ₹{totalCost.toLocaleString("en-IN")}
-              </span>
-            </div>
+          <div style={{marginTop:10,padding:"10px 14px",borderRadius:10,background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F.b}}>💰 {L?"कुल लागत":"Total Cost"}</span>
+            <span style={{fontSize:20,fontWeight:700,fontFamily:F.d,color:"#fff"}}>₹{totalCost.toLocaleString("en-IN")}</span>
           </div>
-        )}
+        </div>}
       </div>
 
-      {/* ── QUICK REFERENCE TABLE */}
-      <div style={{
-        background:C.white, borderRadius:14, border:`1px solid ${C.border}`,
-        marginBottom:24, overflow:"hidden",
-        boxShadow:"0 2px 10px rgba(0,0,0,0.06)",
-      }}>
-        <div style={{
-          padding:"12px 16px", borderBottom:`1px solid ${C.border}`,
-          fontFamily:F.d, fontSize:15, fontWeight:700, color:C.maroon,
-          display:"flex", alignItems:"center", gap:6,
-        }}>
-          📋 {L.refTable} — {cfg.icon} {cfg.name}
+      {/* Reference table */}
+      <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:14,fontWeight:700,color:C.maroon}}>
+          📋 {L?"पूरी संदर्भ तालिका":"Full Reference Table"} — {cfg.icon} {cfg.name}
         </div>
-        <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:F.b, fontSize:11 }}>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:F.b,fontSize:11}}>
             <thead>
-              <tr style={{ background:C.maroonSoft }}>
-                <th style={{ padding:"8px 10px", textAlign:"left", fontWeight:700, color:C.maroon, whiteSpace:"nowrap" }}>{L.paxRow}</th>
-                {["keyMan","driver","guard","rider","gunMan","bouncer"].map(r => (
-                  <th key={r} style={{ padding:"8px 8px", textAlign:"center", fontWeight:700, color:C.maroon, whiteSpace:"nowrap" }}>
-                    {ROLE_META[r].icon}
-                    <div style={{ fontSize:9, fontWeight:600, color:C.tl }}>
-                      {lang==="hi" ? ROLE_META[r].labelHi : ROLE_META[r].label}
-                    </div>
+              <tr style={{background:C.maroonSoft}}>
+                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:C.maroon}}>{L?"पैक्स":"Pax"}</th>
+                {["keyMan","driver","guard","rider","gunMan","bouncer"].map(r=>(
+                  <th key={r} style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>
+                    {ROLE_META[r].icon}<div style={{fontSize:8,fontWeight:500,color:C.tl}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}</div>
                   </th>
                 ))}
-                <th style={{ padding:"8px 8px", textAlign:"center", fontWeight:700, color:C.maroon }}>{L.total}</th>
+                <th style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>{L?"कुल":"Total"}</th>
               </tr>
             </thead>
             <tbody>
-              {data.map((d, i) => {
-                const rowTotal = roles.reduce((s, r) => s + d[r], 0);
-                const isActive = d.pax === clampedPax;
-                return (
-                  <tr key={d.pax}
-                    onClick={() => setPax(d.pax)}
-                    style={{
-                      background: isActive ? C.maroonSoft : i % 2 === 0 ? C.white : C.bg,
-                      cursor:"pointer",
-                      transition:"background 0.1s",
-                    }}>
-                    <td style={{ padding:"8px 10px", fontWeight: isActive ? 700 : 500, color: isActive ? C.maroon : C.text }}>
-                      {d.pax}
-                    </td>
-                    {roles.map(r => (
-                      <td key={r} style={{ padding:"8px 8px", textAlign:"center", color: d[r]>0 ? C.text : C.border, fontWeight: d[r]>0 ? 600 : 400 }}>
-                        {d[r] > 0 ? d[r] : "—"}
-                      </td>
-                    ))}
-                    <td style={{ padding:"8px 8px", textAlign:"center", fontWeight:700, color:C.maroon }}>{rowTotal}</td>
+              {data.map((d,i)=>{
+                const rt=roles.reduce((s,r)=>s+d[r],0);
+                const isA=d.pax===clamped;
+                return(
+                  <tr key={d.pax} onClick={()=>setPax(d.pax)} style={{background:isA?C.maroonSoft:i%2===0?C.white:C.bg,cursor:"pointer"}}>
+                    <td style={{padding:"7px 10px",fontWeight:isA?700:500,color:isA?C.maroon:C.text}}>{d.pax}</td>
+                    {roles.map(r=><td key={r} style={{padding:"7px 8px",textAlign:"center",color:d[r]>0?C.text:C.border,fontWeight:d[r]>0?600:400}}>{d[r]>0?d[r]:"—"}</td>)}
+                    <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>{rt}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <div style={{ padding:"8px 12px", fontSize:10, color:C.tl, fontFamily:F.b, borderTop:`1px solid ${C.border}` }}>
-          👆 {lang==="hi" ? "किसी पंक्ति पर टैप करके पैक्स सेट करें" : "Tap any row to jump to that pax"}
+        <div style={{padding:"6px 12px",fontSize:9,color:C.tl,fontFamily:F.b,borderTop:`1px solid ${C.border}`}}>
+          👆 {L?"किसी पंक्ति पर टैप करें":"Tap any row to jump to that pax"}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
+export default function ValetPlanning({user, lang}){
+  const [tab,setTab]=useState("calendar");
+  const tabs=[
+    {id:"calendar",i:"📅",l:"Bookings",lH:"बुकिंग"},
+    {id:"calc",i:"🧮",l:"Staff Calculator",lH:"स्टाफ कैलकुलेटर"},
+  ];
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>🚗 {lang==="hi"?"वैलेट प्लानिंग":"Valet Planning"}</h1>
+        <div style={{display:"flex",background:C.maroonSoft,borderRadius:10,padding:3,gap:2}}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:600,background:tab===t.id?C.maroon:"transparent",color:tab===t.id?C.white:C.maroon}}>
+              {t.i} {lang==="hi"?t.lH:t.l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab==="calendar"&&<CalendarView user={user} lang={lang}/>}
+      {tab==="calc"&&<StaffCalculator user={user} lang={lang}/>}
     </div>
   );
 }

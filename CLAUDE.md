@@ -62,6 +62,8 @@ Ambria (Get Your Venue Events Pvt Ltd) workforce management app for 4 luxury eve
 9. Areas with SOP completion highlighting
 10. Hindi/English toggle
 11. Dashboard with dept progress
+12. Valet Planning — calendar booking system (valet_bookings Supabase table) + staff calculator with interpolation, car estimates, cost estimator
+13. Vendor Directory — full CRUD vendor contacts grouped by category, click-to-call & WhatsApp, property filter (vendors Supabase table)
 
 ## Features Pending (build these next)
 1. Professional dashboard with deep-dive analytics
