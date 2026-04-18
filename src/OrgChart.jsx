@@ -1,310 +1,246 @@
 import { useState } from "react";
 import { C, F } from "./constants.js";
 
-// ── Department meta ────────────────────────────────────────────────────────────
-const DM = {
-  h:{ icon:"🌱", label:"Horticulture", lH:"हॉर्टिकल्चर", c:C.green,  bg:C.gBg       },
-  k:{ icon:"🧹", label:"Housekeeping", lH:"हाउसकीपिंग",  c:C.blue,   bg:C.bBg       },
-  a:{ icon:"📋", label:"Admin",        lH:"एडमिन",       c:C.maroon, bg:C.maroonSoft },
-  s:{ icon:"🛡️", label:"Security",     lH:"सुरक्षा",      c:C.purple, bg:C.pBg       },
-};
+// ── CSS injected once — handles tree connecting lines via ::before / ::after ──
+const CHART_CSS = `
+.oc { overflow-x: auto; padding-bottom: 20px; }
+.oc-inner { display: inline-flex; flex-direction: column; align-items: center;
+  padding: 8px 20px 8px; min-width: max-content; }
+.oc-grp { display: flex; flex-direction: column; align-items: center; }
+.oc-card {
+  padding: 9px 14px; border-radius: 10px; min-width: 110px;
+  font-family: 'Outfit', sans-serif; text-align: center;
+  cursor: pointer; user-select: none; white-space: nowrap;
+  transition: opacity 0.12s, transform 0.12s;
+}
+.oc-card:active { opacity: 0.8; transform: scale(0.97); }
+.oc-card-name { font-weight: 700; font-size: 12px; color: #2D2D2D; line-height: 1.3; }
+.oc-card-role { font-size: 9px; margin-top: 2px; line-height: 1.3; }
+.oc-card-exp  { font-size: 9px; margin-top: 3px; color: #7A7A7A; }
+.oc-vbar { width: 2px; height: 20px; background: #7B1E2F; }
+.oc-row  { display: flex; align-items: flex-start; justify-content: center; }
+.oc-slot {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0 6px; position: relative; padding-top: 20px;
+}
+.oc-slot::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px; background: #7B1E2F;
+}
+.oc-slot:first-child::before  { left: 50%; }
+.oc-slot:last-child::before   { right: 50%; }
+.oc-slot:only-child::before   { display: none; }
+.oc-slot::after {
+  content: ''; position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%); width: 2px; height: 20px; background: #7B1E2F;
+}
+`;
 
-// ── Property meta ──────────────────────────────────────────────────────────────
-const PM = {
-  pp:{ l:"Pushpanjali", c:"#2E8B57" },
-  ex:{ l:"Exotica",     c:"#C4956A" },
-  mk:{ l:"Manaktala",   c:"#3B6FC0" },
-  rs:{ l:"Restro",      c:"#9A2E42" },
-  all:{ l:"All Venues", c:C.maroon  },
-};
-
-// ── Org tree data ──────────────────────────────────────────────────────────────
-// type: "founder" | "mgmt" | "sa" | "dept"
-// dept key maps to DM; prop key maps to PM
-// Leaf dept-nodes have a `members` array of strings
-const TREE = {
-  id:"harsh", name:"Harsh Vardhan", title:"Founder & Director", type:"founder",
+// ── Org data ────────────────────────────────────────────────────────────────
+const ORG_DATA = {
+  name:"Harsh Vardhan", role:"Founder", color:"#7B1E2F",
   children:[{
-    id:"vicky", name:"Vicky Arya", title:"Overall Head", type:"mgmt", prop:"all",
+    name:"Vicky Arya", role:"Overall Head", color:"#7B1E2F",
     children:[
+      { name:"Abhishek", role:"Efficiency Manager", color:"#7B1E2F" },
       {
-        id:"sonu", name:"Sonu Mali", title:"Site Head", type:"mgmt", dept:"a", prop:"pp",
+        name:"Sonu Mali", role:"Site Head — Pushpanjali", color:"#0891B2",
         children:[
-          { id:"pp_h", name:"Horticulture", title:"3 staff", type:"dept", dept:"h", prop:"pp",
-            members:["Pawan","Dayashankar","Sunil"] },
-          { id:"pp_k", name:"Housekeeping", title:"5 staff", type:"dept", dept:"k", prop:"pp",
-            members:["Poonam (2IC)","Neeru","Umesh","Dinesh","Lalita"] },
-          { id:"pp_s", name:"Security", title:"4 guards", type:"dept", dept:"s", prop:"pp",
-            members:["Day Guard 1 (3rd party)","Day Guard 2 (3rd party)","Night Guard 1 (3rd party)","Night Guard 2 (3rd party)"] },
+          { name:"Pawan",       role:"Horticulture",  color:"#16A34A" },
+          { name:"Dayashankar", role:"Horticulture",  color:"#16A34A" },
+          { name:"Sunil",       role:"Horticulture",  color:"#16A34A" },
+          { name:"Poonam",      role:"HK — 2IC",      color:"#2563EB" },
+          { name:"Neeru",       role:"Housekeeping",  color:"#2563EB" },
+          { name:"Umesh",       role:"Housekeeping",  color:"#2563EB" },
+          { name:"Dinesh",      role:"Housekeeping",  color:"#2563EB" },
+          { name:"Lalita",      role:"Housekeeping",  color:"#2563EB" },
         ]
       },
       {
-        id:"mahesh", name:"Mahesh", title:"Supervisor", type:"mgmt", dept:"a", prop:"ex",
+        name:"Mahesh", role:"Supervisor — Exotica", color:"#D97706",
         children:[
-          { id:"ex_h", name:"Horticulture", title:"3 staff", type:"dept", dept:"h", prop:"ex",
-            members:["Sonu (Hort.)","Dhruv","Kamlesh"] },
-          { id:"ex_k", name:"Housekeeping", title:"4 staff", type:"dept", dept:"k", prop:"ex",
-            members:["Sunita","Brijesh","Ragini","Rani"] },
-          { id:"ex_s", name:"Security", title:"4 guards", type:"dept", dept:"s", prop:"ex",
-            members:["Bhupender (Ambria — Day)","Kitchen Guard (3rd party — Day)","Night Guard 1 (3rd party)","Night Guard 2 (3rd party)"] },
+          { name:"Sonu 2",  role:"Horticulture", color:"#16A34A" },
+          { name:"Dhruv",   role:"Horticulture", color:"#16A34A" },
+          { name:"Kamlesh", role:"Horticulture", color:"#16A34A" },
+          { name:"Sunita",  role:"Housekeeping", color:"#2563EB" },
+          { name:"Brijesh", role:"Housekeeping", color:"#2563EB" },
+          { name:"Ragini",  role:"Housekeeping", color:"#2563EB" },
+          { name:"Rani",    role:"Housekeeping", color:"#2563EB" },
         ]
       },
       {
-        id:"rahees", name:"Rahees", title:"Supervisor", type:"mgmt", dept:"a", prop:"mk",
+        name:"Rahees", role:"Supervisor — Manaktala", color:"#059669",
         children:[
-          { id:"mk_h", name:"Horticulture", title:"3 staff", type:"dept", dept:"h", prop:"mk",
-            members:["Mukesh","Tulsi","Akash (Hort.)"] },
-          { id:"mk_k", name:"Housekeeping", title:"4 staff", type:"dept", dept:"k", prop:"mk",
-            members:["Sadna","Lovekush","Akash","Ajay"] },
-          { id:"mk_s", name:"Security", title:"2 guards", type:"dept", dept:"s", prop:"mk",
-            members:["Ajay Sec (Ambria — Day)","Night Guard (3rd party)"] },
+          { name:"Mukesh",   role:"Horticulture", color:"#16A34A" },
+          { name:"Tulsi",    role:"Horticulture", color:"#16A34A" },
+          { name:"Akash(H)", role:"Horticulture", color:"#16A34A" },
+          { name:"Sadna",    role:"Housekeeping", color:"#2563EB" },
+          { name:"Lovekush", role:"Housekeeping", color:"#2563EB" },
+          { name:"Akash",    role:"Housekeeping", color:"#2563EB" },
+          { name:"Ajay",     role:"Housekeeping", color:"#2563EB" },
         ]
       },
       {
-        id:"restro", name:"Restro — Direct", title:"Managed by Vicky Arya", type:"mgmt", prop:"rs",
+        name:"Sandeep", role:"Security Head — All", color:"#6B21A8",
         children:[
-          { id:"rs_k", name:"Housekeeping", title:"5 staff", type:"dept", dept:"k", prop:"rs",
-            members:["Suresh","Roma","Anita","Arjun","Vinay"] },
-          { id:"rs_h", name:"Horticulture", title:"1 staff", type:"dept", dept:"h", prop:"rs",
-            members:["Ramu"] },
-          { id:"rs_s", name:"Security", title:"2 guards", type:"dept", dept:"s", prop:"rs",
-            members:["Santosh (Ambria — Day)","Night Guard (3rd party)"] },
+          { name:"Santosh",         role:"Security — Restro",    color:"#6B21A8" },
+          { name:"Bhupender",       role:"Security — Exotica",   color:"#6B21A8" },
+          { name:"Ajay (Sec)",      role:"Security — Manaktala", color:"#6B21A8" },
+          { name:"3rd Party Guards",role:"All Venues",            color:"#888888" },
         ]
       },
-      {
-        id:"sandeep", name:"Sandeep", title:"Security Head — All Venues", type:"mgmt", dept:"s", prop:"all",
-        children:[
-          { id:"san_pp", name:"Pushpanjali Security", title:"4 guards", type:"dept", dept:"s", prop:"pp",
-            members:["Day Guard 1 (3rd party)","Day Guard 2 (3rd party)","Night Guard 1 (3rd party)","Night Guard 2 (3rd party)"] },
-          { id:"san_ex", name:"Exotica Security", title:"4 guards", type:"dept", dept:"s", prop:"ex",
-            members:["Bhupender (Ambria — Day)","Kitchen Guard (3rd party — Day)","Night Guard 1 (3rd party)","Night Guard 2 (3rd party)"] },
-          { id:"san_mk", name:"Manaktala Security", title:"2 guards", type:"dept", dept:"s", prop:"mk",
-            members:["Ajay Sec (Ambria — Day)","Night Guard (3rd party)"] },
-          { id:"san_rs", name:"Restro Security", title:"2 guards", type:"dept", dept:"s", prop:"rs",
-            members:["Santosh (Ambria — Day)","Night Guard (3rd party)"] },
-        ]
-      },
-      {
-        id:"abhishek", name:"Abhishek", title:"Efficiency Manager / Super Admin",
-        type:"sa", dept:"a", prop:"all",
-      },
+      // Restro staff report directly to Vicky
+      { name:"Suresh", role:"HK — Restro",   color:"#2563EB" },
+      { name:"Roma",   role:"HK — Restro",   color:"#2563EB" },
+      { name:"Anita",  role:"HK — Restro",   color:"#2563EB" },
+      { name:"Arjun",  role:"HK — Restro",   color:"#2563EB" },
+      { name:"Vinay",  role:"HK — Restro",   color:"#2563EB" },
+      { name:"Ramu",   role:"Hort — Restro", color:"#16A34A" },
     ]
   }]
 };
 
-// ── Recursive node ─────────────────────────────────────────────────────────────
-function OrgNode({ node, depth, expanded, toggle }) {
-  const canExpand = !!(node.children?.length || node.members?.length);
-  const isOpen = !!expanded[node.id];
-  const isDept = node.type === "dept";
-  const isFounder = node.type === "founder";
-  const isSANode = node.type === "sa";
+// ── Collect all node names for expand-all ──────────────────────────────────
+function collectKeys(node, acc = []) {
+  acc.push(node.name);
+  node.children?.forEach(c => collectKeys(c, acc));
+  return acc;
+}
+const ALL_KEYS = collectKeys(ORG_DATA);
 
-  const dm = node.dept ? DM[node.dept] : null;
-  const pm = node.prop ? PM[node.prop] : null;
+// ── Single tree branch (recursive) ────────────────────────────────────────
+function Branch({ node, expanded, toggle }) {
+  const hasKids = !!(node.children?.length);
+  const isOpen  = !!expanded[node.name];
+  const isMgr   = hasKids; // managers have children; staff are leaf nodes
 
-  // Primary color for this node
-  const nodeC = isFounder ? "#B8860B"
-    : isSANode ? C.blue
-    : dm ? dm.c
-    : C.maroon;
-
-  const nodeBg = isFounder ? "#FFFCE8"
-    : isSANode ? C.bBg
-    : isDept ? (dm?.bg || C.maroonSoft)
-    : C.white;
-
-  const borderOpacity = depth <= 1 ? "55" : "28";
-  const avatarChar = isDept ? (dm?.icon || "•")
-    : isFounder ? "H"
-    : isSANode ? "A"
-    : node.name[0];
-
-  const avatarSize = depth === 0 ? 42 : depth === 1 ? 36 : 28;
-  const nameSize = depth === 0 ? 16 : depth === 1 ? 14 : 12;
-  const titleSize = depth === 0 ? 10 : 9;
-  const padV = depth === 0 ? 14 : depth === 1 ? 11 : 8;
-
-  const count = node.children?.length || node.members?.length || 0;
+  const cardStyle = isMgr ? {
+    background: node.color + "18",
+    border: `2px solid ${node.color}`,
+  } : {
+    background: "#fff",
+    borderLeft: `4px solid ${node.color}`,
+    border: `1px solid #EDEDED`,
+    borderLeftWidth: 4,
+    borderLeftColor: node.color,
+  };
 
   return (
-    <div style={{ marginBottom: 5 }}>
-      {/* ── Node card ── */}
+    <div className="oc-grp">
+      {/* Node card */}
       <div
-        onClick={() => canExpand && toggle(node.id)}
-        style={{
-          display:"flex", alignItems:"center", gap:9,
-          padding:`${padV}px 12px`,
-          borderRadius:10,
-          background:nodeBg,
-          border:`2px solid ${nodeC}${borderOpacity}`,
-          cursor:canExpand?"pointer":"default",
-          boxShadow:depth<=1?"0 2px 8px rgba(0,0,0,0.07)":"none",
-          userSelect:"none",
-        }}
+        className="oc-card"
+        style={cardStyle}
+        onClick={() => hasKids && toggle(node.name)}
       >
-        {/* Expand chevron */}
-        <span style={{
-          fontSize:9, color:nodeC, fontWeight:700,
-          minWidth:10, display:"inline-block",
-          transform:isOpen?"rotate(90deg)":"none",
-          transition:"transform 0.18s",
-          opacity:canExpand?1:0,
-        }}>▶</span>
-
-        {/* Avatar */}
-        <div style={{
-          width:avatarSize, height:avatarSize, borderRadius:"50%",
-          background:`linear-gradient(135deg,${nodeC},${nodeC}BB)`,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          color:"#fff", fontWeight:700,
-          fontSize:isDept?16:Math.round(avatarSize*0.42),
-          fontFamily:isDept?"inherit":F.d,
-          flexShrink:0, boxShadow:`0 2px 6px ${nodeC}30`,
-        }}>
-          {avatarChar}
-        </div>
-
-        {/* Name + title */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{
-            fontFamily:depth<=1?F.d:F.b,
-            fontSize:nameSize, fontWeight:700,
-            color:nodeC, lineHeight:1.25,
-          }}>
-            {node.name}
+        <div className="oc-card-name">{node.name}</div>
+        <div className="oc-card-role" style={{ color: node.color }}>{node.role}</div>
+        {hasKids && (
+          <div className="oc-card-exp">
+            {isOpen ? "▾ collapse" : `▸ ${node.children.length} people`}
           </div>
-          <div style={{ fontSize:titleSize, color:C.tl, marginTop:1 }}>{node.title}</div>
-        </div>
-
-        {/* Right badges */}
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3, flexShrink:0 }}>
-          {isSANode && (
-            <span style={{ fontSize:8, padding:"2px 6px", borderRadius:4, background:C.bBg, color:C.blue, fontWeight:700 }}>
-              Super Admin
-            </span>
-          )}
-          {dm && !isDept && (
-            <span style={{ fontSize:8, padding:"2px 6px", borderRadius:4, background:dm.bg, color:dm.c, fontWeight:700, whiteSpace:"nowrap" }}>
-              {dm.icon} {dm.label}
-            </span>
-          )}
-          {pm && (
-            <span style={{ fontSize:8, padding:"2px 6px", borderRadius:4, background:pm.c+"18", color:pm.c, fontWeight:700, whiteSpace:"nowrap" }}>
-              {pm.l}
-            </span>
-          )}
-          {canExpand && (
-            <span style={{
-              fontSize:8, padding:"1px 6px", borderRadius:10, fontWeight:700, whiteSpace:"nowrap",
-              background:isOpen?nodeC:C.border, color:isOpen?"#fff":C.tl,
-              transition:"background 0.18s",
-            }}>
-              {count}
-            </span>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* ── Expanded content ── */}
-      {isOpen && (
-        <div style={{
-          marginLeft:20, paddingLeft:13,
-          borderLeft:`2px solid ${nodeC}28`,
-          marginTop:4,
-        }}>
-          {node.children?.map(child => (
-            <OrgNode key={child.id} node={child} depth={depth+1} expanded={expanded} toggle={toggle}/>
-          ))}
-          {node.members?.map((m,i) => (
-            <div key={i} style={{
-              display:"flex", alignItems:"center", gap:8,
-              padding:"6px 10px",
-              background:C.bg, borderRadius:7,
-              marginBottom:4,
-              border:`1px solid ${C.border}`,
-            }}>
-              <div style={{
-                width:22, height:22, borderRadius:"50%",
-                background:nodeC+"22",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:10, fontWeight:700, color:nodeC, flexShrink:0,
-              }}>{m[0]}</div>
-              <span style={{ fontSize:11, color:C.text }}>{m}</span>
-            </div>
-          ))}
-        </div>
+      {/* Children */}
+      {hasKids && isOpen && (
+        <>
+          <div className="oc-vbar" />
+          <div className="oc-row">
+            {node.children.map((child, i) => (
+              <div key={i} className="oc-slot">
+                <Branch node={child} expanded={expanded} toggle={toggle} />
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-// ── All-node IDs for expand-all ────────────────────────────────────────────────
-function collectIds(node, acc={}) {
-  acc[node.id]=true;
-  node.children?.forEach(c=>collectIds(c,acc));
-  return acc;
-}
-
-// ── Main export ────────────────────────────────────────────────────────────────
+// ── Main export ────────────────────────────────────────────────────────────
 export default function OrgChart({ lang }) {
-  const H = lang==="hi";
-  // Start with only the root expanded so Level 0 + Level 1 (Vicky) are visible
-  const [expanded, setExpanded] = useState({ harsh:true });
+  const H = lang === "hi";
+  // Start with only root expanded → Vicky visible; everything else collapsed
+  const [expanded, setExpanded] = useState({ "Harsh Vardhan": true });
 
-  const toggle = id => setExpanded(p=>({...p,[id]:!p[id]}));
+  const toggle = name =>
+    setExpanded(p => ({ ...p, [name]: !p[name] }));
+
+  const expandAll  = () =>
+    setExpanded(Object.fromEntries(ALL_KEYS.map(k => [k, true])));
+
+  const collapseAll = () =>
+    setExpanded({});
 
   return (
-    <div style={{ fontFamily:F.b }}>
+    <div style={{ fontFamily: F.b }}>
+      {/* Inject CSS */}
+      <style>{CHART_CSS}</style>
+
       {/* Header */}
-      <div style={{ marginBottom:14 }}>
-        <h1 style={{ fontFamily:F.d, fontSize:22, fontWeight:700, color:C.maroon, margin:"0 0 3px" }}>
-          🏢 {H?"संगठन संरचना":"Organisation Structure"}
+      <div style={{ marginBottom: 14 }}>
+        <h1 style={{ fontFamily: F.d, fontSize: 22, fontWeight: 700, color: C.maroon, margin: "0 0 3px" }}>
+          🏢 {H ? "संगठन संरचना" : "Org Chart"}
         </h1>
-        <p style={{ fontSize:11, color:C.tl, margin:0 }}>
-          {H?"किसी भी नाम पर टैप करें — नीचे की टीम दिखेगी":"Tap any name to expand the team below them"}
+        <p style={{ fontSize: 11, color: C.tl, margin: 0 }}>
+          {H ? "नाम पर टैप करें — टीम देखें" : "Tap any name to expand the team below"}
         </p>
       </div>
 
       {/* Legend */}
-      <div style={{ display:"flex", gap:5, marginBottom:14, flexWrap:"wrap" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
         {[
-          { c:"#B8860B", bg:"#FFFCE8", l:"🏛️ Founder"     },
-          { c:C.maroon,  bg:C.maroonSoft, l:"👑 Management" },
-          { c:C.green,   bg:C.gBg,    l:"🌱 Horticulture" },
-          { c:C.blue,    bg:C.bBg,    l:"🧹 Housekeeping" },
-          { c:C.purple,  bg:C.pBg,    l:"🛡️ Security"     },
-        ].map(leg=>(
+          { c: "#7B1E2F", l: "👑 Management" },
+          { c: "#0891B2", l: "🏛️ Pushpanjali" },
+          { c: "#D97706", l: "🌴 Exotica"      },
+          { c: "#059669", l: "✨ Manaktala"    },
+          { c: "#16A34A", l: "🌱 Horticulture" },
+          { c: "#2563EB", l: "🧹 Housekeeping" },
+          { c: "#6B21A8", l: "🛡️ Security"     },
+        ].map(leg => (
           <span key={leg.l} style={{
-            fontSize:9, padding:"3px 8px", borderRadius:6,
-            background:leg.bg, color:leg.c,
-            fontWeight:700, border:`1px solid ${leg.c}28`,
+            fontSize: 9, padding: "3px 8px", borderRadius: 6, fontWeight: 700,
+            background: leg.c + "15", color: leg.c, border: `1px solid ${leg.c}28`,
           }}>
             {leg.l}
           </span>
         ))}
       </div>
 
-      {/* Tree */}
-      <div style={{ background:C.white, borderRadius:14, border:`1px solid ${C.border}`, padding:16 }}>
-        <OrgNode node={TREE} depth={0} expanded={expanded} toggle={toggle}/>
+      {/* Expand / Collapse controls */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button onClick={expandAll} style={{
+          padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`,
+          background: C.white, fontFamily: F.b, fontSize: 11, cursor: "pointer", color: C.text,
+        }}>
+          ⊞ {H ? "सब खोलें" : "Expand All"}
+        </button>
+        <button onClick={collapseAll} style={{
+          padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`,
+          background: C.white, fontFamily: F.b, fontSize: 11, cursor: "pointer", color: C.text,
+        }}>
+          ⊟ {H ? "सब बंद करें" : "Collapse All"}
+        </button>
       </div>
 
-      {/* Controls */}
-      <div style={{ display:"flex", gap:8, marginTop:10 }}>
-        <button
-          onClick={()=>setExpanded(collectIds(TREE))}
-          style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:C.white, fontFamily:F.b, fontSize:11, cursor:"pointer", color:C.text }}
-        >
-          ⊞ {H?"सब खोलें":"Expand All"}
-        </button>
-        <button
-          onClick={()=>setExpanded({})}
-          style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:C.white, fontFamily:F.b, fontSize:11, cursor:"pointer", color:C.text }}
-        >
-          ⊟ {H?"सब बंद करें":"Collapse All"}
-        </button>
+      {/* Tree */}
+      <div style={{
+        background: C.white, borderRadius: 14,
+        border: `1px solid ${C.border}`, padding: 16,
+      }}>
+        <div className="oc">
+          <div className="oc-inner">
+            <Branch node={ORG_DATA} expanded={expanded} toggle={toggle} />
+          </div>
+        </div>
       </div>
+
+      {/* Mobile hint */}
+      <p style={{ fontSize: 10, color: C.tl, margin: "8px 0 0", textAlign: "center" }}>
+        {H ? "← बाएं/दाएं स्क्रॉल करें →" : "← Scroll left/right to see full tree →"}
+      </p>
     </div>
   );
 }

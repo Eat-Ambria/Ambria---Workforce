@@ -1,7 +1,7 @@
 {
-  "name": "Ambria Workforce",
-  "short_name": "Ambria",
-  "description": "Ambria Venue Workforce Management",
+  "name": "Ambria Work Force",
+  "short_name": "Ambria WF",
+  "description": "Ambria Work Force — Venue Management",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FAFAFA",
