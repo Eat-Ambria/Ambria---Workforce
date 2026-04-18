@@ -8,6 +8,7 @@ import ChemicalGuide from "./ChemicalGuide.jsx";
 import AreasView from "./AreasView.jsx";
 import TrainingView from "./TrainingView.jsx";
 import MembersView from "./MembersView.jsx";
+import OrgChart from "./OrgChart.jsx";
 import ValetPlanning from "./ValetPlanning.jsx";
 import VendorDirectory from "./VendorDirectory.jsx";
 
@@ -237,7 +238,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   console.log("USER:",u.id,u.role,u.name);
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"🏢",l:"Team"},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   if(isSA&&!pm)nav.push({id:"members",i:"👤",l:L.members||"Members"});
   console.log("NAV ITEMS:",nav.map(n=>n.id));
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
@@ -376,11 +377,6 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
   </div>);
 }
 
-function TeamV({tasks,prop,L}){return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 10px"}}>{L.team} - {prop?.sn}</h1>
-  {Object.entries(prop?.depts||{}).map(([k,d])=>(<div key={k} style={{background:C.white,borderRadius:12,padding:12,border:`1px solid ${C.border}`,marginBottom:10}}>
-    <div style={{fontFamily:F.d,fontSize:14,fontWeight:700,marginBottom:8}}>{d.i} {d.n}</div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6}}>{d.m.map(m=>{const mt=tasks.filter(t=>t.assignedTo===m.id),md=mt.filter(t=>t.status==="completed").length;
-      return(<div key={m.id} style={{padding:8,background:d.bg,borderRadius:8,borderLeft:`3px solid ${d.c}`}}><div style={{fontWeight:600,fontSize:11,marginBottom:3}}>{m.n}</div><div style={{display:"flex",gap:3}}><Bdg color={C.green} bg={C.gBg}>✅{md}</Bdg><Bdg color={C.yellow} bg={C.yBg}>⏳{mt.filter(t=>t.status==="pending").length}</Bdg></div></div>);})}</div></div>))}</div>);}
 
 
 // ═══ ASSIGNED TASKS — SA creates tasks for Admins ═══
@@ -775,12 +771,12 @@ export default function App(){
     {sN&&<NPanel ns={ns} onClose={()=>setSN(false)} onClr={()=>{setNs([]);setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div style={{marginLeft:185,padding:"0 18px 18px",minHeight:"100vh"}}>
       {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
-      {!pm&&!["members","roster","valet","vendors"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
+      {!pm&&!["members","roster","valet","vendors","team"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
-        {view==="team"&&<TeamV tasks={tasks} prop={prop} L={L}/>}
+        {view==="team"&&<OrgChart lang={lang}/>}
         {view==="areas"&&<AreasView tasks={tasks} prop={prop} lang={lang}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
         {view==="roster"&&<DutyRoster prop={prop} user={eU} lang={lang}/>}

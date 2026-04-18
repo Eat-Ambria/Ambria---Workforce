@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS } from "./constants.js";
+import { C, F, LANGS, PROPS } from "./constants.js";
 
 // ─── DEFAULT TOPICS (seeded to DB on first load) ─────────────────────────────
 const DEFAULT_TOPICS = [
@@ -204,13 +204,17 @@ function VideoForm({init,onSave,onCancel,lang}){
 export default function TrainingView({user,prop,lang}){
   const H=lang==="hi";
   const L=LANGS[lang];
+  const isSA=user.role==="sa";
   const isAdmin=user.role==="sa"||user.role==="a";
+  // Each user watches only their department's videos
+  const myDept=user.dept||user.department||(user.role==="a"?"a":"k");
 
   const[tab,setTab]=useState("videos");
   const[videos,setVideos]=useState([]);
   const[progress,setProgress]=useState({});   // { "video_id_str": true }
   const[staffProgress,setStaffProg]=useState([]);
-  const[deptFilter,setDF]=useState("k");
+  // SA can switch between depts; everyone else is locked to their own dept
+  const[deptFilter,setDF]=useState(isSA?"k":myDept);
   const[activeVideo,setAV]=useState(null);
   const[showForm,setSF]=useState(false);
   const[editVideo,setEV]=useState(null);
@@ -291,9 +295,13 @@ export default function TrainingView({user,prop,lang}){
   };
 
   // Derived stats
-  const filteredVids=videos.filter(v=>v.department===deptFilter);
-  const totalWatched=videos.filter(v=>progress[String(v.id)]).length;
-  const myPct=videos.length?Math.round((totalWatched/videos.length)*100):0;
+  // SA uses the deptFilter selector; everyone else is locked to their own dept
+  const viewDept=isSA?deptFilter:myDept;
+  const filteredVids=videos.filter(v=>v.department===viewDept);
+  // Progress bar counts only the user's OWN department videos
+  const myDeptVideos=videos.filter(v=>v.department===myDept);
+  const totalWatched=myDeptVideos.filter(v=>progress[String(v.id)]).length;
+  const myPct=myDeptVideos.length?Math.round((totalWatched/myDeptVideos.length)*100):0;
 
   const deptStats={};
   Object.keys(DEPT_META).forEach(k=>{
@@ -302,11 +310,15 @@ export default function TrainingView({user,prop,lang}){
     deptStats[k]={total,done,pct:total?Math.round((done/total)*100):0};
   });
 
-  // Staff progress for admin view
-  const allStaff=Object.entries(prop?.depts||{}).flatMap(([,d])=>d.m.map(m=>({...m,deptName:d.n})));
+  // Staff progress — SA sees all properties; admin sees their property only
+  // Each person's completion % is based on THEIR department's video count, not all videos
+  const allStaff=isSA
+    ?Object.entries(PROPS).flatMap(([pid,p])=>Object.entries(p.depts||{}).flatMap(([dk,d])=>d.m.map(m=>({...m,deptKey:dk,deptName:d.n,propName:p.sn}))))
+    :Object.entries(prop?.depts||{}).flatMap(([dk,d])=>d.m.map(m=>({...m,deptKey:dk,deptName:d.n,propName:prop.sn})));
   const staffSummary=allStaff.map(m=>{
-    const watched=staffProgress.filter(r=>r.user_id===m.id).length;
-    return{...m,watched,total:videos.length,pct:videos.length?Math.round((watched/videos.length)*100):0};
+    const deptVids=videos.filter(v=>v.department===m.deptKey);
+    const watched=staffProgress.filter(r=>r.user_id===m.id&&deptVids.some(v=>String(v.id)===r.video_key)).length;
+    return{...m,watched,total:deptVids.length,pct:deptVids.length?Math.round((watched/deptVids.length)*100):0};
   });
 
   return(
@@ -331,7 +343,7 @@ export default function TrainingView({user,prop,lang}){
         {!loading&&<div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,padding:"10px 14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
             <span style={{fontSize:11,fontWeight:600,color:C.text}}>{user.name} — {H?"ट्रेनिंग प्रगति":"Training Progress"}</span>
-            <span style={{fontFamily:F.d,fontSize:17,fontWeight:700,color:myPct===100?C.green:C.maroon}}>{totalWatched}/{videos.length} ({myPct}%)</span>
+            <span style={{fontFamily:F.d,fontSize:17,fontWeight:700,color:myPct===100?C.green:C.maroon}}>{totalWatched}/{myDeptVideos.length} ({myPct}%)</span>
           </div>
           <div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${myPct}%`,background:myPct===100?C.green:C.maroon,borderRadius:3,transition:"width 0.5s"}}/>
@@ -346,20 +358,26 @@ export default function TrainingView({user,prop,lang}){
         {/* Add/Edit form */}
         {showForm&&isAdmin&&<VideoForm init={editVideo} onSave={saveVideo} onCancel={()=>{setSF(false);setEV(null);}} lang={lang}/>}
 
-        {/* Dept filter tabs */}
-        <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
+        {/* Dept filter tabs — SA only; employees/admins are locked to their own dept */}
+        {isSA&&<div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
           {Object.entries(DEPT_META).map(([k,d])=>{
             const st=deptStats[k]||{total:0,done:0,pct:0};
-            const isA=deptFilter===k;
+            const isActive=deptFilter===k;
             return(
-              <button key={k} onClick={()=>setDF(k)} style={{padding:"6px 12px",borderRadius:8,border:isA?`2px solid ${d.c}`:`1px solid ${C.border}`,background:isA?d.c+"18":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:isA?700:400,color:isA?d.c:C.tl,display:"flex",alignItems:"center",gap:5}}>
+              <button key={k} onClick={()=>setDF(k)} style={{padding:"6px 12px",borderRadius:8,border:isActive?`2px solid ${d.c}`:`1px solid ${C.border}`,background:isActive?d.c+"18":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:isActive?700:400,color:isActive?d.c:C.tl,display:"flex",alignItems:"center",gap:5}}>
                 <span>{d.icon}</span>
                 <span>{H?d.lH:d.l}</span>
-                {st.total>0&&<span style={{fontSize:9,background:isA?d.c:"#E0E0E0",color:isA?C.white:C.tl,borderRadius:10,padding:"1px 6px",fontWeight:700}}>{st.done}/{st.total}</span>}
+                {st.total>0&&<span style={{fontSize:9,background:isActive?d.c:"#E0E0E0",color:isActive?C.white:C.tl,borderRadius:10,padding:"1px 6px",fontWeight:700}}>{st.done}/{st.total}</span>}
               </button>
             );
           })}
-        </div>
+        </div>}
+        {/* Non-SA: show which dept they're viewing */}
+        {!isSA&&(()=>{const dm=DEPT_META[myDept];return dm?<div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,padding:"8px 12px",background:dm.bg,borderRadius:8,border:`1px solid ${dm.c}28`}}>
+          <span style={{fontSize:16}}>{dm.icon}</span>
+          <span style={{fontSize:12,fontWeight:700,color:dm.c}}>{H?dm.lH:dm.l}</span>
+          <span style={{fontSize:10,color:dm.c,opacity:0.7}}>— {H?"आपके विभाग की ट्रेनिंग":"Your department training"}</span>
+        </div>:null;})()}
 
         {/* Video grid */}
         {loading&&<div style={{textAlign:"center",padding:28,color:C.tl,fontSize:13,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>Loading training videos...</div>}
@@ -437,7 +455,7 @@ export default function TrainingView({user,prop,lang}){
                       <div style={{width:26,height:26,borderRadius:"50%",background:barC,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:10,fontWeight:700}}>{m.n[0]}</div>
                       <div>
                         <div style={{fontSize:11,fontWeight:700}}>{m.n}</div>
-                        <div style={{fontSize:9,color:C.tl}}>{m.deptName}</div>
+                        <div style={{fontSize:9,color:C.tl}}>{m.deptName}{m.propName?` · ${m.propName}`:""}</div>
                       </div>
                     </div>
                     <div style={{textAlign:"right"}}>
