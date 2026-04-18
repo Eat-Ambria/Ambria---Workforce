@@ -482,7 +482,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const[showRemarks,setShowRemarks]=useState(false);
   const[remarks,setRemarks]=useState("");
   const cRef=useRef(null);const rRef=useRef(null);
-  const isSA=u.role==="sa";const isTarget=dir.to===u.id;
+  const isSA=u.role==="sa";const isTarget=dir.to===u.id||(!!u.username&&dir.to===u.username);
   const tgt=ADMIN_TARGETS.find(t=>t.id===dir.to||t.username===dir.to);
   const mC=tgt?.color||C.blue;
 
@@ -710,8 +710,12 @@ export default function App(){
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
-        console.log("FETCH assigned_tasks WHERE to_user =",user.id,"(role:",user.role+")");
-        if(user.role!=="sa")atQ=atQ.eq("to_user",user.id);
+        if(user.role!=="sa"){
+          const _uid=user.id||"";const _uname=user.username||"";
+          // Match tasks assigned to this user by id OR username (handles either being stored in to_user)
+          if(_uname&&_uname!==_uid){atQ=atQ.or(`to_user.eq.${_uid},to_user.eq.${_uname}`);}
+          else{atQ=atQ.eq("to_user",_uid);}
+        }
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
         // ═══ DEBUG: assigned tasks ═══
         console.log("=== ASSIGNED TASKS DEBUG ===");
@@ -770,7 +774,7 @@ export default function App(){
     {sN&&<NPanel ns={ns} onClose={()=>setSN(false)} onClr={()=>{setNs([]);setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div style={{marginLeft:185,padding:"0 18px 18px",minHeight:"100vh"}}>
       {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
-      {!pm&&!["members","roster","valet","vendors","team"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
+      {!pm&&!["members","roster","valet","vendors","team","chemicals"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}

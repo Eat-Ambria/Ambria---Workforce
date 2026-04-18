@@ -220,26 +220,32 @@ export default function TrainingView({user,prop,lang}){
   const[editVideo,setEV]=useState(null);
   const[loading,setLd]=useState(true);
 
-  // Load videos from DB; seed defaults if table is empty
+  // Load videos from DB; admins see all + seed if empty; employees see only their dept
   useEffect(()=>{
     setLd(true);
     (async()=>{
       try{
-        const{data,error}=await supabase.from("training_videos").select("*")
-          .eq("is_active",true).order("department").order("sort_order");
-        if(data&&data.length>0){
-          setVideos(data);
-        }else if(!error){
-          // Empty table → seed defaults
-          const seeds=DEFAULT_TOPICS.map(t=>({...t,is_active:true,created_by:"system"}));
-          const{data:seeded}=await supabase.from("training_videos").insert(seeds).select();
-          setVideos(seeded||DEFAULT_TOPICS.map((t,i)=>({...t,id:i+1})));
+        if(!isAdmin){
+          // Non-admin: only fetch their department's videos — no seeding
+          const{data}=await supabase.from("training_videos").select("*")
+            .eq("is_active",true).eq("department",myDept).order("sort_order");
+          setVideos(data&&data.length>0?data:DEFAULT_TOPICS.filter(t=>t.department===myDept).map((t,i)=>({...t,id:i+1})));
         }else{
-          // Table missing → local fallback (no edit functionality)
-          setVideos(DEFAULT_TOPICS.map((t,i)=>({...t,id:i+1})));
+          // Admin/SA: fetch all and seed if table is empty
+          const{data,error}=await supabase.from("training_videos").select("*")
+            .eq("is_active",true).order("department").order("sort_order");
+          if(data&&data.length>0){
+            setVideos(data);
+          }else if(!error){
+            const seeds=DEFAULT_TOPICS.map(t=>({...t,is_active:true,created_by:"system"}));
+            const{data:seeded}=await supabase.from("training_videos").insert(seeds).select();
+            setVideos(seeded||DEFAULT_TOPICS.map((t,i)=>({...t,id:i+1})));
+          }else{
+            setVideos(DEFAULT_TOPICS.map((t,i)=>({...t,id:i+1})));
+          }
         }
       }catch(_){
-        setVideos(DEFAULT_TOPICS.map((t,i)=>({...t,id:i+1})));
+        setVideos(DEFAULT_TOPICS.filter(t=>isAdmin||t.department===myDept).map((t,i)=>({...t,id:i+1})));
       }finally{setLd(false);}
     })();
   },[]);

@@ -98,9 +98,10 @@ const CSS = `
 const ORG_DATA = {
   name:"Harsh Vardhan", role:"Founder & Director", color:"#7B1E2F",
   children:[{
-    name:"Vicky Arya", role:"Overall Head", color:"#7B1E2F",
-    children:[
-      { name:"Abhishek",    role:"Efficiency Manager", color:"#7B1E2F" },
+    name:"Abhishek", role:"Efficiency Manager", color:"#7B1E2F",
+    children:[{
+      name:"Vicky Arya", role:"Overall Head", color:"#7B1E2F",
+      children:[
       {
         name:"Sonu Mali", role:"Site Head — Pushpanjali", color:"#0891B2",
         children:[
@@ -154,7 +155,8 @@ const ORG_DATA = {
       { name:"Arjun",  role:"HK — Restro",   color:"#2563EB" },
       { name:"Vinay",  role:"HK — Restro",   color:"#2563EB" },
       { name:"Ramu",   role:"Hort — Restro", color:"#16A34A" },
-    ]
+      ]
+    }]
   }]
 };
 
@@ -211,8 +213,8 @@ function Branch({ node, expanded, toggle }) {
 // ── Main export ────────────────────────────────────────────────────────────────
 export default function OrgChart({ lang }) {
   const H = lang === "hi";
-  // Start with root expanded → only Vicky visible; all else collapsed
-  const [expanded, setExpanded] = useState({ "Harsh Vardhan": true });
+  // Start with chain Harsh→Abhishek→Vicky expanded; all else collapsed
+  const [expanded, setExpanded] = useState({ "Harsh Vardhan": true, "Abhishek": true });
 
   const toggle = name =>
     setExpanded(p => ({ ...p, [name]: !p[name] }));
