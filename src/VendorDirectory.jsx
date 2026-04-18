@@ -286,11 +286,6 @@ export default function VendorDirectory({ user, lang }) {
         </button>
       </div>
 
-      {/* Setup notice */}
-      <div style={{ background:"#FFF7ED", border:`1px solid ${C.accent}`, borderRadius:10, padding:"8px 12px", marginBottom:12, fontSize:11, fontFamily:F.b, color:C.accent }}>
-        <strong>⚠️ First-time setup:</strong> Run the <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 4px", borderRadius:3 }}>vendors</code> SQL in Supabase SQL Editor — see the note at the bottom.
-      </div>
-
       {/* Form */}
       {showForm && (
         <VendorForm init={editV} onSave={save} onCancel={() => { setSF(false); setEV(null); }} user={user} lang={lang} />
@@ -376,28 +371,6 @@ export default function VendorDirectory({ user, lang }) {
         </div>
       )}
 
-      {/* SQL Setup */}
-      <details style={{ marginTop:16 }}>
-        <summary style={{ cursor:"pointer", fontSize:11, fontFamily:F.b, color:C.tl, padding:"6px 0" }}>🛠️ Supabase Setup SQL (run once)</summary>
-        <pre style={{ background:"#1E1E1E", color:"#D4D4D4", padding:14, borderRadius:8, fontSize:10, overflowX:"auto", marginTop:6, lineHeight:1.6 }}>{`CREATE TABLE vendors (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  company TEXT,
-  phone TEXT NOT NULL,
-  alt_phone TEXT,
-  email TEXT,
-  category TEXT NOT NULL,
-  property TEXT DEFAULT 'all',
-  notes TEXT,
-  rating INTEGER DEFAULT 3,
-  is_active BOOLEAN DEFAULT true,
-  created_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE vendors ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all" ON vendors
-  FOR ALL USING (true) WITH CHECK (true);`}</pre>
-      </details>
     </div>
   );
 }

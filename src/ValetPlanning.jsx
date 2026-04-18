@@ -1,8 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
 
-// ─── STAFF CALCULATOR DATA ───────────────────────────────────────────────────
+// Developer note — never shown in UI
+console.log(
+  "Run this SQL in Supabase if new valet fields fail:",
+  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS event_type TEXT DEFAULT 'other';" +
+  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS guest_count INTEGER DEFAULT 0;" +
+  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal';" +
+  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS special_instructions TEXT;"
+);
+
+// ─── STAFF CALCULATOR DATA ────────────────────────────────────────────────────
 const VALET_DATA = {
   pp: [
     { pax:100,  keyMan:1, driver:3,  guard:0, rider:0, gunMan:0, bouncer:0 },
@@ -64,7 +73,25 @@ const ROLE_META = {
   bouncer: { label:"Bouncer",  labelHi:"बाउंसर", icon:"💪" },
 };
 
-// ─── CALENDAR HELPERS ────────────────────────────────────────────────────────
+// ─── EVENT TYPES ──────────────────────────────────────────────────────────────
+const EVENT_TYPES = {
+  standard_wedding: { l:"Standard Wedding",           lH:"स्टैंडर्ड शादी",    icon:"💒", carRatio:0.4, vip:false },
+  premium_wedding:  { l:"Premium Wedding",            lH:"प्रीमियम शादी",    icon:"👑", carRatio:0.5, vip:false },
+  corporate:        { l:"Corporate Event",            lH:"कॉर्पोरेट इवेंट",  icon:"🏢", carRatio:0.6, vip:false },
+  luxury_vip:       { l:"Luxury / VIP Event",         lH:"लग्ज़री / VIP",    icon:"⭐", carRatio:0.7, vip:true  },
+  birthday:         { l:"Birthday / Small Party",     lH:"जन्मदिन / पार्टी", icon:"🎂", carRatio:0.3, vip:false },
+  exhibition:       { l:"Exhibition / Large Gathering",lH:"प्रदर्शनी",        icon:"🎪", carRatio:0.5, vip:false },
+  other:            { l:"Other",                      lH:"अन्य",             icon:"📋", carRatio:0.4, vip:false },
+};
+
+// ─── PRIORITIES ───────────────────────────────────────────────────────────────
+const PRIORITIES = {
+  normal:   { l:"Normal",                  lH:"सामान्य",         c:C.tl,     bg:"#F0F0F0" },
+  high:     { l:"High — Elite Crowd",      lH:"हाई — एलीट क्राउड", c:"#d97706", bg:"#FFF7ED" },
+  critical: { l:"Critical — Luxury Event", lH:"क्रिटिकल — लग्ज़री", c:C.red,    bg:C.rBg   },
+};
+
+// ─── CALENDAR HELPERS ─────────────────────────────────────────────────────────
 const MN_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MN_HI = ["जनवरी","फ़रवरी","मार्च","अप्रैल","मई","जून","जुलाई","अगस्त","सितंबर","अक्टूबर","नवंबर","दिसंबर"];
 const DY_EN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -73,20 +100,16 @@ const DY_HI = ["रवि","सोम","मंगल","बुध","गुरु"
 function dIM(y,m){return new Date(y,m+1,0).getDate();}
 function fDM(y,m){return new Date(y,m,1).getDay();}
 function toDS(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
-function fmtD(ds){
-  if(!ds)return "";
-  const [y,mo,d]=ds.split("-");
-  return `${parseInt(d)} ${MN_EN[parseInt(mo)-1].slice(0,3)} ${y}`;
-}
+function fmtD(ds){if(!ds)return "";const[y,mo,d]=ds.split("-");return `${parseInt(d)} ${MN_EN[parseInt(mo)-1].slice(0,3)} ${y}`;}
 function fmtT(t){if(!t)return "";const[h,m]=t.split(":");const hr=parseInt(h);return `${hr>12?hr-12:hr}:${m} ${hr>=12?"PM":"AM"}`;}
 
-const STATUS={
-  planned:   {l:"Planned",   lH:"नियोजित", c:C.yellow, bg:C.yBg},
-  confirmed: {l:"Confirmed", lH:"पुष्टि",  c:C.green,  bg:C.gBg},
-  completed: {l:"Completed", lH:"पूर्ण",   c:C.tl,     bg:"#EFEFEF"},
+const STATUS = {
+  planned:   { l:"Planned",   lH:"नियोजित", c:C.yellow, bg:C.yBg    },
+  confirmed: { l:"Confirmed", lH:"पुष्टि",  c:C.green,  bg:C.gBg    },
+  completed: { l:"Completed", lH:"पूर्ण",   c:C.tl,     bg:"#EFEFEF" },
 };
 
-const PROP_OPTS=[
+const PROP_OPTS = [
   {v:"all",l:"All"},
   {v:"pp", l:"Pushpanjali"},
   {v:"ex", l:"Exotica"},
@@ -94,31 +117,79 @@ const PROP_OPTS=[
   {v:"rs", l:"Restro"},
 ];
 
+// ─── AUTO-CALC HELPERS ────────────────────────────────────────────────────────
+function calcCars(guests, eventType){
+  const gc = parseInt(guests) || 0;
+  if(!gc) return "";
+  return String(Math.ceil(gc * (EVENT_TYPES[eventType]?.carRatio || 0.4)));
+}
+function calcValets(cars, eventType){
+  const c = parseInt(cars) || 0;
+  if(!c) return "";
+  const isVip = EVENT_TYPES[eventType]?.vip;
+  return String(Math.max(2, Math.ceil(c / (isVip ? 10 : 15))));
+}
+
 // ─── BOOKING FORM ─────────────────────────────────────────────────────────────
 function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
-  const defProp = user.prop==="all"?"pp":(user.prop||"pp");
-  const [f,sF]=useState(init||{
-    property:defProp, event_date:prefillDate||"", event_name:"",
-    expected_cars:"", valets_needed:"", vendor_name:"", vendor_phone:"",
-    shift_start:"18:00", shift_end:"23:30", notes:"", status:"planned",
-  });
-  const isEdit=!!init?.id;
-  const inp=(k,v)=>sF(p=>({...p,[k]:v}));
+  const defProp = user.prop==="all" ? "pp" : (user.prop||"pp");
+  const isEdit = !!init?.id;
+  const initData = isEdit ? {
+    ...init,
+    event_type: init.event_type || "other",
+    guest_count: String(init.guest_count||""),
+    priority: init.priority || "normal",
+    special_instructions: init.special_instructions || init.notes || "",
+    expected_cars: String(init.expected_cars||""),
+    valets_needed: String(init.valets_needed||""),
+  } : {
+    property: defProp, event_date: prefillDate||"", event_name:"",
+    event_type:"standard_wedding", guest_count:"", expected_cars:"",
+    valets_needed:"", priority:"normal", special_instructions:"",
+    vendor_name:"", vendor_phone:"", shift_start:"18:00", shift_end:"23:30",
+    status:"planned",
+  };
+  const [f, sF] = useState(initData);
+  const inp = (k,v) => sF(p=>({...p,[k]:v}));
 
-  const save=()=>{
-    if(!f.event_date||!f.property)return;
-    onSave({...f,expected_cars:parseInt(f.expected_cars)||0,valets_needed:parseInt(f.valets_needed)||0,created_by:f.created_by||user.id});
+  // Track whether cars/valets have been manually overridden
+  const carsEdited = useRef(isEdit && !!init?.expected_cars);
+  const valetsEdited = useRef(isEdit && !!init?.valets_needed);
+
+  // Auto-calculate when guest_count or event_type changes
+  useEffect(()=>{
+    if(carsEdited.current) return;
+    const cars = calcCars(f.guest_count, f.event_type);
+    if(!cars) return;
+    sF(p=>{
+      const valets = valetsEdited.current ? p.valets_needed : calcValets(cars, p.event_type);
+      return {...p, expected_cars:cars, valets_needed:valets};
+    });
+  },[f.guest_count, f.event_type]);
+
+  const save = ()=>{
+    if(!f.event_date||!f.property) return;
+    onSave({
+      ...f,
+      expected_cars: parseInt(f.expected_cars)||0,
+      valets_needed: parseInt(f.valets_needed)||0,
+      guest_count: parseInt(f.guest_count)||0,
+      created_by: f.created_by||user.id,
+    });
   };
 
-  const F2={width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:C.bg};
-  const Lb={fontSize:11,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
+  const isPremium = f.priority==="high" || f.priority==="critical";
+  const F2 = {width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:C.bg};
+  const Lb = {fontSize:11,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
 
   return(
     <div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:14}}>
       <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:12}}>
         {isEdit?"✏️ Edit Booking":"➕ New Valet Booking"}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        {/* Property + Date */}
         <div>
           <label style={Lb}>{lang==="hi"?"वेन्यू":"Property"}</label>
           <select value={f.property} onChange={e=>inp("property",e.target.value)} style={F2}>
@@ -129,18 +200,85 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
           <label style={Lb}>{lang==="hi"?"तारीख":"Event Date"}</label>
           <input type="date" value={f.event_date} onChange={e=>inp("event_date",e.target.value)} style={F2}/>
         </div>
+
+        {/* Event Name full width */}
         <div style={{gridColumn:"1/-1"}}>
           <label style={Lb}>{lang==="hi"?"इवेंट नाम":"Event Name"}</label>
-          <input value={f.event_name} onChange={e=>inp("event_name",e.target.value)} placeholder="e.g. Sharma Wedding, Corporate Event" style={F2}/>
+          <input value={f.event_name} onChange={e=>inp("event_name",e.target.value)}
+            placeholder="e.g. Sharma Wedding, TechCorp Annual Event" style={F2}/>
+        </div>
+
+        {/* Event Type full width */}
+        <div style={{gridColumn:"1/-1"}}>
+          <label style={Lb}>{lang==="hi"?"इवेंट प्रकार":"Event Type"}</label>
+          <select value={f.event_type} onChange={e=>{carsEdited.current=false;valetsEdited.current=false;inp("event_type",e.target.value);}} style={F2}>
+            {Object.entries(EVENT_TYPES).map(([k,v])=>(
+              <option key={k} value={k}>{v.icon} {lang==="hi"?v.lH:v.l}</option>
+            ))}
+          </select>
+          <div style={{fontSize:10,color:C.tl,marginTop:3}}>
+            Car ratio: ×{EVENT_TYPES[f.event_type]?.carRatio} per guest
+            {EVENT_TYPES[f.event_type]?.vip && <span style={{marginLeft:6,color:C.accent,fontWeight:700}}>⭐ VIP — 1 valet per 10 cars</span>}
+          </div>
+        </div>
+
+        {/* Guest Count + Priority */}
+        <div>
+          <label style={Lb}>👥 {lang==="hi"?"अपेक्षित मेहमान":"Expected Guests"}</label>
+          <input type="number" min={0} value={f.guest_count}
+            onChange={e=>{carsEdited.current=false;valetsEdited.current=false;inp("guest_count",e.target.value);}}
+            placeholder="e.g. 500" style={F2}/>
         </div>
         <div>
-          <label style={Lb}>🚗 {lang==="hi"?"अनुमानित कारें":"Expected Cars"}</label>
-          <input type="number" min={0} value={f.expected_cars} onChange={e=>inp("expected_cars",e.target.value)} style={F2}/>
+          <label style={Lb}>🚨 {lang==="hi"?"प्राथमिकता":"Priority"}</label>
+          <select value={f.priority} onChange={e=>inp("priority",e.target.value)} style={{...F2,
+            background:PRIORITIES[f.priority]?.bg||C.bg,
+            color:PRIORITIES[f.priority]?.c||C.text,
+            fontWeight:f.priority!=="normal"?700:400,
+          }}>
+            {Object.entries(PRIORITIES).map(([k,v])=>(
+              <option key={k} value={k}>{lang==="hi"?v.lH:v.l}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Premium event warning */}
+        {isPremium&&<div style={{gridColumn:"1/-1",background:f.priority==="critical"?C.rBg:"#FFF7ED",border:`1px solid ${f.priority==="critical"?C.red:C.accent}`,borderRadius:8,padding:"8px 12px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:f.priority==="critical"?C.red:C.accent}}>
+            ⚠️ {lang==="hi"?"प्रीमियम इवेंट — अतिरिक्त वैलेट और सीनियर स्टाफ सुनिश्चित करें":"Premium event — ensure extra valets and senior staff on duty"}
+          </div>
+        </div>}
+
+        {/* Expected Cars + Valets (with auto-calc indicators) */}
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
+            <label style={{...Lb,marginBottom:0}}>🚗 {lang==="hi"?"अनुमानित कारें":"Expected Cars"}</label>
+            {f.guest_count>0&&<button type="button" onClick={()=>{carsEdited.current=false;valetsEdited.current=false;const c=calcCars(f.guest_count,f.event_type);sF(p=>({...p,expected_cars:c,valets_needed:calcValets(c,p.event_type)}));}} style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
+          </div>
+          <input type="number" min={0} value={f.expected_cars}
+            onChange={e=>{carsEdited.current=true;inp("expected_cars",e.target.value);}}
+            placeholder={f.guest_count>0?`~${calcCars(f.guest_count,f.event_type)} suggested`:"Enter cars"} style={F2}/>
         </div>
         <div>
-          <label style={Lb}>👤 {lang==="hi"?"वैलेट स्टाफ":"Valets Needed"}</label>
-          <input type="number" min={0} value={f.valets_needed} onChange={e=>inp("valets_needed",e.target.value)} style={F2}/>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
+            <label style={{...Lb,marginBottom:0}}>👤 {lang==="hi"?"वैलेट स्टाफ":"Valets Needed"}</label>
+            {f.expected_cars>0&&<button type="button" onClick={()=>{valetsEdited.current=false;sF(p=>({...p,valets_needed:calcValets(p.expected_cars,p.event_type)}));}} style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
+          </div>
+          <input type="number" min={0} value={f.valets_needed}
+            onChange={e=>{valetsEdited.current=true;inp("valets_needed",e.target.value);}}
+            placeholder={f.expected_cars>0?`~${calcValets(f.expected_cars,f.event_type)} suggested`:"Enter valets"} style={F2}/>
         </div>
+
+        {/* Special Instructions — amber highlight */}
+        <div style={{gridColumn:"1/-1"}}>
+          <label style={{...Lb,color:C.accent}}>📋 {lang==="hi"?"सेल्स टीम के विशेष निर्देश":"Special Instructions from Sales Team"}</label>
+          <textarea value={f.special_instructions}
+            onChange={e=>inp("special_instructions",e.target.value)}
+            placeholder="e.g. VIP guest list, extra valets requested, specific parking arrangement, luxury cars expected"
+            rows={2} style={{...F2,background:"#FFFBF0",border:`1px solid ${C.accent}`,resize:"vertical"}}/>
+        </div>
+
+        {/* Vendor + Phone */}
         <div>
           <label style={Lb}>🏢 {lang==="hi"?"वेंडर नाम":"Vendor Name"}</label>
           <input value={f.vendor_name} onChange={e=>inp("vendor_name",e.target.value)} placeholder="Valet company name" style={F2}/>
@@ -149,6 +287,8 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
           <label style={Lb}>📞 {lang==="hi"?"वेंडर फ़ोन":"Vendor Phone"}</label>
           <input type="tel" value={f.vendor_phone} onChange={e=>inp("vendor_phone",e.target.value)} placeholder="+91 99999 99999" style={F2}/>
         </div>
+
+        {/* Shift times */}
         <div>
           <label style={Lb}>⏰ {lang==="hi"?"शिफ्ट शुरू":"Shift Start"}</label>
           <input type="time" value={f.shift_start} onChange={e=>inp("shift_start",e.target.value)} style={F2}/>
@@ -157,18 +297,16 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
           <label style={Lb}>⏰ {lang==="hi"?"शिफ्ट खत्म":"Shift End"}</label>
           <input type="time" value={f.shift_end} onChange={e=>inp("shift_end",e.target.value)} style={F2}/>
         </div>
+
+        {/* Status */}
         <div>
           <label style={Lb}>{lang==="hi"?"स्थिति":"Status"}</label>
           <select value={f.status} onChange={e=>inp("status",e.target.value)} style={F2}>
             {Object.entries(STATUS).map(([k,v])=><option key={k} value={k}>{lang==="hi"?v.lH:v.l}</option>)}
           </select>
         </div>
-        <div style={{gridColumn:"1/-1"}}>
-          <label style={Lb}>{lang==="hi"?"नोट्स":"Notes"}</label>
-          <textarea value={f.notes} onChange={e=>inp("notes",e.target.value)} placeholder="Any special instructions..." rows={2}
-            style={{...F2,resize:"vertical"}}/>
-        </div>
       </div>
+
       <div style={{display:"flex",gap:8}}>
         <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
           {isEdit?"💾 Update":"✅ Save Booking"}
@@ -183,85 +321,88 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
 
 // ─── CALENDAR VIEW ────────────────────────────────────────────────────────────
 function CalendarView({user, lang}){
-  const today=new Date();
-  const [yr,setYr]=useState(today.getFullYear());
-  const [mo,setMo]=useState(today.getMonth());
-  const [bookings,setBk]=useState([]);
-  const [loading,setLd]=useState(false);
-  const [selDate,setSD]=useState(null);
-  const [showForm,setSF]=useState(false);
-  const [editB,setEB]=useState(null);
-  const [prefDate,setPD]=useState(null);
-  const [propF,setPF]=useState(user.prop==="all"?"all":(user.prop||"pp"));
-  const todayStr=toDS(today.getFullYear(),today.getMonth(),today.getDate());
+  const today = new Date();
+  const [yr,setYr] = useState(today.getFullYear());
+  const [mo,setMo] = useState(today.getMonth());
+  const [bookings,setBk] = useState([]);
+  const [loading,setLd] = useState(false);
+  const [selDate,setSD] = useState(null);
+  const [showForm,setSF] = useState(false);
+  const [editB,setEB] = useState(null);
+  const [prefDate,setPD] = useState(null);
+  const [propF,setPF] = useState(user.prop==="all"?"all":(user.prop||"pp"));
+  const todayStr = toDS(today.getFullYear(),today.getMonth(),today.getDate());
 
-  const load=useCallback(async()=>{
+  const load = useCallback(async()=>{
     setLd(true);
     const y=String(yr),m=String(mo+1).padStart(2,"0");
     const s=`${y}-${m}-01`, e=`${y}-${m}-${String(dIM(yr,mo)).padStart(2,"0")}`;
-    let q=supabase.from("valet_bookings").select("*").gte("event_date",s).lte("event_date",e).order("event_date");
-    if(propF!=="all")q=q.eq("property",propF);
+    let q = supabase.from("valet_bookings").select("*").gte("event_date",s).lte("event_date",e).order("event_date");
+    if(propF!=="all") q=q.eq("property",propF);
     const{data}=await q;
-    setBk(data||[]);
+    setBk((data||[]).map(b=>({
+      ...b,
+      event_type: b.event_type||"other",
+      priority: b.priority||"normal",
+      guest_count: b.guest_count||0,
+      special_instructions: b.special_instructions||b.notes||"",
+    })));
     setLd(false);
   },[yr,mo,propF]);
 
   useEffect(()=>{load();},[load]);
 
-  const save=async(f)=>{
+  const save = async(f)=>{
+    const payload = {
+      property:f.property, event_date:f.event_date, event_name:f.event_name||null,
+      event_type:f.event_type||null, guest_count:f.guest_count||0,
+      expected_cars:f.expected_cars, valets_needed:f.valets_needed,
+      vendor_name:f.vendor_name||null, vendor_phone:f.vendor_phone||null,
+      shift_start:f.shift_start||null, shift_end:f.shift_end||null,
+      notes:f.special_instructions||null,
+      special_instructions:f.special_instructions||null,
+      priority:f.priority||"normal", status:f.status,
+    };
     if(f.id){
-      await supabase.from("valet_bookings").update({
-        property:f.property,event_date:f.event_date,event_name:f.event_name||null,
-        expected_cars:f.expected_cars,valets_needed:f.valets_needed,
-        vendor_name:f.vendor_name||null,vendor_phone:f.vendor_phone||null,
-        shift_start:f.shift_start||null,shift_end:f.shift_end||null,
-        notes:f.notes||null,status:f.status,
-      }).eq("id",f.id);
+      await supabase.from("valet_bookings").update(payload).eq("id",f.id);
     } else {
-      await supabase.from("valet_bookings").insert({
-        property:f.property,event_date:f.event_date,event_name:f.event_name||null,
-        expected_cars:f.expected_cars,valets_needed:f.valets_needed,
-        vendor_name:f.vendor_name||null,vendor_phone:f.vendor_phone||null,
-        shift_start:f.shift_start||null,shift_end:f.shift_end||null,
-        notes:f.notes||null,status:f.status,created_by:f.created_by,
-      });
+      await supabase.from("valet_bookings").insert({...payload,created_by:f.created_by});
     }
     setSF(false);setEB(null);setPD(null);load();
   };
 
-  const del=async(id)=>{
+  const del = async(id)=>{
     await supabase.from("valet_bookings").delete().eq("id",id);
     load();
   };
 
-  const byDate={};
+  const byDate = {};
   bookings.forEach(b=>{if(!byDate[b.event_date])byDate[b.event_date]=[];byDate[b.event_date].push(b);});
 
   const prevM=()=>{if(mo===0){setMo(11);setYr(y=>y-1);}else setMo(m=>m-1);};
   const nextM=()=>{if(mo===11){setMo(0);setYr(y=>y+1);}else setMo(m=>m+1);};
-  const days=dIM(yr,mo);const firstDay=fDM(yr,mo);
-  const cells=[];
-  for(let i=0;i<firstDay;i++)cells.push(null);
-  for(let d=1;d<=days;d++)cells.push(d);
-  const mns=lang==="hi"?MN_HI:MN_EN;
-  const dys=lang==="hi"?DY_HI:DY_EN;
+  const days=dIM(yr,mo); const firstDay=fDM(yr,mo);
+  const cells=[]; for(let i=0;i<firstDay;i++)cells.push(null); for(let d=1;d<=days;d++)cells.push(d);
+  const mns=lang==="hi"?MN_HI:MN_EN; const dys=lang==="hi"?DY_HI:DY_EN;
+
+  // Cell chip color: critical=red, high=orange, else status color
+  const chipStyle=(b)=>{
+    const pri=b.priority||"normal";
+    if(pri==="critical") return {bg:C.rBg,c:C.red};
+    if(pri==="high") return {bg:"#FFF7ED",c:"#d97706"};
+    const st=STATUS[b.status]||STATUS.planned;
+    return {bg:st.bg,c:st.c};
+  };
 
   return(
     <div>
-      {/* Setup notice */}
-      <div style={{background:"#FFF7ED",border:`1px solid ${C.accent}`,borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:11,fontFamily:F.b,color:C.accent}}>
-        <strong>⚠️ First-time setup:</strong> Run the <code style={{background:"rgba(0,0,0,0.06)",padding:"1px 4px",borderRadius:3}}>valet_bookings</code> SQL in Supabase SQL Editor — see the note at the bottom of this page.
-      </div>
-
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
-        {/* Month Nav */}
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={prevM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
           <span style={{fontFamily:F.d,fontSize:17,fontWeight:700,color:C.maroon,minWidth:150,textAlign:"center"}}>{mns[mo]} {yr}</span>
           <button onClick={nextM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
         </div>
-        {/* Add button */}
         <button onClick={()=>{setPD(null);setEB(null);setSF(true);}}
           style={{padding:"7px 14px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>
           ➕ {lang==="hi"?"नई बुकिंग":"New Booking"}
@@ -284,11 +425,9 @@ function CalendarView({user, lang}){
 
       {/* Calendar grid */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        {/* Day headers */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:C.maroonSoft,borderBottom:`1px solid ${C.border}`}}>
           {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:10,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{d}</div>)}
         </div>
-        {/* Cells */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
           {cells.map((day,idx)=>{
             if(!day)return<div key={`e${idx}`} style={{minHeight:62,background:"#F9F9F9",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}/>;
@@ -299,18 +438,18 @@ function CalendarView({user, lang}){
             return(
               <div key={day} onClick={()=>setSD(isSel?null:ds)}
                 style={{minHeight:62,padding:"4px 3px 3px 5px",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:isSel?C.maroonSoft:C.white,position:"relative",transition:"background 0.1s"}}>
-                <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:10,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>
-                  {day}
-                </div>
+                <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:10,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>{day}</div>
                 <div style={{display:"flex",flexDirection:"column",gap:1}}>
-                  {dayBks.slice(0,2).map(b=>(
-                    <div key={b.id} style={{fontSize:8,fontFamily:F.b,fontWeight:600,padding:"1px 3px",borderRadius:3,background:STATUS[b.status]?.bg||C.yBg,color:STATUS[b.status]?.c||C.yellow,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
-                      {PROPS[b.property]?.icon}{b.event_name?" "+b.event_name.slice(0,8):""}
-                    </div>
-                  ))}
+                  {dayBks.slice(0,2).map(b=>{
+                    const cs=chipStyle(b);
+                    return(
+                      <div key={b.id} style={{fontSize:8,fontFamily:F.b,fontWeight:600,padding:"1px 3px",borderRadius:3,background:cs.bg,color:cs.c,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
+                        {EVENT_TYPES[b.event_type]?.icon||PROPS[b.property]?.icon}{b.event_name?" "+b.event_name.slice(0,7):""}
+                      </div>
+                    );
+                  })}
                   {dayBks.length>2&&<div style={{fontSize:7,color:C.tl,fontFamily:F.b}}>+{dayBks.length-2}</div>}
                 </div>
-                {/* Quick-add "+" on hover — always visible on mobile */}
                 <button onClick={e=>{e.stopPropagation();setPD(ds);setEB(null);setSF(true);}}
                   style={{position:"absolute",top:2,right:2,width:14,height:14,borderRadius:3,border:`1px solid ${C.border}`,background:C.white,color:C.tl,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,opacity:0.6}}>+</button>
               </div>
@@ -335,73 +474,62 @@ function CalendarView({user, lang}){
           {(byDate[selDate]||[]).length===0
             ?<div style={{textAlign:"center",padding:"14px 0",color:C.tl,fontSize:12,fontFamily:F.b}}>No bookings — click ➕ to add one</div>
             :(byDate[selDate]||[]).map(b=>{
-                const st=STATUS[b.status]||STATUS.planned;
-                return(
-                  <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:8,borderLeft:`4px solid ${st.c}`,border:`1px solid ${C.border}`,borderLeftWidth:4,borderLeftColor:st.c}}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:4}}>
-                          {PROPS[b.property]?.icon} {b.event_name||"Event"} <span style={{fontSize:10,color:C.tl,fontWeight:400}}>— {PROPS[b.property]?.sn}</span>
-                        </div>
-                        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
-                          <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:st.bg,color:st.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?st.lH:st.l}</span>
-                          {b.expected_cars>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>🚗 {b.expected_cars} cars</span>}
-                          {b.valets_needed>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.maroonSoft,color:C.maroon,fontFamily:F.b}}>👤 {b.valets_needed} valets</span>}
-                          {(b.shift_start||b.shift_end)&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>⏰ {fmtT(b.shift_start)}–{fmtT(b.shift_end)}</span>}
-                        </div>
-                        {b.vendor_name&&(
-                          <div style={{fontSize:11,color:C.tl,fontFamily:F.b,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                            <span>🏢 {b.vendor_name}</span>
-                            {b.vendor_phone&&<a href={`tel:${b.vendor_phone}`} style={{color:C.blue,fontWeight:600,textDecoration:"none"}}>📞 {b.vendor_phone}</a>}
-                          </div>
-                        )}
-                        {b.notes&&<div style={{fontSize:10,color:C.tl,marginTop:3,fontStyle:"italic"}}>{b.notes}</div>}
+              const st=STATUS[b.status]||STATUS.planned;
+              const pri=PRIORITIES[b.priority||"normal"]||PRIORITIES.normal;
+              const et=EVENT_TYPES[b.event_type||"other"]||EVENT_TYPES.other;
+              return(
+                <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:8,borderLeft:`4px solid ${st.c}`,border:`1px solid ${C.border}`,borderLeftWidth:4,borderLeftColor:st.c}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:4}}>
+                        {et.icon} {b.event_name||"Event"} <span style={{fontSize:10,color:C.tl,fontWeight:400}}>— {PROPS[b.property]?.sn}</span>
                       </div>
-                      <div style={{display:"flex",gap:4,flexShrink:0}}>
-                        <button onClick={()=>{setEB(b);setPD(null);setSF(true);}} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:11}}>✏️</button>
-                        <button onClick={()=>{if(window.confirm("Delete this booking?"))del(b.id);}} style={{padding:"5px 8px",borderRadius:6,border:"none",background:C.rBg,cursor:"pointer",fontSize:11,color:C.red}}>🗑️</button>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:st.bg,color:st.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?st.lH:st.l}</span>
+                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:pri.bg,color:pri.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?pri.lH:pri.l}</span>
+                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>{et.icon} {lang==="hi"?et.lH:et.l}</span>
+                        {b.guest_count>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>👥 {b.guest_count} guests</span>}
+                        {b.expected_cars>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>🚗 {b.expected_cars} cars</span>}
+                        {b.valets_needed>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.maroonSoft,color:C.maroon,fontFamily:F.b}}>👤 {b.valets_needed} valets</span>}
+                        {(b.shift_start||b.shift_end)&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>⏰ {fmtT(b.shift_start)}–{fmtT(b.shift_end)}</span>}
                       </div>
+                      {b.vendor_name&&(
+                        <div style={{fontSize:11,color:C.tl,fontFamily:F.b,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
+                          <span>🏢 {b.vendor_name}</span>
+                          {b.vendor_phone&&<a href={`tel:${b.vendor_phone}`} style={{color:C.blue,fontWeight:600,textDecoration:"none"}}>📞 {b.vendor_phone}</a>}
+                        </div>
+                      )}
+                      {b.special_instructions&&(
+                        <div style={{background:"#FFFBF0",border:`1px solid ${C.accent}`,borderRadius:6,padding:"5px 8px",fontSize:10,color:C.accent,fontFamily:F.b,marginTop:3}}>
+                          📋 {b.special_instructions}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <button onClick={()=>{setEB(b);setPD(null);setSF(true);}} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:11}}>✏️</button>
+                      <button onClick={()=>{if(window.confirm("Delete this booking?"))del(b.id);}} style={{padding:"5px 8px",borderRadius:6,border:"none",background:C.rBg,cursor:"pointer",fontSize:11,color:C.red}}>🗑️</button>
                     </div>
                   </div>
-                );
-              })
+                </div>
+              );
+            })
           }
         </div>
       )}
 
       {/* Legend */}
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",padding:"6px 0",marginBottom:8}}>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",padding:"6px 0",marginBottom:4}}>
         {Object.entries(STATUS).map(([k,v])=>(
           <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
             <div style={{width:10,height:10,borderRadius:2,background:v.bg,border:`2px solid ${v.c}`}}/>
             <span style={{fontSize:10,fontFamily:F.b,color:C.tl}}>{lang==="hi"?v.lH:v.l}</span>
           </div>
         ))}
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <div style={{width:10,height:10,borderRadius:2,background:C.rBg,border:`2px solid ${C.red}`}}/>
+          <span style={{fontSize:10,fontFamily:F.b,color:C.tl}}>Critical / Luxury</span>
+        </div>
       </div>
-
-      {/* SQL setup block */}
-      <details style={{marginTop:12}}>
-        <summary style={{cursor:"pointer",fontSize:11,fontFamily:F.b,color:C.tl,padding:"6px 0"}}>🛠️ Supabase Setup SQL (run once)</summary>
-        <pre style={{background:"#1E1E1E",color:"#D4D4D4",padding:14,borderRadius:8,fontSize:10,overflowX:"auto",marginTop:6,lineHeight:1.6}}>{`CREATE TABLE valet_bookings (
-  id SERIAL PRIMARY KEY,
-  property TEXT NOT NULL,
-  event_date DATE NOT NULL,
-  event_name TEXT,
-  expected_cars INTEGER DEFAULT 0,
-  valets_needed INTEGER DEFAULT 0,
-  vendor_name TEXT,
-  vendor_phone TEXT,
-  shift_start TIME,
-  shift_end TIME,
-  notes TEXT,
-  status TEXT DEFAULT 'planned',
-  created_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE valet_bookings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all" ON valet_bookings
-  FOR ALL USING (true) WITH CHECK (true);`}</pre>
-      </details>
     </div>
   );
 }
@@ -442,8 +570,7 @@ function StaffCalculator({user, lang}){
   const [showCost,setShowCost]=useState(false);
   const [rates,setRates]=useState({keyMan:1500,driver:1200,guard:1000,rider:800,gunMan:2000,bouncer:1500});
 
-  const cfg=VENUE_CFG[venue];
-  const data=VALET_DATA[venue];
+  const cfg=VENUE_CFG[venue]; const data=VALET_DATA[venue];
   const clamped=Math.min(Math.max(pax,cfg.min),cfg.max);
   const alloc=interpolate(data,clamped);
   const roles=["keyMan","driver","guard","rider","gunMan","bouncer"];
@@ -457,7 +584,6 @@ function StaffCalculator({user, lang}){
     <div style={{maxWidth:680,margin:"0 auto"}}>
       <div style={{fontSize:11,color:C.tl,fontFamily:F.b,marginBottom:16}}>{L?"स्टाफ की संख्या ऊपर की ओर गोल की गई है।":"Staff counts rounded up — always better to have more than less."}</div>
 
-      {/* Venue Tabs */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {Object.entries(VENUE_CFG).map(([k,v])=>{
           const a=venue===k;
@@ -470,7 +596,6 @@ function StaffCalculator({user, lang}){
         })}
       </div>
 
-      {/* PAX Slider */}
       <div style={{background:C.white,borderRadius:14,padding:"16px 18px 18px",border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:600,color:C.tl,fontFamily:F.b}}>{L?"अपेक्षित मेहमान":"Expected Guests (Pax)"}</div>
@@ -492,7 +617,6 @@ function StaffCalculator({user, lang}){
         </div>
       </div>
 
-      {/* Results hero */}
       <div style={{background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,borderRadius:14,padding:"16px 18px 14px",marginBottom:14,boxShadow:`0 4px 16px ${C.maroon}33`}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div>
@@ -514,7 +638,6 @@ function StaffCalculator({user, lang}){
         </div>
       </div>
 
-      {/* Role cards */}
       {active.length>0&&<div style={{marginBottom:14}}>
         <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"स्टाफ विवरण":"Staff Breakdown"}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
@@ -522,7 +645,6 @@ function StaffCalculator({user, lang}){
         </div>
       </div>}
 
-      {/* Car estimates */}
       <div style={{background:C.white,borderRadius:14,padding:14,border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:10}}>🚘 {L?"कार अनुमान":"Car Estimate"}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
@@ -536,7 +658,6 @@ function StaffCalculator({user, lang}){
         </div>
       </div>
 
-      {/* Cost estimator */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,marginBottom:14,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <button onClick={()=>setShowCost(!showCost)} style={{width:"100%",padding:"12px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",fontFamily:F.b,fontSize:13,fontWeight:600,color:C.maroon}}>
           <span>💰 {showCost?(L?"लागत छुपाएं":"Hide Cost"):(L?"लागत अनुमान":"Show Cost Estimate")}</span>
@@ -560,7 +681,6 @@ function StaffCalculator({user, lang}){
         </div>}
       </div>
 
-      {/* Reference table */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:14,fontWeight:700,color:C.maroon}}>
           📋 {L?"पूरी संदर्भ तालिका":"Full Reference Table"} — {cfg.icon} {cfg.name}
