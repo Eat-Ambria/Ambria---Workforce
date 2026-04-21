@@ -19,13 +19,13 @@ function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
           position: "absolute", top: "50%", left: "50%",
           transform: "translate(-50%,-50%)", textAlign: "center"
         }}>
-          <div style={{ fontSize: 16 }}>{icon}</div>
-          <div style={{ fontFamily: F.d, fontSize: 13, fontWeight: 700, color, lineHeight: 1 }}>{pct}%</div>
+          <div style={{ fontSize:17 }}>{icon}</div>
+          <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color, lineHeight: 1 }}>{pct}%</div>
         </div>
       </div>
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.text }}>{label}</div>
-        <div style={{ fontSize: 9, color: C.tl }}>{done}/{total}</div>
+        <div style={{ fontSize:11, fontWeight: 700, color: C.text }}>{label}</div>
+        <div style={{ fontSize:10, color: C.tl }}>{done}/{total}</div>
       </div>
     </div>
   );
@@ -50,41 +50,41 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
       display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 12, alignItems: "center"
     }}>
       <div>
-        <div style={{ fontFamily: F.d, fontSize: 14, fontWeight: 700, color: C.maroon }}>
+        <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon }}>
           🕐 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
         </div>
-        <div style={{ fontSize: 10, color: C.tl, marginTop: 2 }}>
+        <div style={{ fontSize:11, color: C.tl, marginTop: 2 }}>
           {prop.name} · {prop.sh}
         </div>
       </div>
 
       <div style={{ textAlign: "center", padding: "4px 12px", borderRadius: 8, background: C.gBg }}>
-        <div style={{ fontFamily: F.d, fontSize: 18, fontWeight: 700, color: C.green }}>{present.length}</div>
-        <div style={{ fontSize: 9, color: C.green, fontWeight: 600 }}>{L.presentToday}</div>
+        <div style={{ fontFamily: F.d, fontSize:19, fontWeight: 700, color: C.green }}>{present.length}</div>
+        <div style={{ fontSize:10, color: C.green, fontWeight: 600 }}>{L.presentToday}</div>
       </div>
 
       <div style={{
         textAlign: "center", padding: "4px 12px", borderRadius: 8,
         background: absent.length > 0 ? C.rBg : C.gBg
       }}>
-        <div style={{ fontFamily: F.d, fontSize: 18, fontWeight: 700, color: absent.length > 0 ? C.red : C.green }}>
+        <div style={{ fontFamily: F.d, fontSize:19, fontWeight: 700, color: absent.length > 0 ? C.red : C.green }}>
           {absent.length}
         </div>
-        <div style={{ fontSize: 9, color: absent.length > 0 ? C.red : C.green, fontWeight: 600 }}>
+        <div style={{ fontSize:10, color: absent.length > 0 ? C.red : C.green, fontWeight: 600 }}>
           {absent.length === 0 ? L.allPresent : L.absentToday}
         </div>
         {absent.length > 0 && (
-          <div style={{ fontSize: 8, color: C.tl, marginTop: 2 }}>
+          <div style={{ fontSize:8, color: C.tl, marginTop: 2 }}>
             {absent.slice(0, 3).map(m => m.n).join(", ")}{absent.length > 3 ? ` +${absent.length - 3}` : ""}
           </div>
         )}
       </div>
 
       <div style={{ textAlign: "center", padding: "4px 12px", borderRadius: 8, background: C.yBg }}>
-        <div style={{ fontFamily: F.d, fontSize: 18, fontWeight: 700, color: C.yellow }}>{onLeaveStaff.length}</div>
-        <div style={{ fontSize: 9, color: C.yellow, fontWeight: 600 }}>{L.onLeave}</div>
+        <div style={{ fontFamily: F.d, fontSize:19, fontWeight: 700, color: C.yellow }}>{onLeaveStaff.length}</div>
+        <div style={{ fontSize:10, color: C.yellow, fontWeight: 600 }}>{L.onLeave}</div>
         {onLeaveStaff.length > 0 && (
-          <div style={{ fontSize: 8, color: C.tl, marginTop: 2 }}>
+          <div style={{ fontSize:8, color: C.tl, marginTop: 2 }}>
             {onLeaveStaff.slice(0, 2).map(m => m.n).join(", ")}
           </div>
         )}
@@ -109,32 +109,32 @@ function CriticalPanel({ tasks, L }) {
 
   return (
     <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14, height: "100%" }}>
-      <div style={{ fontFamily: F.d, fontSize: 14, fontWeight: 700, color: C.red, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.red, marginBottom: 8 }}>
         🚨 {L.criticalActions}
       </div>
       {allOk ? (
         <div style={{ display: "flex", gap: 6, alignItems: "center", padding: 8, background: C.gBg, borderRadius: 8 }}>
-          <span style={{ fontSize: 16 }}>✅</span>
-          <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>{L.noCritical}</span>
+          <span style={{ fontSize:17 }}>✅</span>
+          <span style={{ fontSize:12, color: C.green, fontWeight: 600 }}>{L.noCritical}</span>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {issues.length > 0 && (
             <div style={{ padding: 8, background: C.rBg, borderRadius: 8, border: `1px solid #f0c8c4` }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.red }}>⚠️ {issues.length} issue{issues.length > 1 ? "s" : ""} reported</div>
-              <div style={{ fontSize: 9, color: C.tl, marginTop: 2 }}>
+              <div style={{ fontSize:12, fontWeight: 700, color: C.red }}>⚠️ {issues.length} issue{issues.length > 1 ? "s" : ""} reported</div>
+              <div style={{ fontSize:10, color: C.tl, marginTop: 2 }}>
                 {issues.slice(0, 2).map(t => t.title).join(" · ")}
               </div>
             </div>
           )}
           {pct < 40 && total > 0 && (
             <div style={{ padding: 8, background: C.yBg, borderRadius: 8, border: `1px solid #f0dcc8` }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.yellow }}>📉 Only {pct}% done — behind schedule</div>
+              <div style={{ fontSize:12, fontWeight: 700, color: C.yellow }}>📉 Only {pct}% done — behind schedule</div>
             </div>
           )}
           {overdue.length > 0 && (
             <div style={{ padding: 8, background: C.yBg, borderRadius: 8, border: `1px solid #f0dcc8` }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.yellow }}>⏰ {overdue.length} tasks past time window</div>
+              <div style={{ fontSize:12, fontWeight: 700, color: C.yellow }}>⏰ {overdue.length} tasks past time window</div>
             </div>
           )}
         </div>
@@ -155,11 +155,11 @@ function StaffPerf({ tasks, prop, L }) {
 
   return (
     <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14, height: "100%" }}>
-      <div style={{ fontFamily: F.d, fontSize: 14, fontWeight: 700, color: C.maroon, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 8 }}>
         🏆 {L.staffPerformance}
       </div>
       {perf.length === 0 ? (
-        <div style={{ fontSize: 11, color: C.tl, textAlign: "center", padding: 12 }}>No task data yet</div>
+        <div style={{ fontSize:12, color: C.tl, textAlign: "center", padding: 12 }}>No task data yet</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           {perf.slice(0, 6).map((m, i) => (
@@ -167,12 +167,12 @@ function StaffPerf({ tasks, prop, L }) {
               <div style={{
                 width: 20, height: 20, borderRadius: "50%", background: i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : m.dc,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: C.white, fontSize: 8, fontWeight: 700, flexShrink: 0
+                color: C.white, fontSize:8, fontWeight: 700, flexShrink: 0
               }}>{i < 3 ? ["🥇", "🥈", "🥉"][i] : m.n[0]}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.n}</span>
-                  <span style={{ fontSize: 9, color: m.pct === 100 ? C.green : C.tl, fontWeight: 600, flexShrink: 0, marginLeft: 4 }}>{m.done}/{m.total}</span>
+                  <span style={{ fontSize:11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.n}</span>
+                  <span style={{ fontSize:10, color: m.pct === 100 ? C.green : C.tl, fontWeight: 600, flexShrink: 0, marginLeft: 4 }}>{m.done}/{m.total}</span>
                 </div>
                 <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${m.pct}%`, background: m.pct === 100 ? C.green : m.dc, borderRadius: 2, transition: "width 0.3s" }} />
@@ -198,17 +198,17 @@ function Suggestions({ tasks, L }) {
 
   return (
     <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14 }}>
-      <div style={{ fontFamily: F.d, fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.green, marginBottom: 8 }}>
         📈 {L.suggestions}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
-        {pct === 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🏆</span><span style={{ fontSize: 11 }}><strong>All tasks complete!</strong> Outstanding work today.</span></div>}
-        {pct >= 70 && pct < 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>👍</span><span style={{ fontSize: 11 }}><strong>{pct}% done</strong> — push last {total - done} to 100%</span></div>}
-        {pct < 70 && total > 0 && <div style={{ padding: 8, background: C.yBg, borderRadius: 8, display: "flex", gap: 5 }}><span>⚡</span><span style={{ fontSize: 11 }}><strong>Behind at {pct}%</strong> — mid-day check with leads needed</span></div>}
-        <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🌱</span><span style={{ fontSize: 11 }}><strong>Horticulture:</strong> {h.done}/{h.total} — Evening watering critical at 5PM</span></div>
-        <div style={{ padding: 8, background: C.bBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🧹</span><span style={{ fontSize: 11 }}><strong>Housekeeping:</strong> {k.done}/{k.total} — WC recheck at 3:30 PM</span></div>
-        <div style={{ padding: 8, background: C.maroonSoft, borderRadius: 8, display: "flex", gap: 5 }}><span>📋</span><span style={{ fontSize: 11 }}><strong>Admin:</strong> {a.done}/{a.total} — Daily report to Vicky by 6 PM</span></div>
-        <div style={{ padding: 8, background: C.pBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🛡️</span><span style={{ fontSize: 11 }}><strong>Security:</strong> {s.done}/{s.total} — CCTV & fire exits check</span></div>
+        {pct === 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🏆</span><span style={{ fontSize:12 }}><strong>All tasks complete!</strong> Outstanding work today.</span></div>}
+        {pct >= 70 && pct < 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>👍</span><span style={{ fontSize:12 }}><strong>{pct}% done</strong> — push last {total - done} to 100%</span></div>}
+        {pct < 70 && total > 0 && <div style={{ padding: 8, background: C.yBg, borderRadius: 8, display: "flex", gap: 5 }}><span>⚡</span><span style={{ fontSize:12 }}><strong>Behind at {pct}%</strong> — mid-day check with leads needed</span></div>}
+        <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🌱</span><span style={{ fontSize:12 }}><strong>Horticulture:</strong> {h.done}/{h.total} — Evening watering critical at 5PM</span></div>
+        <div style={{ padding: 8, background: C.bBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🧹</span><span style={{ fontSize:12 }}><strong>Housekeeping:</strong> {k.done}/{k.total} — WC recheck at 3:30 PM</span></div>
+        <div style={{ padding: 8, background: C.maroonSoft, borderRadius: 8, display: "flex", gap: 5 }}><span>📋</span><span style={{ fontSize:12 }}><strong>Admin:</strong> {a.done}/{a.total} — Daily report to Vicky by 6 PM</span></div>
+        <div style={{ padding: 8, background: C.pBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🛡️</span><span style={{ fontSize:12 }}><strong>Security:</strong> {s.done}/{s.total} — CCTV & fire exits check</span></div>
       </div>
     </div>
   );
@@ -242,16 +242,16 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div>
-          <h1 style={{ fontFamily: F.d, fontSize: 20, fontWeight: 700, color: C.maroon, margin: 0 }}>
+          <h1 style={{ fontFamily: F.d, fontSize:21, fontWeight: 700, color: C.maroon, margin: 0 }}>
             📊 {prop.name}
           </h1>
-          <p style={{ fontSize: 10, color: C.tl, margin: "2px 0 0" }}>
+          <p style={{ fontSize:11, color: C.tl, margin: "2px 0 0" }}>
             {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontFamily: F.d, fontSize: 28, fontWeight: 700, color: pct >= 70 ? C.green : pct >= 40 ? C.yellow : C.red }}>{pct}%</div>
-          <div style={{ fontSize: 9, color: C.tl }}>{done}/{total} {L.done}</div>
+          <div style={{ fontFamily: F.d, fontSize:28, fontWeight: 700, color: pct >= 70 ? C.green : pct >= 40 ? C.yellow : C.red }}>{pct}%</div>
+          <div style={{ fontSize:10, color: C.tl }}>{done}/{total} {L.done}</div>
         </div>
       </div>
 
@@ -272,7 +272,7 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
             border: `1px solid ${d.pct === 100 ? C.green : C.border}`
           }}>
             <Ring pct={d.pct} color={d.c} bg={d.bg} icon={d.i} label={d.n} done={d.done} total={d.total} />
-            {d.pct === 100 && <span style={{ fontSize: 9, color: C.green, fontWeight: 700, marginTop: 3 }}>✓ Complete</span>}
+            {d.pct === 100 && <span style={{ fontSize:10, color: C.green, fontWeight: 700, marginTop: 3 }}>✓ Complete</span>}
           </div>
         ))}
       </div>

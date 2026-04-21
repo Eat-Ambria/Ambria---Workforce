@@ -43,43 +43,43 @@ function EditMemberModal({ member, onSave, onClose, L }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Member</div>
+        <div style={{ fontFamily: F.d, fontSize:17, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Member</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Full Name</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Full Name</label>
             <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box", outline: "none" }} />
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box", outline: "none" }} />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📅 Joining Date</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📅 Joining Date</label>
             <input type="date" value={form.joining_date || ""} onChange={e => setForm({ ...form, joining_date: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📱 Phone</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📱 Phone</label>
             <input type="tel" placeholder="e.g. 9876543210" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box", outline: "none" }} />
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box", outline: "none" }} />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Department</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Department</label>
             <select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13 }}>
               {Object.entries(DEPT_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Property</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Property</label>
             <select value={form.property} onChange={e => setForm({ ...form, property: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13 }}>
               {Object.entries(PROPS).map(([k, p]) => <option key={k} value={k}>{p.icon} {p.sn}</option>)}
             </select>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <button onClick={save} disabled={saving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          <button onClick={save} disabled={saving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:14, fontWeight: 700, cursor: "pointer" }}>
             {saving ? "Saving..." : "💾 Save"}
           </button>
-          <button onClick={onClose} style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize: 13, cursor: "pointer" }}>{L.cancel}</button>
+          <button onClick={onClose} style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize:14, cursor: "pointer" }}>{L.cancel}</button>
         </div>
       </div>
     </div>
@@ -104,19 +104,19 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L 
         width: 34, height: 34, borderRadius: "50%",
         background: isActive ? deptColor : C.red,
         display: "flex", alignItems: "center", justifyContent: "center",
-        color: C.white, fontWeight: 700, fontSize: 12, flexShrink: 0
+        color: C.white, fontWeight: 700, fontSize:13, flexShrink: 0
       }}>{member.n?.[0] || "?"}</div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, textDecoration: isActive ? "none" : "line-through" }}>
+        <div style={{ fontSize:13, fontWeight: 700, textDecoration: isActive ? "none" : "line-through" }}>
           {member.n}
-          {member.isCustom && <span style={{ marginLeft: 5, fontSize: 8, color: C.blue, fontWeight: 600 }}>NEW</span>}
+          {member.isCustom && <span style={{ marginLeft: 5, fontSize:8, color: C.blue, fontWeight: 600 }}>NEW</span>}
         </div>
-        <div style={{ fontSize: 9, color: C.tl }}>
+        <div style={{ fontSize:10, color: C.tl }}>
           {member.deptIcon} {member.deptName}
           {member.phone && <span style={{ marginLeft: 6 }}>📱 {member.phone}</span>}
         </div>
-        <div style={{ fontSize: 9, color: C.tl, marginTop: 1 }}>
+        <div style={{ fontSize:10, color: C.tl, marginTop: 1 }}>
           {isActive ? (
             member.joining_date ? (
               <span>📅 {lang === "hi" ? "जोइनिंग:" : "Joined:"} {formatDate(member.joining_date)}
@@ -135,17 +135,17 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L 
         <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
           <button onClick={() => onEdit(member)} style={{
             padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-            background: C.bg, color: C.tl, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer"
+            background: C.bg, color: C.tl, fontFamily: F.b, fontSize:10, fontWeight: 600, cursor: "pointer"
           }}>✏️ Edit</button>
           {isActive ? (
             <button onClick={() => onDeactivate(member)} style={{
               padding: "3px 8px", borderRadius: 6, border: "none",
-              background: C.rBg, color: C.red, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer"
+              background: C.rBg, color: C.red, fontFamily: F.b, fontSize:10, fontWeight: 600, cursor: "pointer"
             }}>✕ {L.deactivate}</button>
           ) : (
             <button onClick={() => onRestore(member)} style={{
               padding: "3px 8px", borderRadius: 6, border: "none",
-              background: C.gBg, color: C.green, fontFamily: F.b, fontSize: 9, fontWeight: 600, cursor: "pointer"
+              background: C.gBg, color: C.green, fontFamily: F.b, fontSize:10, fontWeight: 600, cursor: "pointer"
             }}>↩ Restore</button>
           )}
         </div>
@@ -276,17 +276,17 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
-          <h1 style={{ fontFamily: F.d, fontSize: 22, fontWeight: 700, color: C.maroon, margin: 0 }}>
+          <h1 style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: C.maroon, margin: 0 }}>
             👤 {L.members}
           </h1>
-          <p style={{ fontSize: 10, color: C.tl, margin: "3px 0 0" }}>
+          <p style={{ fontSize:11, color: C.tl, margin: "3px 0 0" }}>
             {activeCount} active · {pastCount} past
           </p>
         </div>
         {isAdmin && (
           <button onClick={() => setShowAdd(!showAdd)} style={{
             padding: "8px 14px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 12, fontWeight: 700, cursor: "pointer"
+            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer"
           }}>➕ {L.addMember}</button>
         )}
       </div>
@@ -295,7 +295,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
         {propFilters.map(f => (
           <button key={f.id} onClick={() => setFilterProp(f.id)} style={{
-            padding: "5px 12px", borderRadius: 8, cursor: "pointer", fontFamily: F.b, fontSize: 11, fontWeight: 600,
+            padding: "5px 12px", borderRadius: 8, cursor: "pointer", fontFamily: F.b, fontSize:12, fontWeight: 600,
             border: filterProp === f.id ? `2px solid ${C.maroon}` : `1px solid ${C.border}`,
             background: filterProp === f.id ? C.maroonSoft : C.white,
             color: filterProp === f.id ? C.maroon : C.tl,
@@ -306,31 +306,31 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       {/* ── Add Form ── */}
       {showAdd && (
         <div style={{ background: C.white, borderRadius: 12, border: `2px solid ${C.maroon}`, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontFamily: F.d, fontSize: 15, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>➕ {L.addMember}</div>
+          <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>➕ {L.addMember}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <input placeholder={L.memberName} value={fName} onChange={e => setFName(e.target.value)}
-              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, outline: "none" }} />
+              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, outline: "none" }} />
             <input placeholder="Username" value={fUser} onChange={e => setFUser(e.target.value)}
-              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, outline: "none" }} />
+              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, outline: "none" }} />
             <input type="password" placeholder="Password (auto: user@123)" value={fPass} onChange={e => setFPass(e.target.value)}
-              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, outline: "none" }} />
+              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, outline: "none" }} />
             <div>
-              <label style={{ fontSize: 10, color: C.tl, display: "block", marginBottom: 3 }}>📅 {L.joiningDate}</label>
+              <label style={{ fontSize:11, color: C.tl, display: "block", marginBottom: 3 }}>📅 {L.joiningDate}</label>
               <input type="date" value={fJoining} onChange={e => setFJoining(e.target.value)}
-                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
             </div>
             <select value={fProp} onChange={e => setFProp(e.target.value)}
-              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
+              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13 }}>
               {Object.entries(PROPS).map(([k, p]) => <option key={k} value={k}>{p.icon} {p.sn}</option>)}
             </select>
             <select value={fDept} onChange={e => setFDept(e.target.value)}
-              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12 }}>
+              style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13 }}>
               {Object.entries(DEPT_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button onClick={addMember} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{L.save}</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize: 13, cursor: "pointer" }}>{L.cancel}</button>
+            <button onClick={addMember} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:14, fontWeight: 700, cursor: "pointer" }}>{L.save}</button>
+            <button onClick={() => setShowAdd(false)} style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize:14, cursor: "pointer" }}>{L.cancel}</button>
           </div>
         </div>
       )}
@@ -343,7 +343,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-            fontFamily: F.b, fontSize: 11, fontWeight: 600,
+            fontFamily: F.b, fontSize:12, fontWeight: 600,
             background: tab === t.id ? C.maroon : "transparent",
             color: tab === t.id ? C.white : C.maroon
           }}>{t.label}</button>
@@ -358,9 +358,9 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
           if (filtered.length === 0) return null;
           return (
             <div key={pk} style={{ background: C.white, borderRadius: 12, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-              <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
+              <div style={{ fontFamily: F.d, fontSize:17, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
                 {prop.icon} {prop.sn}
-                <span style={{ fontSize: 12, fontWeight: 400, color: C.tl, marginLeft: 6 }}>
+                <span style={{ fontSize:13, fontWeight: 400, color: C.tl, marginLeft: 6 }}>
                   ({filtered.length} {tab === "active" ? "active" : "past"})
                 </span>
               </div>

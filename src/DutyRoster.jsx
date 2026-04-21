@@ -8,14 +8,14 @@ function SearchSelect({value,onChange,options,style:cs,placeholder}){
   const fil=options.filter(o=>String(o.l).toLowerCase().includes(q.toLowerCase()));
   const cur=options.find(o=>String(o.v)===String(value));
   return(<div ref={ref} style={{position:"relative",...cs}}>
-    <button onClick={()=>{setOpen(p=>!p);setQ("");}} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"#fff",fontFamily:F.b,fontSize:12,color:C.text,cursor:"pointer",outline:"none",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
+    <button onClick={()=>{setOpen(p=>!p);setQ("");}} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"#fff",fontFamily:F.b,fontSize:13,color:C.text,cursor:"pointer",outline:"none",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
       <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cur?.l||placeholder||"Select..."}</span>
-      <span style={{fontSize:9,color:C.tl,flexShrink:0}}>▾</span>
+      <span style={{fontSize:10,color:C.tl,flexShrink:0}}>▾</span>
     </button>
     {open&&<div style={{position:"absolute",top:"100%",left:0,zIndex:9999,minWidth:"100%",background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,0.15)",marginTop:2,overflow:"hidden"}}>
-      <div style={{padding:5,borderBottom:`1px solid ${C.border}`}}><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search..." style={{width:"100%",padding:"5px 7px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:11,outline:"none",boxSizing:"border-box"}}/></div>
-      <div style={{maxHeight:180,overflowY:"auto"}}>{fil.map(o=><div key={o.v} onMouseDown={()=>{onChange(o.v);setOpen(false);setQ("");}} style={{padding:"7px 10px",cursor:"pointer",fontSize:12,fontFamily:F.b,background:String(o.v)===String(value)?C.maroonSoft:"transparent",color:String(o.v)===String(value)?C.maroon:C.text,fontWeight:String(o.v)===String(value)?600:400}}>{o.l}</div>)}
-      {fil.length===0&&<div style={{padding:10,fontSize:11,color:C.tl,textAlign:"center"}}>No results</div>}
+      <div style={{padding:5,borderBottom:`1px solid ${C.border}`}}><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search..." style={{width:"100%",padding:"5px 7px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box"}}/></div>
+      <div style={{maxHeight:180,overflowY:"auto"}}>{fil.map(o=><div key={o.v} onMouseDown={()=>{onChange(o.v);setOpen(false);setQ("");}} style={{padding:"7px 10px",cursor:"pointer",fontSize:13,fontFamily:F.b,background:String(o.v)===String(value)?C.maroonSoft:"transparent",color:String(o.v)===String(value)?C.maroon:C.text,fontWeight:String(o.v)===String(value)?600:400}}>{o.l}</div>)}
+      {fil.length===0&&<div style={{padding:10,fontSize:12,color:C.tl,textAlign:"center"}}>No results</div>}
       </div>
     </div>}
   </div>);
@@ -63,7 +63,7 @@ const SHIFT_COLORS = {
 function ShiftBadge({ shiftType }) {
   const s = SHIFT_COLORS[shiftType] || SHIFT_COLORS.none;
   return (
-    <span style={{ padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, background: s.bg, color: s.color }}>
+    <span style={{ padding: "2px 8px", borderRadius: 5, fontSize:11, fontWeight: 700, background: s.bg, color: s.color }}>
       {s.label}
     </span>
   );
@@ -80,17 +80,17 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360 }}>
-        <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 4 }}>✏️ Edit Shift</div>
-        <div style={{ fontSize: 11, color: C.tl, marginBottom: 14 }}>{member.n} · {date}</div>
+        <div style={{ fontFamily: F.d, fontSize:17, fontWeight: 700, color: C.maroon, marginBottom: 4 }}>✏️ Edit Shift</div>
+        <div style={{ fontSize:12, color: C.tl, marginBottom: 14 }}>{member.n} · {date}</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 6 }}>Shift Type</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 6 }}>Shift Type</label>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
               {["day","night","half","off"].map(s => {
                 const sc = SHIFT_COLORS[s];
                 return (
                   <button key={s} onClick={() => setForm({ ...form, shift_type: s })} style={{
-                    padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontFamily: F.b, fontSize: 11, fontWeight: 600,
+                    padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontFamily: F.b, fontSize:12, fontWeight: 600,
                     border: `2px solid ${form.shift_type === s ? sc.color : C.border}`,
                     background: form.shift_type === s ? sc.bg : C.white,
                     color: form.shift_type === s ? sc.color : C.tl,
@@ -102,31 +102,31 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
           {form.shift_type !== "off" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart||"Start"}</label>
+                <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart||"Start"}</label>
                 <input type="time" value={form.shift_start} onChange={e => setForm({ ...form, shift_start: e.target.value })}
-                  style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+                  style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftEnd||"End"}</label>
+                <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftEnd||"End"}</label>
                 <input type="time" value={form.shift_end} onChange={e => setForm({ ...form, shift_end: e.target.value })}
-                  style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+                  style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
               </div>
             </div>
           )}
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Notes</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Notes</label>
             <input placeholder="Optional note..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => onSave(form)} style={{
             flex: 1, padding: "10px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 13, fontWeight: 700, cursor: "pointer"
+            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:14, fontWeight: 700, cursor: "pointer"
           }}>{L.saveRoster||"Save"}</button>
           <button onClick={onClose} style={{
             padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-            background: C.bg, fontFamily: F.b, fontSize: 13, cursor: "pointer"
+            background: C.bg, fontFamily: F.b, fontSize:14, cursor: "pointer"
           }}>{L.cancel||"Cancel"}</button>
         </div>
       </div>
@@ -154,10 +154,10 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360 }}>
-        <div style={{ fontFamily: F.d, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Guard Shift — {entry.label}</div>
+        <div style={{ fontFamily: F.d, fontSize:17, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Guard Shift — {entry.label}</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard / Staff</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard / Staff</label>
             <SearchSelect value={form.staff_id || "third-party"} onChange={v => {
               const m = secMembers.find(x => x.id === v);
               setForm({ ...form, staff_id: v, staff_name: m?.n || "", source: v === "third-party" ? "third-party" : "ambria", guard_name: v === "third-party" ? form.guard_name : "" });
@@ -165,51 +165,51 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
           </div>
           {(form.staff_id === "third-party" || !form.staff_id) && (
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard Name</label>
+              <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard Name</label>
               <input placeholder="e.g. Ramesh Kumar" value={form.guard_name || ""} onChange={e => setForm({ ...form, guard_name: e.target.value, staff_name: e.target.value.trim() || "Third Party Guard" })}
-                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box", outline: "none" }} />
+                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box", outline: "none" }} />
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart||"Start"}</label>
+              <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart||"Start"}</label>
               <input type="time" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })}
-                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftEnd||"End"}</label>
+              <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftEnd||"End"}</label>
               <input type="time" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })}
-                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+                style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Shift Type</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Shift Type</label>
             <div style={{ display: "flex", gap: 6 }}>
               {["day","night"].map(s => (
                 <button key={s} onClick={() => setForm({ ...form, shift: s })} style={{
                   flex: 1, padding: "8px", borderRadius: 8,
                   border: `2px solid ${form.shift === s ? (s === "day" ? C.accent : "#6B21A8") : C.border}`,
                   background: form.shift === s ? (s === "day" ? "#FFF7ED" : "#EDE9FE") : C.white,
-                  cursor: "pointer", fontFamily: F.b, fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", fontFamily: F.b, fontSize:12, fontWeight: 600,
                   color: form.shift === s ? (s === "day" ? C.accent : "#6B21A8") : C.tl,
                 }}>{s === "day" ? "🌅 Day" : "🌙 Night"}</button>
               ))}
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Notes</label>
+            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Notes</label>
             <input placeholder="e.g. Kitchen entry only" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, boxSizing: "border-box" }} />
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => onSave({ ...entry, ...form })} style={{
             flex: 1, padding: "10px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize: 13, fontWeight: 700, cursor: "pointer"
+            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:14, fontWeight: 700, cursor: "pointer"
           }}>{L.saveRoster||"Save"}</button>
           <button onClick={onClose} style={{
             padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-            background: C.bg, fontFamily: F.b, fontSize: 13, cursor: "pointer"
+            background: C.bg, fontFamily: F.b, fontSize:14, cursor: "pointer"
           }}>{L.cancel||"Cancel"}</button>
         </div>
       </div>
@@ -334,7 +334,7 @@ export default function DutyRoster({ prop, user, lang }) {
           {Object.values(PROPS).map(p => (
             <button key={p.id} onClick={() => setLocalPropId(p.id)} style={{
               padding: "6px 12px", borderRadius: 8, cursor: "pointer",
-              fontFamily: F.b, fontSize: 11, fontWeight: 600,
+              fontFamily: F.b, fontSize:12, fontWeight: 600,
               border: localPropId === p.id ? `2px solid ${C.maroon}` : `1px solid ${C.border}`,
               background: localPropId === p.id ? C.maroonSoft : C.white,
               color: localPropId === p.id ? C.maroon : C.tl,
@@ -345,12 +345,12 @@ export default function DutyRoster({ prop, user, lang }) {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
-          <h1 style={{ fontFamily: F.d, fontSize: 22, fontWeight: 700, color: C.maroon, margin: 0 }}>🗓️ {L.roster||"Duty Roster"}</h1>
-          <p style={{ fontSize: 10, color: C.tl, margin: "3px 0 0" }}>
+          <h1 style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: C.maroon, margin: 0 }}>🗓️ {L.roster||"Duty Roster"}</h1>
+          <p style={{ fontSize:11, color: C.tl, margin: "3px 0 0" }}>
             {activeProp.name} · {new Date(today).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
-        {saving && <div style={{ fontSize: 11, color: C.tl }}>Saving...</div>}
+        {saving && <div style={{ fontSize:12, color: C.tl }}>Saving...</div>}
       </div>
 
       {/* ── Department Tabs ── */}
@@ -358,7 +358,7 @@ export default function DutyRoster({ prop, user, lang }) {
         {DEPT_TABS.map(t => (
           <button key={t.id} onClick={() => setDeptTab(t.id)} style={{
             padding: "6px 12px", borderRadius: 8, cursor: "pointer",
-            fontFamily: F.b, fontSize: 11, fontWeight: 600,
+            fontFamily: F.b, fontSize:12, fontWeight: 600,
             border: deptTab === t.id ? `2px solid ${C.maroon}` : `1px solid ${C.border}`,
             background: deptTab === t.id ? C.maroonSoft : C.white,
             color: deptTab === t.id ? C.maroon : C.tl,
@@ -369,7 +369,7 @@ export default function DutyRoster({ prop, user, lang }) {
       {/* ── Staff Roster (non-security) ── */}
       {staffToShow.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: F.d, fontSize: 15, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
+          <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
             {deptTab === "all" ? "👥 All Staff Shifts" : `${DEPT_TABS.find(t=>t.id===deptTab)?.icon} ${DEPT_TABS.find(t=>t.id===deptTab)?.label} Shifts`}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -384,26 +384,26 @@ export default function DutyRoster({ prop, user, lang }) {
                   padding: "10px 12px", background: C.white, borderRadius: 10,
                   border: `1px solid ${C.border}`, borderLeft: `4px solid ${m.deptColor || C.maroon}`,
                 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: m.deptColor || C.maroon, display: "flex", alignItems: "center", justifyContent: "center", color: C.white, fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: m.deptColor || C.maroon, display: "flex", alignItems: "center", justifyContent: "center", color: C.white, fontWeight: 700, fontSize:12, flexShrink: 0 }}>
                     {m.n?.[0] || "?"}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>{m.n}</div>
-                    <div style={{ fontSize: 9, color: C.tl }}>{m.deptIcon} {m.deptName}</div>
+                    <div style={{ fontSize:13, fontWeight: 700 }}>{m.n}</div>
+                    <div style={{ fontSize:10, color: C.tl }}>{m.deptIcon} {m.deptName}</div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <ShiftBadge shiftType={shiftType} />
                     {saved && shiftType !== "off" && shiftType !== "none" && (
-                      <div style={{ fontSize: 9, color: C.tl, marginTop: 2 }}>
+                      <div style={{ fontSize:10, color: C.tl, marginTop: 2 }}>
                         {saved.shift_start} – {saved.shift_end}
                       </div>
                     )}
-                    {notes && <div style={{ fontSize: 9, color: C.tl, fontStyle: "italic" }}>{notes}</div>}
+                    {notes && <div style={{ fontSize:10, color: C.tl, fontStyle: "italic" }}>{notes}</div>}
                   </div>
                   {isAdmin && (
                     <button onClick={() => setEditingStaff(m)} style={{
                       padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-                      background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize: 9, fontWeight: 600, color: C.tl, flexShrink: 0
+                      background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:10, fontWeight: 600, color: C.tl, flexShrink: 0
                     }}>✏️</button>
                   )}
                 </div>
@@ -416,16 +416,16 @@ export default function DutyRoster({ prop, user, lang }) {
       {/* ── Security Section ── */}
       {showSecurity && defaults.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: F.d, fontSize: 15, fontWeight: 700, color: "#6B21A8", marginBottom: 8 }}>
+          <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: "#6B21A8", marginBottom: 8 }}>
             🛡️ Security Guards — {activeProp.sn}
           </div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8, fontSize: 10, color: C.tl }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8, fontSize:11, color: C.tl }}>
             <span style={{ padding: "2px 8px", borderRadius: 4, background: "#FFF7ED", color: C.accent, fontWeight: 600 }}>🌅 {daySlots.length} Day</span>
             <span style={{ padding: "2px 8px", borderRadius: 4, background: "#EDE9FE", color: "#6B21A8", fontWeight: 600 }}>🌙 {nightSlots.length} Night</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 6 }}>🌅 {L.dayShift||"Day Shift"}</div>
+              <div style={{ fontSize:12, fontWeight: 700, color: C.accent, marginBottom: 6 }}>🌅 {L.dayShift||"Day Shift"}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {daySlots.map(d => {
                   const entry = getSecEntry(d.slot);
@@ -438,28 +438,28 @@ export default function DutyRoster({ prop, user, lang }) {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div>
                           <div style={{ display: "flex", gap: 4, marginBottom: 3, flexWrap: "wrap" }}>
-                            <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600, background: isAmbria ? C.maroonSoft : C.bg, color: isAmbria ? C.maroon : C.tl }}>
+                            <span style={{ padding: "2px 6px", borderRadius: 4, fontSize:10, fontWeight: 600, background: isAmbria ? C.maroonSoft : C.bg, color: isAmbria ? C.maroon : C.tl }}>
                               {isAmbria ? "Ambria" : "3rd Party"}
                             </span>
                           </div>
-                          <div style={{ fontSize: 12, fontWeight: 700 }}>{entry.staff_name || entry.label}</div>
-                          <div style={{ fontSize: 10, color: C.tl, marginTop: 2 }}>🕐 {entry.start} – {entry.end}{entry.notes ? ` · ${entry.notes}` : ""}</div>
+                          <div style={{ fontSize:13, fontWeight: 700 }}>{entry.staff_name || entry.label}</div>
+                          <div style={{ fontSize:11, color: C.tl, marginTop: 2 }}>🕐 {entry.start} – {entry.end}{entry.notes ? ` · ${entry.notes}` : ""}</div>
                         </div>
                         {isAdmin && (
                           <button onClick={() => setEditingSecSlot(entry)} style={{
                             padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize: 9, fontWeight: 600, color: C.tl
+                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:10, fontWeight: 600, color: C.tl
                           }}>✏️</button>
                         )}
                       </div>
                     </div>
                   );
                 })}
-                {daySlots.length === 0 && <div style={{ fontSize: 11, color: C.tl, fontStyle: "italic" }}>No day guards</div>}
+                {daySlots.length === 0 && <div style={{ fontSize:12, color: C.tl, fontStyle: "italic" }}>No day guards</div>}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#6B21A8", marginBottom: 6 }}>🌙 {L.nightShift||"Night Shift"}</div>
+              <div style={{ fontSize:12, fontWeight: 700, color: "#6B21A8", marginBottom: 6 }}>🌙 {L.nightShift||"Night Shift"}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {nightSlots.map(d => {
                   const entry = getSecEntry(d.slot);
@@ -472,24 +472,24 @@ export default function DutyRoster({ prop, user, lang }) {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div>
                           <div style={{ display: "flex", gap: 4, marginBottom: 3, flexWrap: "wrap" }}>
-                            <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600, background: isAmbria ? C.maroonSoft : C.bg, color: isAmbria ? C.maroon : C.tl }}>
+                            <span style={{ padding: "2px 6px", borderRadius: 4, fontSize:10, fontWeight: 600, background: isAmbria ? C.maroonSoft : C.bg, color: isAmbria ? C.maroon : C.tl }}>
                               {isAmbria ? "Ambria" : "3rd Party"}
                             </span>
                           </div>
-                          <div style={{ fontSize: 12, fontWeight: 700 }}>{entry.staff_name || entry.label}</div>
-                          <div style={{ fontSize: 10, color: C.tl, marginTop: 2 }}>🕐 {entry.start} – {entry.end}{entry.notes ? ` · ${entry.notes}` : ""}</div>
+                          <div style={{ fontSize:13, fontWeight: 700 }}>{entry.staff_name || entry.label}</div>
+                          <div style={{ fontSize:11, color: C.tl, marginTop: 2 }}>🕐 {entry.start} – {entry.end}{entry.notes ? ` · ${entry.notes}` : ""}</div>
                         </div>
                         {isAdmin && (
                           <button onClick={() => setEditingSecSlot(entry)} style={{
                             padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize: 9, fontWeight: 600, color: C.tl
+                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:10, fontWeight: 600, color: C.tl
                           }}>✏️</button>
                         )}
                       </div>
                     </div>
                   );
                 })}
-                {nightSlots.length === 0 && <div style={{ fontSize: 11, color: C.tl, fontStyle: "italic" }}>No night guards</div>}
+                {nightSlots.length === 0 && <div style={{ fontSize:12, color: C.tl, fontStyle: "italic" }}>No night guards</div>}
               </div>
             </div>
           </div>
