@@ -312,7 +312,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
               style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, outline: "none" }} />
             <input placeholder="Username" value={fUser} onChange={e => setFUser(e.target.value)}
               style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, outline: "none" }} />
-            <input placeholder="Password (auto: user@123)" value={fPass} onChange={e => setFPass(e.target.value)}
+            <input type="password" placeholder="Password (auto: user@123)" value={fPass} onChange={e => setFPass(e.target.value)}
               style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize: 12, outline: "none" }} />
             <div>
               <label style={{ fontSize: 10, color: C.tl, display: "block", marginBottom: 3 }}>📅 {L.joiningDate}</label>

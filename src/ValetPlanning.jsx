@@ -2,15 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
 
-// Developer note — never shown in UI
-console.log(
-  "Run this SQL in Supabase if new valet fields fail:",
-  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS event_type TEXT DEFAULT 'other';" +
-  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS guest_count INTEGER DEFAULT 0;" +
-  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal';" +
-  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS special_instructions TEXT;"
-);
-
 // ─── STAFF CALCULATOR DATA ────────────────────────────────────────────────────
 const VALET_DATA = {
   pp: [

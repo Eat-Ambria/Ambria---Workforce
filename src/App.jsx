@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
+import Modal from "./Modal.jsx";
 import { C, F, LANGS, PROPS } from "./constants.js";
 import Dashboard from "./Dashboard.jsx";
 import DutyRoster from "./DutyRoster.jsx";
@@ -136,7 +137,7 @@ function Btn2({children,onClick,primary,small,style:cs}){return <button onClick=
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang}){
   const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
-  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("*").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
+  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("id,name,username,role,property,department").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:11,cursor:"pointer",fontWeight:600,color:C.maroon}}>{lang==="en"?"हिंदी":"English"}</button></div>
@@ -152,7 +153,7 @@ function LoginScreen({onLogin,lang,setLang}){
 // ═══ PHOTO ═══
 function PhotoUp({photos,onUp,onRetake,disabled,L}){
   const ref=useRef(null);
-  const hndl=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>{onUp({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),date:new Date().toLocaleDateString("en-IN")});};r.readAsDataURL(f);e.target.value="";};
+  const hndl=(e)=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r=new FileReader();r.onload=(ev)=>{onUp({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),date:new Date().toLocaleDateString("en-IN")});};r.readAsDataURL(f);e.target.value="";};
   const has=photos?.length>0;
   return(<div>
     {!has?(<div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={()=>ref.current?.click()} disabled={disabled} style={{padding:"10px 16px",borderRadius:10,border:`2px dashed ${!disabled?C.accent:C.border}`,background:!disabled?"#FFF7ED":C.bg,cursor:disabled?"default":"pointer",fontFamily:F.b,fontSize:12,fontWeight:700,color:!disabled?C.accent:C.tl,opacity:disabled?0.5:1}}>📸 {L.uploadPhoto}</button>{!disabled&&<span style={{fontSize:10,color:C.red,fontWeight:600}}>⚠️ {L.photoNeeded}</span>}</div>)
@@ -213,8 +214,7 @@ function AddTF({prop,onAdd,onClose,L}){
   const[f,sF]=useState({title:"",titleHi:"",dept:Object.keys(prop?.depts||{})[0]||"h",area:prop?.areas?.[0]?.id,assignedTo:"",priority:"medium",cat:"daily",dur:"1h",desc:"",descHi:"",timeBlock:"9:00-10:00"});
   const ms=prop?.depts?.[f.dept]?.m||[];
   const sub=()=>{if(!f.title||!f.assignedTo)return;const m=ms.find(x=>x.id===f.assignedTo);onAdd({id:`${prop.id}_c_${Date.now()}`,prop:prop.id,...f,assigneeName:m?.n||"?",status:"pending",notes:"",completedAt:null,completedBy:"",photos:[],isTeam:false});onClose();};
-  return(<div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:16}}>
-    <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,marginBottom:12}}>➕ {L.addTask}</div>
+  return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
       <input placeholder={L.taskTitle+" (EN)"} value={f.title} onChange={e=>sF({...f,title:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
       <input placeholder={L.taskTitle+" (HI)"} value={f.titleHi} onChange={e=>sF({...f,titleHi:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
@@ -234,12 +234,9 @@ function AddTF({prop,onAdd,onClose,L}){
 function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allDbUsers,dirs,aP}){
   const eU=effectiveUser||u;
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
-  console.log("USER:",u.id,u.role,u.name);
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
   const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:"Team"},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
-  // Members is now a sub-tab inside the Team page — no separate nav item needed
-  console.log("NAV ITEMS:",nav.map(n=>n.id));
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
     <div style={{padding:"14px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -305,7 +302,7 @@ function AttView({user:u,att,setAtt,prop,L}){
     });
   },[prop.id]);
   const doCheckIn=()=>{attRef.current?.click();};
-  const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});const ph=ev.target.result;if(!mr){const{error}=await supabase.from("attendance").insert({user_id:u.id,user_name:u.name,date:tk,check_in:tm});if(!error)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ph,coPhoto:null}]);}else if(!mr.co){const{error}=await supabase.from("attendance").update({check_out:tm}).eq("user_id",u.id).eq("date",tk);if(!error)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ph}:a));}};r.readAsDataURL(f);e.target.value="";};
+  const onPhoto=(e)=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r=new FileReader();r.onload=async(ev)=>{const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});const ph=ev.target.result;if(!mr){const{error}=await supabase.from("attendance").insert({user_id:u.id,user_name:u.name,date:tk,check_in:tm});if(!error)setAtt(p=>[...p,{uid:u.id,name:u.name,date:tk,ci:tm,co:null,ciPhoto:ph,coPhoto:null}]);}else if(!mr.co){const{error}=await supabase.from("attendance").update({check_out:tm}).eq("user_id",u.id).eq("date",tk);if(!error)setAtt(p=>p.map(a=>a.uid===u.id&&a.date===tk?{...a,co:tm,coPhoto:ph}:a));}};r.readAsDataURL(f);e.target.value="";};
   const tpMark=async(slot,present)=>{
     const name=(tpNames[slot.id]||"").trim()||slot.label;
     const ex=att.find(a=>a.uid===slot.id&&a.date===tk);
@@ -368,7 +365,9 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
       <div style={{fontFamily:F.d,fontSize:24,fontWeight:700,color:C.maroon}}>{myPc}%</div>
     </div>}
     {vt==="mytasks"&&!isA&&<div style={{background:C.maroonSoft,borderRadius:8,padding:"7px 12px",marginBottom:10,fontSize:11}}>{L.steps}</div>}
-    {sa&&isA&&<AddTF prop={prop} onAdd={(t)=>setTasks(prev=>[...prev,t])} onClose={()=>setSA(false)} L={L}/>}
+    <Modal isOpen={sa&&isA} onClose={()=>setSA(false)} title={L.addTask} size="lg">
+      <AddTF prop={prop} onAdd={(t)=>setTasks(prev=>[...prev,t])} onClose={()=>setSA(false)} L={L}/>
+    </Modal>
     {vt==="tasks"&&<div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}><Sel2 value={fD} onChange={sFD} options={[{v:"all",l:"All"},...Object.entries(prop?.depts||{}).map(([k,d])=>({v:k,l:`${d.i} ${d.n}`}))]}/><Sel2 value={fS} onChange={sFS} options={[{v:"all",l:"All"},{v:"pending",l:"⏳"},{v:"completed",l:"✅"},{v:"issue",l:"⚠️"}]}/><Sel2 value={fC} onChange={sFC} options={[{v:"all",l:"All"},{v:"daily",l:L.daily},{v:"weekly",l:L.weekly},{v:"monthly",l:L.monthly}]}/></div>}
     {cO.filter(c=>gr[c]).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8}}><span style={{width:4,height:12,borderRadius:2,background:cC[cat]}}/><h3 style={{fontFamily:F.d,fontSize:14,fontWeight:700,margin:0}}>{cL[cat]}</h3><Bdg color={cC[cat]} bg={`${cC[cat]}15`}>{gr[cat].length}</Bdg></div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>{gr[cat].map(task=><TC key={task.id} task={task} uTask={uT} delTask={isA?dT:null} depts={prop?.depts||{}} areas={prop?.areas||[]} user={u} allM={allM} L={L} lang={lang}/>)}</div></div>))}
@@ -393,8 +392,6 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const isSA=u.role==="sa";
   // Use u.id directly — DB-fetched admin IDs and login user.id come from same row
   const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
-  console.log("USER:",u.id,u.role,u.name);
-  console.log("[AT VIEW] u.id:",u.id,"isSA:",isSA,"total dirs:",dirs.length,"myDirs:",myDirs.length,"dir.to samples:",dirs.slice(0,5).map(d=>d.to));
   const[showNew,setShowNew]=useState(false);
   const[newTo,setNewTo]=useState("");
   const[admins,setAdmins]=useState([]);
@@ -410,12 +407,10 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     if(!isSA)return;
     supabase.from("users").select("id,name,property,username").eq("role","a")
       .then(({data,error})=>{
-        console.log("[Admins fetch from DB]",data?.length,"admins:",data?.map(a=>a.id),"error:",error?.message||"none");
         if(data&&data.length>0){setAdmins(data);setNewTo(data[0].id);}
-        else{// DB has no role='a' users — fall back to ADMIN_TARGETS
+        else{
           const fb=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));
           setAdmins(fb);setNewTo(fb[0].id);
-          console.log("[Admins] Fallback to ADMIN_TARGETS:",fb.map(t=>t.id));
         }
       });
   },[isSA]);
@@ -424,7 +419,6 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     const tgt=admins.find(a=>a.id===newTo)||{name:newTo};
     const tgtColor=ADMIN_TARGETS.find(t=>t.id===newTo||t.username===newTo)?.color||C.blue;
     const atId="at_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
-    console.log("[AssignedTask] SAVING — id:",atId,"to_user:",newTo,"to_name:",tgt.name,"from_user:",u.id);
     const{data,error}=await supabase.from("assigned_tasks").insert({id:atId,from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt.name||"",to_color:tgtColor,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
     if(error){console.error("sendTask error:",error.message);return;}
     const newDir={id:data.id,from:u.id,fromName:u.name,to:newTo,toName:tgt.name||"",toColor:tgtColor,prop:newProp,text:newText.trim(),photo:nPh?.data||null,status:"sent",replies:[],remarksSA:"",dueDate:nDue||null,completedAt:null,completionNote:"",completionPhoto:null,createdAt:data.created_at,createdTime:new Date(data.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),createdDate:new Date(data.created_at).toLocaleDateString("en-IN")};
@@ -442,8 +436,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     </div>
 
     {/* NEW TASK FORM */}
-    {showNew&&isSA&&<div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:16}}>
-      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>➕ {L.newDirective}</div>
+    <Modal isOpen={showNew&&isSA} onClose={()=>setShowNew(false)} title={`➕ ${L.newDirective}`} size="lg">
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
         <SearchSelect value={newTo} onChange={setNewTo} options={admins.map(a=>({v:a.id,l:a.name+(a.property?` — ${a.property}`:"")}))} style={{width:"100%"}}/>
         <SearchSelect value={newProp} onChange={setNewProp} options={[{v:"all",l:"All Properties"},...Object.entries(PROPS).map(([k,p])=>({v:k,l:`${p.icon} ${p.sn}`}))]} style={{width:"100%"}}/>
@@ -453,10 +446,10 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
         <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:600,color:C.tl}}>📅 {L.dueDate}:</span><input type="date" value={nDue} onChange={e=>setNDue(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none"}}/></div>
         <button onClick={()=>nPhRef.current?.click()} style={{padding:"8px 14px",borderRadius:8,border:`1px dashed ${C.accent}`,background:"#FFF7ED",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:C.accent}}>📸 {L.addPhoto}</button>
         {nPh&&<img src={nPh.data} alt="" style={{width:40,height:40,borderRadius:6,objectFit:"cover"}}/>}
-        <input ref={nPhRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;const r2=new FileReader();r2.onload=ev=>setNPh({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
+        <input ref={nPhRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r2=new FileReader();r2.onload=ev=>setNPh({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
       </div>
       <div style={{display:"flex",gap:8}}><Btn2 primary onClick={sendTask}>{L.send} →</Btn2><Btn2 onClick={()=>setShowNew(false)}>{L.cancel}</Btn2></div>
-    </div>}
+    </Modal>
 
     {/* FILTER BY MEMBER — color coded */}
     {isSA&&<div style={{display:"flex",gap:4,marginBottom:14,flexWrap:"wrap"}}>
@@ -648,36 +641,35 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         </>}
       </div>}
 
-      {/* SA: Reject — remarks input */}
-      {isSA&&showRemarks&&<div style={{width:"100%",marginTop:8}}>
-        <textarea placeholder={L.writeRemarks||"Write remarks for admin..."} value={remarks} onChange={e=>setRemarks(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.red}`,fontFamily:F.b,fontSize:12,minHeight:50,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
+      {/* SA: Reject — remarks modal */}
+      <Modal isOpen={isSA&&showRemarks} onClose={()=>setShowRemarks(false)} title="❌ Reject — Write Remarks" size="sm">
+        <textarea placeholder={L.writeRemarks||"Write remarks for admin..."} value={remarks} onChange={e=>setRemarks(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.red}`,fontFamily:F.b,fontSize:12,minHeight:70,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
         <div style={{display:"flex",gap:6}}><Btn2 small onClick={handleNotOk} style={{background:C.rBg,color:C.red}}>❌ {L.send||"Send"}</Btn2><Btn2 small onClick={()=>setShowRemarks(false)}>{L.cancel||"Cancel"}</Btn2></div>
-      </div>}
+      </Modal>
 
-      {/* MARK COMPLETE BOX — photo REQUIRED to enable submit */}
-      {showComplete&&isTarget&&(status==="sent"||status==="rejected"||status==="approved")&&<div style={{marginTop:8,padding:12,background:C.gBg,borderRadius:10,border:`1px solid #b8dcc8`}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.green,marginBottom:4}}>📸 {L.markComplete||"Mark Complete"}</div>
+      {/* MARK COMPLETE — modal */}
+      <Modal isOpen={showComplete&&isTarget&&(status==="sent"||status==="rejected"||status==="approved")} onClose={()=>setShowComplete(false)} title={`📸 ${L.markComplete||"Mark Complete"}`} size="sm">
         <div style={{fontSize:10,color:C.tl,marginBottom:8}}>Photo proof is <strong>required</strong> to complete this task.</div>
-        <textarea placeholder={L.completionNote||"Completion note (optional)"} value={cNote} onChange={e=>setCNote(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:40,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
-        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+        <textarea placeholder={L.completionNote||"Completion note (optional)"} value={cNote} onChange={e=>setCNote(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:60,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
           <button onClick={()=>cRef.current?.click()} style={{padding:"7px 12px",borderRadius:8,border:`2px ${cPhoto?"solid":"dashed"} ${cPhoto?C.green:C.red}`,background:cPhoto?C.gBg:"#FFF5F5",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:cPhoto?C.green:C.red}}>{cPhoto?"✅ Photo taken — retake?":"📸 Take Photo (Required)"}</button>
           {cPhoto&&<img src={cPhoto.data} alt="" style={{width:40,height:40,borderRadius:6,objectFit:"cover"}}/>}
-          <input ref={cRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;const r2=new FileReader();r2.onload=ev=>setCPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
+          <input ref={cRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r2=new FileReader();r2.onload=ev=>setCPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
         </div>
+        {!cPhoto&&<div style={{fontSize:10,color:C.red,marginBottom:8}}>📸 Please take a photo to enable completion</div>}
         <Btn2 primary small onClick={handleComplete} style={{background:cPhoto?C.green:"#aaa",cursor:cPhoto?"pointer":"not-allowed",opacity:cPhoto?1:0.6}}>✅ {L.markComplete||"Mark Complete"}</Btn2>
-        {!cPhoto&&<div style={{fontSize:10,color:C.red,marginTop:4}}>📸 Please take a photo to enable completion</div>}
-      </div>}
+      </Modal>
 
-      {/* REPLY BOX */}
-      {showReply&&<div style={{marginTop:8,padding:10,background:C.bg,borderRadius:8}}>
-        <textarea placeholder={L.replyHere||"Write reply..."} value={rText} onChange={e=>setRText(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:50,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:6}}/>
+      {/* REPLY — modal */}
+      <Modal isOpen={showReply} onClose={()=>setShowReply(false)} title={`💬 ${L.reply||"Reply"}`} size="sm">
+        <textarea placeholder={L.replyHere||"Write reply..."} value={rText} onChange={e=>setRText(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:70,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <button onClick={()=>rRef.current?.click()} style={{padding:"6px 12px",borderRadius:6,border:`1px dashed ${C.accent}`,background:"#FFF7ED",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,color:C.accent}}>📸</button>
           {rPhoto&&<img src={rPhoto.data} alt="" style={{width:30,height:30,borderRadius:4,objectFit:"cover"}}/>}
-          <input ref={rRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;const r2=new FileReader();r2.onload=ev=>setRPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
+          <input ref={rRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r2=new FileReader();r2.onload=ev=>setRPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
           <Btn2 primary small onClick={addReply}>{L.send||"Send"}</Btn2>
         </div>
-      </div>}
+      </Modal>
     </div>
   </div>);
 }
@@ -698,7 +690,6 @@ export default function App(){
   useEffect(()=>{
     if(!user)return;
     const today=new Date().toISOString().split("T")[0];
-    console.log("[App] Loading data for user — id:",user?.id,"role:",user?.role,"prop:",user?.prop);
     setLoading(true);setAtLoaded(false);
     (async()=>{
       try{
@@ -717,13 +708,6 @@ export default function App(){
           else{atQ=atQ.eq("to_user",_uid);}
         }
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
-        // ═══ DEBUG: assigned tasks ═══
-        console.log("=== ASSIGNED TASKS DEBUG ===");
-        console.log("Current user ID:",user.id);
-        console.log("Current user role:",user.role);
-        console.log("ALL assigned_tasks in DB:",atData?.length,atData);
-        if(atData&&atData.length>0){console.log("to_user values:",atData.map(t=>t.to_user));console.log("Tasks for this user:",atData.filter(t=>t.to_user===user.id));}
-        console.log("=== END DEBUG ===");
         if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
         if(atData){
           const repMap={};
@@ -733,10 +717,10 @@ export default function App(){
         setAtLoaded(true);
         // 3. Custom members from users table (those not in PROPS template)
         const allTemplateIds=new Set(allS.map(m=>m.id));
-        const{data:allUsers}=await supabase.from("users").select("*");
+        const{data:allUsers}=await supabase.from("users").select("id,name,username,role,property,department,joining_date,is_active");
         if(allUsers){
           const extra=allUsers.filter(u=>!allTemplateIds.has(u.id)&&u.role==="e");
-          setCM(extra.map(u=>({id:u.id,n:u.name,u:u.username,p:u.password,prop:u.property,dept:u.department,role:"e",joining_date:u.joining_date,is_active:u.is_active!==false})));
+          setCM(extra.map(u=>({id:u.id,n:u.name,u:u.username,prop:u.property,dept:u.department,role:"e",joining_date:u.joining_date,is_active:u.is_active!==false})));
           const inactive=allUsers.filter(u=>u.is_active===false).map(u=>u.id);
           setRI(inactive);
           setAllDbUsers(allUsers.filter(u=>u.is_active!==false&&u.role!=="sa"));
@@ -749,7 +733,6 @@ export default function App(){
   if(!user)return <LoginScreen onLogin={(u2,rememberMe)=>{
     const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
     const _at3=findAT(u3);if(u3.role!=="sa"&&_at3)u3.role="a";
-    console.log("[Login] id:",u3.id,"username:",u3.username,"role:",u3.role,"adminTarget:",_at3?.id||"none");
     if(rememberMe)localStorage.setItem("ambria_user",JSON.stringify(u3));
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
