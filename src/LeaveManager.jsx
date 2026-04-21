@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS } from "./constants.js";
+import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 
 // leaves table: id, user_id, user_name, leave_date, leave_type, reason, status, approved_by
 
@@ -32,36 +33,36 @@ function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
             <div style={{
               width: 28, height: 28, borderRadius: "50%", background: lt.color,
               display: "flex", alignItems: "center", justifyContent: "center",
-              color: C.white, fontSize:11, fontWeight: 700, flexShrink: 0
+              color: C.white, fontSize:10, fontWeight: 700, flexShrink: 0
             }}>{leave.user_name?.[0] || "?"}</div>
-            <span style={{ fontSize:14, fontWeight: 700 }}>{leave.user_name}</span>
-            <span style={{ padding: "2px 7px", borderRadius: 5, background: lt.color + "20", color: lt.color, fontSize:11, fontWeight: 600 }}>
+            <span style={{ fontSize:13, fontWeight: 700 }}>{leave.user_name}</span>
+            <span style={{ padding: "2px 7px", borderRadius: 5, background: lt.color + "20", color: lt.color, fontSize:10, fontWeight: 600 }}>
               {lt.icon} {lang === "hi" ? lt.hiLabel : lt.enLabel}
             </span>
           </div>
-          <div style={{ fontSize:13, color: C.text, marginBottom: 4 }}>
+          <div style={{ fontSize:12, color: C.text, marginBottom: 4 }}>
             📅 {leave.leave_date ? new Date(leave.leave_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
           </div>
           {leave.reason && (
-            <div style={{ fontSize:11, color: C.tl, fontStyle: "italic" }}>"{leave.reason}"</div>
+            <div style={{ fontSize:10, color: C.tl, fontStyle: "italic" }}>"{leave.reason}"</div>
           )}
           {leave.approved_by && (
-            <div style={{ fontSize:10, color: C.tl, marginTop: 3 }}>By: {leave.approved_by}</div>
+            <div style={{ fontSize:9, color: C.tl, marginTop: 3 }}>By: {leave.approved_by}</div>
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-          <span style={{ padding: "3px 8px", borderRadius: 6, background: st.bg, color: st.color, fontSize:11, fontWeight: 700 }}>
+          <span style={{ padding: "3px 8px", borderRadius: 6, background: st.bg, color: st.color, fontSize:10, fontWeight: 700 }}>
             {st.icon} {lang === "hi" ? st.hiLabel : st.label}
           </span>
           {isAdmin && leave.status === "pending" && (
             <div style={{ display: "flex", gap: 4 }}>
               <button onClick={() => onApprove(leave.id)} style={{
                 padding: "5px 10px", borderRadius: 6, border: "none",
-                background: C.green, color: C.white, fontFamily: F.b, fontSize:11, fontWeight: 700, cursor: "pointer"
+                background: C.green, color: C.white, fontFamily: F.b, fontSize:10, fontWeight: 700, cursor: "pointer"
               }}>✓ {L.approve}</button>
               <button onClick={() => onReject(leave.id)} style={{
                 padding: "5px 10px", borderRadius: 6, border: "none",
-                background: C.red, color: C.white, fontFamily: F.b, fontSize:11, fontWeight: 700, cursor: "pointer"
+                background: C.red, color: C.white, fontFamily: F.b, fontSize:10, fontWeight: 700, cursor: "pointer"
               }}>✗ {L.reject}</button>
             </div>
           )}
@@ -113,6 +114,8 @@ export default function LeaveManager({ prop, user, lang }) {
       status: "pending",
     });
     if (!error) {
+      const dateFmt = new Date(form.leave_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      getSAAndAdminIds(user.prop || user.property).then(ids => notifyMultiple("leave_request","📅 "+user.name+" requested "+form.leave_type+" leave on "+dateFmt,user.id,user.name,ids,user.prop||user.property));
       setForm({ leave_type: "casual", reason: "", leave_date: today });
       setShowForm(false);
       loadLeaves();
@@ -122,6 +125,16 @@ export default function LeaveManager({ prop, user, lang }) {
 
   const updateStatus = async (id, status) => {
     await supabase.from("leaves").update({ status, approved_by: user.name }).eq("id", id);
+    const leave = leaves.find(l => l.id === id);
+    if (leave) {
+      const dateFmt = new Date(leave.leave_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      if (status === "approved") {
+        notifyMultiple("leave_approved","✅ Leave approved: "+leave.user_name+" — "+dateFmt,user.id,user.name,[leave.user_id],leave.property||null);
+        getSAAndAdminIds(user.prop||user.property).then(saIds => notifyMultiple("leave_approved","✅ Leave approved: "+leave.user_name+" — "+dateFmt,user.id,user.name,saIds.filter(i=>i!==user.id),leave.property||null));
+      } else {
+        notifyMultiple("leave_rejected","❌ Leave rejected: "+leave.user_name+" — "+dateFmt,user.id,user.name,[leave.user_id],leave.property||null);
+      }
+    }
     setLeaves(prev => prev.map(l => l.id === id ? { ...l, status, approved_by: user.name } : l));
   };
 
@@ -147,14 +160,14 @@ export default function LeaveManager({ prop, user, lang }) {
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
-          <h1 style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: C.maroon, margin: 0 }}>
+          <h1 style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.maroon, margin: 0 }}>
             🏖️ {L.leaveRequest}
           </h1>
-          <p style={{ fontSize:11, color: C.tl, margin: "3px 0 0" }}>{prop?.name}</p>
+          <p style={{ fontSize:10, color: C.tl, margin: "3px 0 0" }}>{prop?.name}</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} style={{
           padding: "8px 14px", borderRadius: 8, border: "none",
-          background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer"
+          background: C.maroon, color: C.white, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer"
         }}>➕ {L.applyLeave}</button>
       </div>
 
@@ -164,20 +177,20 @@ export default function LeaveManager({ prop, user, lang }) {
           background: C.white, borderRadius: 12, border: `2px solid ${C.maroon}`,
           padding: 16, marginBottom: 16
         }}>
-          <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>
+          <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>
             📝 {L.applyLeave}
           </div>
 
           {/* Leave type */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 6 }}>{L.leaveType}</label>
+            <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 6 }}>{L.leaveType}</label>
             <div style={{ display: "flex", gap: 6 }}>
               {LEAVE_TYPES.map(t => (
                 <button key={t.id} onClick={() => setForm({ ...form, leave_type: t.id })} style={{
                   flex: 1, padding: "8px 6px", borderRadius: 8,
                   border: `2px solid ${form.leave_type === t.id ? t.color : C.border}`,
                   background: form.leave_type === t.id ? t.color + "15" : C.white,
-                  cursor: "pointer", fontFamily: F.b, fontSize:12, fontWeight: 600,
+                  cursor: "pointer", fontFamily: F.b, fontSize:11, fontWeight: 600,
                   color: form.leave_type === t.id ? t.color : C.tl
                 }}>{t.icon} {lang === "hi" ? t.hiLabel : t.enLabel}</button>
               ))}
@@ -186,29 +199,29 @@ export default function LeaveManager({ prop, user, lang }) {
 
           {/* Single date */}
           <div style={{ marginBottom: 10 }}>
-            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📅 {L.fromDate}</label>
+            <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>📅 {L.fromDate}</label>
             <input type="date" value={form.leave_date} min={today}
               onChange={e => setForm({ ...form, leave_date: e.target.value })}
-              style={{ padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13 }} />
+              style={{ padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12 }} />
           </div>
 
           {/* Reason */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize:12, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.leaveReason}</label>
+            <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.leaveReason}</label>
             <textarea placeholder={lang === "hi" ? "कारण बताएं..." : "Reason for leave..."} value={form.reason}
               onChange={e => setForm({ ...form, reason: e.target.value })}
-              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:13, minHeight: 50, resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, minHeight: 50, resize: "vertical", outline: "none", boxSizing: "border-box" }} />
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={submitLeave} disabled={submitting} style={{
               padding: "10px 20px", borderRadius: 8, border: "none",
               background: submitting ? "#9A2E42" : C.maroon, color: C.white,
-              fontFamily: F.b, fontSize:14, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer"
+              fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer"
             }}>{submitting ? "..." : L.send} →</button>
             <button onClick={() => setShowForm(false)} style={{
               padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-              background: C.bg, fontFamily: F.b, fontSize:14, cursor: "pointer"
+              background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer"
             }}>{L.cancel}</button>
           </div>
         </div>
@@ -219,7 +232,7 @@ export default function LeaveManager({ prop, user, lang }) {
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-            fontFamily: F.b, fontSize:12, fontWeight: 600,
+            fontFamily: F.b, fontSize:11, fontWeight: 600,
             background: tab === t.id ? C.maroon : "transparent",
             color: tab === t.id ? C.white : C.maroon
           }}>{t.label}</button>
@@ -228,11 +241,11 @@ export default function LeaveManager({ prop, user, lang }) {
 
       {/* ── Leave Cards ── */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 24, color: C.tl, fontSize:13 }}>Loading...</div>
+        <div style={{ textAlign: "center", padding: 24, color: C.tl, fontSize:12 }}>Loading...</div>
       ) : displayed.length === 0 ? (
         <div style={{ background: C.white, borderRadius: 12, padding: 24, textAlign: "center", border: `1px solid ${C.border}` }}>
           <div style={{ fontSize:28 }}>🏖️</div>
-          <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, marginTop: 4, color: C.tl }}>{L.noLeaves}</div>
+          <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, marginTop: 4, color: C.tl }}>{L.noLeaves}</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

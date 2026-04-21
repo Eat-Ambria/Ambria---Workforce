@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
+import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 
 // ─── CATEGORY CONFIG ──────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -47,7 +48,7 @@ function Stars({ rating, onChange }) {
       {[1,2,3,4,5].map(i => (
         <span key={i}
           onClick={onChange ? () => onChange(i) : undefined}
-          style={{ fontSize:15, color: i <= (rating||0) ? "#F59E0B" : "#D1D5DB", cursor: onChange ? "pointer" : "default", lineHeight:1 }}>★</span>
+          style={{ fontSize:14, color: i <= (rating||0) ? "#F59E0B" : "#D1D5DB", cursor: onChange ? "pointer" : "default", lineHeight:1 }}>★</span>
       ))}
     </div>
   );
@@ -63,13 +64,13 @@ function VendorForm({ init, onSave, onCancel, user, lang }) {
   const inp = (k, v) => sF(p => ({ ...p, [k]: v }));
   const save = () => { if (!f.name.trim() || !f.phone.trim()) return; onSave({ ...f, created_by: f.created_by || user.id }); };
 
-  const F2 = { width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:13, outline:"none", boxSizing:"border-box", background:C.bg };
-  const Lb = { fontSize:12, fontWeight:600, color:C.tl, marginBottom:3, display:"block" };
+  const F2 = { width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:12, outline:"none", boxSizing:"border-box", background:C.bg };
+  const Lb = { fontSize:11, fontWeight:600, color:C.tl, marginBottom:3, display:"block" };
   const L = lang === "hi";
 
   return (
     <div style={{ background:C.white, borderRadius:12, padding:16, border:`2px solid ${C.maroon}`, marginBottom:16 }}>
-      <div style={{ fontFamily:F.d, fontSize:16, fontWeight:700, color:C.maroon, marginBottom:12 }}>
+      <div style={{ fontFamily:F.d, fontSize:15, fontWeight:700, color:C.maroon, marginBottom:12 }}>
         {isEdit ? "✏️ Edit Vendor" : "➕ Add Vendor"}
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
@@ -109,7 +110,7 @@ function VendorForm({ init, onSave, onCancel, user, lang }) {
           <label style={Lb}>⭐ {L?"रेटिंग":"Rating"}</label>
           <div style={{ padding:"8px 10px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:6 }}>
             <Stars rating={f.rating} onChange={v => inp("rating", v)} />
-            <span style={{ fontSize:11, color:C.tl, fontFamily:F.b }}>{f.rating}/5</span>
+            <span style={{ fontSize:10, color:C.tl, fontFamily:F.b }}>{f.rating}/5</span>
           </div>
         </div>
         <div style={{ gridColumn:"1/-1" }}>
@@ -119,10 +120,10 @@ function VendorForm({ init, onSave, onCancel, user, lang }) {
         </div>
       </div>
       <div style={{ display:"flex", gap:8 }}>
-        <button onClick={save} style={{ padding:"9px 18px", borderRadius:8, border:"none", background:C.maroon, color:C.white, fontFamily:F.b, fontSize:14, fontWeight:700, cursor:"pointer" }}>
+        <button onClick={save} style={{ padding:"9px 18px", borderRadius:8, border:"none", background:C.maroon, color:C.white, fontFamily:F.b, fontSize:13, fontWeight:700, cursor:"pointer" }}>
           {isEdit ? "💾 Update" : "✅ Add Vendor"}
         </button>
-        <button onClick={onCancel} style={{ padding:"9px 16px", borderRadius:8, border:`1px solid ${C.border}`, background:C.white, color:C.text, fontFamily:F.b, fontSize:14, cursor:"pointer" }}>
+        <button onClick={onCancel} style={{ padding:"9px 16px", borderRadius:8, border:`1px solid ${C.border}`, background:C.white, color:C.text, fontFamily:F.b, fontSize:13, cursor:"pointer" }}>
           {L ? "रद्द" : "Cancel"}
         </button>
       </div>
@@ -147,22 +148,22 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
         {/* Header row */}
         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8, marginBottom:8 }}>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontWeight:700, fontSize:15, color:C.text, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {v.name}
             </div>
             {v.company && (
-              <div style={{ fontSize:12, color:C.tl, fontFamily:F.b, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              <div style={{ fontSize:11, color:C.tl, fontFamily:F.b, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 🏢 {v.company}
               </div>
             )}
           </div>
           <div style={{ display:"flex", gap:4, flexShrink:0 }}>
-            <button onClick={() => onEdit(v)} style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.white, cursor:"pointer", fontSize:12 }}>✏️</button>
+            <button onClick={() => onEdit(v)} style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.white, cursor:"pointer", fontSize:11 }}>✏️</button>
             {!delConfirm
-              ? <button onClick={() => setDC(true)} style={{ padding:"4px 8px", borderRadius:6, border:"none", background:C.rBg, cursor:"pointer", fontSize:12, color:C.red }}>🗑️</button>
+              ? <button onClick={() => setDC(true)} style={{ padding:"4px 8px", borderRadius:6, border:"none", background:C.rBg, cursor:"pointer", fontSize:11, color:C.red }}>🗑️</button>
               : <div style={{ display:"flex", gap:3 }}>
-                  <button onClick={() => onDelete(v.id)} style={{ padding:"4px 8px", borderRadius:6, border:"none", background:C.red, color:C.white, cursor:"pointer", fontFamily:F.b, fontSize:11, fontWeight:700 }}>Yes</button>
-                  <button onClick={() => setDC(false)} style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.white, cursor:"pointer", fontFamily:F.b, fontSize:11 }}>No</button>
+                  <button onClick={() => onDelete(v.id)} style={{ padding:"4px 8px", borderRadius:6, border:"none", background:C.red, color:C.white, cursor:"pointer", fontFamily:F.b, fontSize:10, fontWeight:700 }}>Yes</button>
+                  <button onClick={() => setDC(false)} style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.white, cursor:"pointer", fontFamily:F.b, fontSize:10 }}>No</button>
                 </div>
             }
           </div>
@@ -170,14 +171,14 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
 
         {/* Badges */}
         <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:10 }}>
-          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:cc.bg, color:cc.c, fontWeight:700, fontFamily:F.b }}>
+          <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, background:cc.bg, color:cc.c, fontWeight:700, fontFamily:F.b }}>
             {v.category}
           </span>
-          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:C.maroonSoft, color:C.maroon, fontWeight:600, fontFamily:F.b }}>
+          <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, background:C.maroonSoft, color:C.maroon, fontWeight:600, fontFamily:F.b }}>
             {v.property === "all" ? "All" : (PROPS[v.property]?.icon + " " + PROPS[v.property]?.sn) || v.property}
           </span>
           {v.rating > 0 && (
-            <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:C.yBg, color:C.yellow, fontFamily:F.b, display:"flex", alignItems:"center", gap:2 }}>
+            <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, background:C.yBg, color:C.yellow, fontFamily:F.b, display:"flex", alignItems:"center", gap:2 }}>
               <span style={{ color:"#F59E0B" }}>★</span> {v.rating}/5
             </span>
           )}
@@ -186,16 +187,16 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
         {/* Phone actions */}
         <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", marginBottom:v.notes?8:0 }}>
           <a href={`tel:${v.phone}`}
-            style={{ display:"flex", alignItems:"center", gap:4, padding:"7px 12px", borderRadius:8, background:C.gBg, color:C.green, textDecoration:"none", fontFamily:F.b, fontSize:12, fontWeight:700 }}>
+            style={{ display:"flex", alignItems:"center", gap:4, padding:"7px 12px", borderRadius:8, background:C.gBg, color:C.green, textDecoration:"none", fontFamily:F.b, fontSize:11, fontWeight:700 }}>
             📞 {v.phone}
           </a>
           <a href={`https://wa.me/91${waPhone}`} target="_blank" rel="noreferrer"
-            style={{ display:"flex", alignItems:"center", gap:4, padding:"7px 10px", borderRadius:8, background:"#DCF8C6", color:"#128C7E", textDecoration:"none", fontFamily:F.b, fontSize:12, fontWeight:700 }}>
+            style={{ display:"flex", alignItems:"center", gap:4, padding:"7px 10px", borderRadius:8, background:"#DCF8C6", color:"#128C7E", textDecoration:"none", fontFamily:F.b, fontSize:11, fontWeight:700 }}>
             💬 WA
           </a>
           {v.alt_phone && (
             <a href={`tel:${v.alt_phone}`}
-              style={{ display:"flex", alignItems:"center", gap:3, padding:"7px 10px", borderRadius:8, background:C.bBg, color:C.blue, textDecoration:"none", fontFamily:F.b, fontSize:12, fontWeight:600 }}>
+              style={{ display:"flex", alignItems:"center", gap:3, padding:"7px 10px", borderRadius:8, background:C.bBg, color:C.blue, textDecoration:"none", fontFamily:F.b, fontSize:11, fontWeight:600 }}>
               📞 {v.alt_phone}
             </a>
           )}
@@ -203,7 +204,7 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
 
         {/* Notes */}
         {v.notes && (
-          <div style={{ fontSize:11, color:C.tl, fontFamily:F.b, fontStyle:"italic", marginTop:6, lineHeight:1.5, borderTop:`1px solid ${C.border}`, paddingTop:6 }}>
+          <div style={{ fontSize:10, color:C.tl, fontFamily:F.b, fontStyle:"italic", marginTop:6, lineHeight:1.5, borderTop:`1px solid ${C.border}`, paddingTop:6 }}>
             {v.notes}
           </div>
         )}
@@ -246,7 +247,8 @@ export default function VendorDirectory({ user, lang }) {
         notes:f.notes||null, rating:f.rating, created_by:f.created_by, is_active:true,
       });
     }
-    setSF(false); setEV(null); load();
+    getSAAndAdminIds(null).then(ids=>notifyMultiple("vendor_added","📞 New vendor added: "+(f.name||"")+" ("+f.category+")",user?.id||"system",user?.name||"admin",ids,null));
+      setSF(false); setEV(null); load();
   };
 
   const del = async (id) => {
@@ -277,11 +279,11 @@ export default function VendorDirectory({ user, lang }) {
     <div>
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:8 }}>
-        <h1 style={{ fontFamily:F.d, fontSize:23, fontWeight:700, color:C.maroon, margin:0 }}>
+        <h1 style={{ fontFamily:F.d, fontSize:22, fontWeight:700, color:C.maroon, margin:0 }}>
           📞 {L ? "वेंडर डायरेक्टरी" : "Vendor Directory"}
         </h1>
         <button onClick={() => { setEV(null); setSF(!showForm); }}
-          style={{ padding:"7px 14px", borderRadius:8, border:"none", background:C.maroon, color:C.white, fontFamily:F.b, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+          style={{ padding:"7px 14px", borderRadius:8, border:"none", background:C.maroon, color:C.white, fontFamily:F.b, fontSize:12, fontWeight:700, cursor:"pointer" }}>
           ➕ {L ? "वेंडर जोड़ें" : "Add Vendor"}
         </button>
       </div>
@@ -296,12 +298,12 @@ export default function VendorDirectory({ user, lang }) {
         <div style={{ flex:1, minWidth:180, position:"relative" }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={L ? "नाम, कंपनी, श्रेणी खोजें..." : "Search name, company, category..."}
-            style={{ width:"100%", padding:"9px 12px 9px 34px", borderRadius:9, border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:13, outline:"none", boxSizing:"border-box", background:C.white }}/>
-          <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", fontSize:14 }}>🔍</span>
-          {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", border:"none", background:"none", cursor:"pointer", color:C.tl, fontSize:14 }}>✕</button>}
+            style={{ width:"100%", padding:"9px 12px 9px 34px", borderRadius:9, border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:12, outline:"none", boxSizing:"border-box", background:C.white }}/>
+          <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", fontSize:13 }}>🔍</span>
+          {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", border:"none", background:"none", cursor:"pointer", color:C.tl, fontSize:13 }}>✕</button>}
         </div>
         <select value={propFilter} onChange={e => setPF(e.target.value)}
-          style={{ padding:"9px 10px", borderRadius:9, border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:13, outline:"none", background:C.white, cursor:"pointer" }}>
+          style={{ padding:"9px 10px", borderRadius:9, border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:12, outline:"none", background:C.white, cursor:"pointer" }}>
           {PROP_OPTS.map(p => <option key={p.v} value={p.v}>{p.v !== "all" ? (PROPS[p.v]?.icon + " ") : ""}{p.l}</option>)}
         </select>
       </div>
@@ -310,7 +312,7 @@ export default function VendorDirectory({ user, lang }) {
       {usedCats.length > 0 && (
         <div style={{ display:"flex", gap:4, marginBottom:14, flexWrap:"wrap" }}>
           <button onClick={() => setCF("all")}
-            style={{ padding:"4px 12px", borderRadius:20, border:catFilter==="all"?`2px solid ${C.maroon}`:`1px solid ${C.border}`, background:catFilter==="all"?C.maroonSoft:C.white, fontFamily:F.b, fontSize:11, fontWeight:catFilter==="all"?700:400, color:catFilter==="all"?C.maroon:C.tl, cursor:"pointer" }}>
+            style={{ padding:"4px 12px", borderRadius:20, border:catFilter==="all"?`2px solid ${C.maroon}`:`1px solid ${C.border}`, background:catFilter==="all"?C.maroonSoft:C.white, fontFamily:F.b, fontSize:10, fontWeight:catFilter==="all"?700:400, color:catFilter==="all"?C.maroon:C.tl, cursor:"pointer" }}>
             All ({vendors.filter(v=>propFilter==="all"||v.property==="all"||v.property===propFilter).length})
           </button>
           {usedCats.map(cat => {
@@ -319,7 +321,7 @@ export default function VendorDirectory({ user, lang }) {
             if (!cnt) return null;
             return (
               <button key={cat} onClick={() => setCF(cat)}
-                style={{ padding:"4px 12px", borderRadius:20, border:catFilter===cat?`2px solid ${cc.c}`:`1px solid ${C.border}`, background:catFilter===cat?cc.bg:C.white, fontFamily:F.b, fontSize:11, fontWeight:catFilter===cat?700:400, color:catFilter===cat?cc.c:C.tl, cursor:"pointer" }}>
+                style={{ padding:"4px 12px", borderRadius:20, border:catFilter===cat?`2px solid ${cc.c}`:`1px solid ${C.border}`, background:catFilter===cat?cc.bg:C.white, fontFamily:F.b, fontSize:10, fontWeight:catFilter===cat?700:400, color:catFilter===cat?cc.c:C.tl, cursor:"pointer" }}>
                 {cat} ({cnt})
               </button>
             );
@@ -328,16 +330,16 @@ export default function VendorDirectory({ user, lang }) {
       )}
 
       {/* Loading */}
-      {loading && <div style={{ textAlign:"center", padding:24, color:C.tl, fontSize:13, fontFamily:F.b }}>Loading vendors...</div>}
+      {loading && <div style={{ textAlign:"center", padding:24, color:C.tl, fontSize:12, fontFamily:F.b }}>Loading vendors...</div>}
 
       {/* Empty state */}
       {!loading && filtered.length === 0 && (
         <div style={{ background:C.white, borderRadius:12, padding:32, textAlign:"center", border:`1px solid ${C.border}` }}>
           <div style={{ fontSize:28, marginBottom:8 }}>📞</div>
-          <div style={{ fontFamily:F.d, fontSize:16, fontWeight:700, color:C.maroon, marginBottom:4 }}>
+          <div style={{ fontFamily:F.d, fontSize:15, fontWeight:700, color:C.maroon, marginBottom:4 }}>
             {search || catFilter !== "all" ? "No vendors match your search" : "No vendors added yet"}
           </div>
-          <div style={{ fontSize:13, color:C.tl, fontFamily:F.b }}>
+          <div style={{ fontSize:12, color:C.tl, fontFamily:F.b }}>
             {search || catFilter !== "all" ? "Try a different search or filter" : "Click \"Add Vendor\" to add your first contact"}
           </div>
         </div>
@@ -350,8 +352,8 @@ export default function VendorDirectory({ user, lang }) {
           <div key={cat} style={{ marginBottom:20 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
               <span style={{ width:4, height:14, borderRadius:2, background:cc.c, display:"block" }}/>
-              <h3 style={{ fontFamily:F.d, fontSize:15, fontWeight:700, color:cc.c, margin:0 }}>{cat}</h3>
-              <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:cc.bg, color:cc.c, fontFamily:F.b, fontWeight:600 }}>{groups[cat].length}</span>
+              <h3 style={{ fontFamily:F.d, fontSize:14, fontWeight:700, color:cc.c, margin:0 }}>{cat}</h3>
+              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:cc.bg, color:cc.c, fontFamily:F.b, fontWeight:600 }}>{groups[cat].length}</span>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:10 }}>
               {groups[cat].map(v => (
@@ -365,9 +367,9 @@ export default function VendorDirectory({ user, lang }) {
       {/* Stats bar */}
       {vendors.length > 0 && (
         <div style={{ background:C.white, borderRadius:10, padding:"10px 14px", border:`1px solid ${C.border}`, display:"flex", gap:16, flexWrap:"wrap", marginTop:8 }}>
-          <span style={{ fontSize:12, fontFamily:F.b, color:C.tl }}>{L?"कुल":"Total"}: <strong style={{ color:C.maroon }}>{vendors.length}</strong> {L?"वेंडर":"vendors"}</span>
-          <span style={{ fontSize:12, fontFamily:F.b, color:C.tl }}>{L?"श्रेणियां":"Categories"}: <strong style={{ color:C.maroon }}>{usedCats.length}</strong></span>
-          {filtered.length !== vendors.length && <span style={{ fontSize:12, fontFamily:F.b, color:C.blue }}>{L?"दिखाए":"Showing"}: <strong>{filtered.length}</strong></span>}
+          <span style={{ fontSize:11, fontFamily:F.b, color:C.tl }}>{L?"कुल":"Total"}: <strong style={{ color:C.maroon }}>{vendors.length}</strong> {L?"वेंडर":"vendors"}</span>
+          <span style={{ fontSize:11, fontFamily:F.b, color:C.tl }}>{L?"श्रेणियां":"Categories"}: <strong style={{ color:C.maroon }}>{usedCats.length}</strong></span>
+          {filtered.length !== vendors.length && <span style={{ fontSize:11, fontFamily:F.b, color:C.blue }}>{L?"दिखाए":"Showing"}: <strong>{filtered.length}</strong></span>}
         </div>
       )}
 

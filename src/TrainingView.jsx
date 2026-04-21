@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
 import QuizModal, { QuizManager } from "./TrainingQuiz.jsx";
+import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 
 // ─── DEFAULT TOPICS (seeded to DB on first load) ─────────────────────────────
 const DEFAULT_TOPICS = [
@@ -71,7 +72,7 @@ function ensureYTScript(){
 }
 
 // ─── VIDEO MODAL ──────────────────────────────────────────────────────────────
-function VideoModal({video,isDone,onClose,onCompleted,userId,lang}){
+function VideoModal({video,isDone,onClose,onCompleted,userId,user,lang}){
   const H=lang==="hi";
   const pid=useRef(`ytp-${video.id}-${Date.now()}`).current;
   const ytRef=useRef(null);
@@ -119,8 +120,8 @@ function VideoModal({video,isDone,onClose,onCompleted,userId,lang}){
         {/* Header */}
         <div style={{background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1}}>
-            <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:"#fff"}}>{H?video.topic_hi||video.topic:video.topic}</div>
-            {done&&<span style={{display:"inline-block",marginTop:3,fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:5,padding:"2px 8px",color:"#fff",fontFamily:F.b}}>✅ {H?"पूरा हुआ":"Completed"}</span>}
+            <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:"#fff"}}>{H?video.topic_hi||video.topic:video.topic}</div>
+            {done&&<span style={{display:"inline-block",marginTop:3,fontSize:9,background:"rgba(255,255,255,0.2)",borderRadius:5,padding:"2px 8px",color:"#fff",fontFamily:F.b}}>✅ {H?"पूरा हुआ":"Completed"}</span>}
           </div>
           <button onClick={onClose} style={{width:44,height:44,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
         </div>
@@ -130,12 +131,12 @@ function VideoModal({video,isDone,onClose,onCompleted,userId,lang}){
             ?<div id={pid} style={{position:"absolute",inset:0,width:"100%",height:"100%"}}/>
             :<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10}}>
                <div style={{fontSize:40}}>🎬</div>
-               <div style={{color:"rgba(255,255,255,0.5)",fontSize:14,fontFamily:F.b}}>{H?"वीडियो अभी जोड़ा नहीं गया":"No video linked yet"}</div>
+               <div style={{color:"rgba(255,255,255,0.5)",fontSize:13,fontFamily:F.b}}>{H?"वीडियो अभी जोड़ा नहीं गया":"No video linked yet"}</div>
              </div>
           }
         </div>
       </div>
-      {showQuiz&&<QuizModal video={video} userId={userId} lang={lang}
+      {showQuiz&&<QuizModal video={video} userId={userId} user={user} lang={lang}
         onPass={handlePass} onFail={handleFail} onClose={()=>setShowQuiz(false)}/>}
     </div>
   );
@@ -156,12 +157,12 @@ function VideoForm({init,onSave,onCancel,lang}){
     onSave({...f,youtube_id:ytId,youtube_url:f.youtube_url.trim()});
   };
 
-  const S2={width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",boxSizing:"border-box",background:"#FAFAFA"};
-  const Lb={fontSize:12,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
+  const S2={width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:"#FAFAFA"};
+  const Lb={fontSize:11,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
 
   return(
     <div style={{background:C.white,borderRadius:12,padding:14,border:`2px solid ${C.maroon}`,marginBottom:14}}>
-      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>
+      <div style={{fontFamily:F.d,fontSize:14,fontWeight:700,color:C.maroon,marginBottom:10}}>
         {init?.id?"✏️ Edit Video":"➕ Add Training Video"}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -187,20 +188,20 @@ function VideoForm({init,onSave,onCancel,lang}){
           <label style={Lb}>🔗 YouTube URL (paste full link — URL is never shown to employees)</label>
           <input value={f.youtube_url} onChange={e=>inp("youtube_url",e.target.value)}
             placeholder="https://www.youtube.com/watch?v=ABC123..." style={S2}/>
-          {f.youtube_url&&<div style={{marginTop:4,fontSize:11,fontWeight:600,color:ytId?C.green:C.red}}>
+          {f.youtube_url&&<div style={{marginTop:4,fontSize:10,fontWeight:600,color:ytId?C.green:C.red}}>
             {ytId?`✅ Video ID: ${ytId}`:"❌ Invalid URL — could not extract video ID"}
           </div>}
         </div>
         {ytId&&<div style={{gridColumn:"1/-1"}}>
-          <div style={{fontSize:11,color:C.tl,marginBottom:4}}>Thumbnail preview:</div>
+          <div style={{fontSize:10,color:C.tl,marginBottom:4}}>Thumbnail preview:</div>
           <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt="" style={{width:"100%",maxWidth:280,borderRadius:8,border:`1px solid ${C.border}`}}/>
         </div>}
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+        <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>
           {init?.id?"💾 Update":"✅ Save Video"}
         </button>
-        <button onClick={onCancel} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,fontFamily:F.b,fontSize:13,cursor:"pointer"}}>
+        <button onClick={onCancel} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,fontFamily:F.b,fontSize:12,cursor:"pointer"}}>
           {H?"रद्द":"Cancel"}
         </button>
       </div>
@@ -284,6 +285,7 @@ export default function TrainingView({user,prop,lang}){
     );
     setProgress(p=>({...p,[key]:true}));
     setStaffProg(p=>[...p,{user_id:user.id,video_key:key,department:video.department}]);
+    getSAAndAdminIds(user.prop||user.property).then(ids=>notifyMultiple("training_completed","🎓 "+user.name+" completed training: "+(video.topic||video.title||""),user.id,user.name,ids,user.prop||user.property));
   },[user.id,progress]);
 
   // Save new or edited video (admin)
@@ -340,12 +342,12 @@ export default function TrainingView({user,prop,lang}){
     <div style={{fontFamily:F.b}}>
       {/* Page header + tabs */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <h1 style={{fontFamily:F.d,fontSize:23,fontWeight:700,color:C.maroon,margin:0}}>
+        <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>
           🎓 {H?"प्रशिक्षण और ज्ञान":"Training & Knowledge"}
         </h1>
         <div style={{display:"flex",background:C.maroonSoft,borderRadius:10,padding:3,gap:2}}>
           {[{id:"videos",l:"🎬 Video Training",lH:"🎬 वीडियो ट्रेनिंग"},{id:"chem",l:"🧪 Chemical Guide",lH:"🧪 केमिकल गाइड"}].map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:13,fontWeight:700,background:tab===t.id?C.maroon:"transparent",color:tab===t.id?C.white:C.maroon}}>
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:700,background:tab===t.id?C.maroon:"transparent",color:tab===t.id?C.white:C.maroon}}>
               {H?t.lH:t.l}
             </button>
           ))}
@@ -357,8 +359,8 @@ export default function TrainingView({user,prop,lang}){
         {/* My progress bar */}
         {!loading&&<div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,padding:"10px 14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-            <span style={{fontSize:12,fontWeight:600,color:C.text}}>{user.name} — {H?"ट्रेनिंग प्रगति":"Training Progress"}</span>
-            <span style={{fontFamily:F.d,fontSize:17,fontWeight:700,color:myPct===100?C.green:C.maroon}}>{totalWatched}/{myDeptVideos.length} ({myPct}%)</span>
+            <span style={{fontSize:11,fontWeight:600,color:C.text}}>{user.name} — {H?"ट्रेनिंग प्रगति":"Training Progress"}</span>
+            <span style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:myPct===100?C.green:C.maroon}}>{totalWatched}/{myDeptVideos.length} ({myPct}%)</span>
           </div>
           <div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${myPct}%`,background:myPct===100?C.green:C.maroon,borderRadius:3,transition:"width 0.5s"}}/>
@@ -366,7 +368,7 @@ export default function TrainingView({user,prop,lang}){
         </div>}
 
         {/* Admin: Add Video button */}
-        {isAdmin&&!showForm&&<button onClick={()=>{setEV(null);setSF(true);}} style={{marginBottom:12,padding:"7px 14px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+        {isAdmin&&!showForm&&<button onClick={()=>{setEV(null);setSF(true);}} style={{marginBottom:12,padding:"7px 14px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>
           ➕ {H?"वीडियो जोड़ें":"Add Video"}
         </button>}
 
@@ -379,28 +381,28 @@ export default function TrainingView({user,prop,lang}){
             const st=deptStats[k]||{total:0,done:0,pct:0};
             const isActive=deptFilter===k;
             return(
-              <button key={k} onClick={()=>setDF(k)} style={{padding:"6px 12px",borderRadius:8,border:isActive?`2px solid ${d.c}`:`1px solid ${C.border}`,background:isActive?d.c+"18":C.white,cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:isActive?700:400,color:isActive?d.c:C.tl,display:"flex",alignItems:"center",gap:5}}>
+              <button key={k} onClick={()=>setDF(k)} style={{padding:"6px 12px",borderRadius:8,border:isActive?`2px solid ${d.c}`:`1px solid ${C.border}`,background:isActive?d.c+"18":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:isActive?700:400,color:isActive?d.c:C.tl,display:"flex",alignItems:"center",gap:5}}>
                 <span>{d.icon}</span>
                 <span>{H?d.lH:d.l}</span>
-                {st.total>0&&<span style={{fontSize:10,background:isActive?d.c:"#E0E0E0",color:isActive?C.white:C.tl,borderRadius:10,padding:"1px 6px",fontWeight:700}}>{st.done}/{st.total}</span>}
+                {st.total>0&&<span style={{fontSize:9,background:isActive?d.c:"#E0E0E0",color:isActive?C.white:C.tl,borderRadius:10,padding:"1px 6px",fontWeight:700}}>{st.done}/{st.total}</span>}
               </button>
             );
           })}
         </div>}
         {/* Non-SA: show which dept they're viewing */}
         {!isSA&&(()=>{const dm=DEPT_META[myDept];return dm?<div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,padding:"8px 12px",background:dm.bg,borderRadius:8,border:`1px solid ${dm.c}28`}}>
-          <span style={{fontSize:17}}>{dm.icon}</span>
-          <span style={{fontSize:13,fontWeight:700,color:dm.c}}>{H?dm.lH:dm.l}</span>
-          <span style={{fontSize:11,color:dm.c,opacity:0.7}}>— {H?"आपके विभाग की ट्रेनिंग":"Your department training"}</span>
+          <span style={{fontSize:16}}>{dm.icon}</span>
+          <span style={{fontSize:12,fontWeight:700,color:dm.c}}>{H?dm.lH:dm.l}</span>
+          <span style={{fontSize:10,color:dm.c,opacity:0.7}}>— {H?"आपके विभाग की ट्रेनिंग":"Your department training"}</span>
         </div>:null;})()}
 
         {/* Video grid */}
-        {loading&&<div style={{textAlign:"center",padding:28,color:C.tl,fontSize:14,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>Loading training videos...</div>}
+        {loading&&<div style={{textAlign:"center",padding:28,color:C.tl,fontSize:13,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>Loading training videos...</div>}
 
         {!loading&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))",gap:10,marginBottom:16}}>
-          {filteredVids.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",padding:24,color:C.tl,fontSize:13,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>
+          {filteredVids.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",padding:24,color:C.tl,fontSize:12,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>
             {H?"इस विभाग में अभी कोई वीडियो नहीं है":"No videos in this department yet"}
-            {isAdmin&&<div style={{fontSize:11,marginTop:4}}>Click "Add Video" to add the first one.</div>}
+            {isAdmin&&<div style={{fontSize:10,marginTop:4}}>Click "Add Video" to add the first one.</div>}
           </div>}
 
           {filteredVids.map(v=>{
@@ -425,12 +427,12 @@ export default function TrainingView({user,prop,lang}){
                   {/* Play button overlay */}
                   {canPlay&&!watched&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.15)"}}>
                     <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,0.92)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>
-                      <span style={{fontSize:15,marginLeft:3,color:C.maroon}}>▶</span>
+                      <span style={{fontSize:14,marginLeft:3,color:C.maroon}}>▶</span>
                     </div>
                   </div>}
                   {/* Watched checkmark */}
                   {watched&&<div style={{position:"absolute",top:7,right:7,width:26,height:26,borderRadius:"50%",background:C.green,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(0,0,0,0.25)"}}>
-                    <span style={{color:"#fff",fontSize:14,fontWeight:700}}>✓</span>
+                    <span style={{color:"#fff",fontSize:13,fontWeight:700}}>✓</span>
                   </div>}
                   {/* Dept badge */}
                   <div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,0.5)",borderRadius:4,padding:"1px 5px"}}>
@@ -439,17 +441,17 @@ export default function TrainingView({user,prop,lang}){
                 </div>
                 {/* Title row */}
                 <div style={{padding:"7px 9px 8px",background:watched?"#F0FFF4":C.white}}>
-                  <div style={{fontSize:12,fontWeight:700,color:watched?C.green:C.text,lineHeight:1.35,marginBottom:isAdmin?5:0}}>
+                  <div style={{fontSize:11,fontWeight:700,color:watched?C.green:C.text,lineHeight:1.35,marginBottom:isAdmin?5:0}}>
                     {H?v.topic_hi||v.topic:v.topic}
                   </div>
                   {/* Admin: edit / delete / quiz */}
                   {isAdmin&&<div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
                     <button onClick={()=>{setEV(v);setSF(true);window.scrollTo({top:0,behavior:"smooth"});}}
-                      style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:11,fontWeight:600,color:C.tl}}>✏️</button>
+                      style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:10,fontWeight:600,color:C.tl}}>✏️</button>
                     <button onClick={()=>setQuizMgr(v)}
-                      style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${C.blue}`,background:C.bBg,cursor:"pointer",fontSize:11,fontWeight:600,color:C.blue}}>📝</button>
+                      style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${C.blue}`,background:C.bBg,cursor:"pointer",fontSize:10,fontWeight:600,color:C.blue}}>📝</button>
                     <button onClick={()=>deleteVideo(v.id)}
-                      style={{flex:1,padding:"5px 0",borderRadius:5,border:"none",background:C.rBg,cursor:"pointer",fontSize:11,fontWeight:600,color:C.red}}>🗑️</button>
+                      style={{flex:1,padding:"5px 0",borderRadius:5,border:"none",background:C.rBg,cursor:"pointer",fontSize:10,fontWeight:600,color:C.red}}>🗑️</button>
                   </div>}
                 </div>
               </div>
@@ -459,7 +461,7 @@ export default function TrainingView({user,prop,lang}){
 
         {/* Staff Progress (admin only) */}
         {isAdmin&&!loading&&staffSummary.length>0&&<div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,padding:14}}>
-          <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,marginBottom:10}}>
+          <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>
             👥 {H?"स्टाफ प्रगति":"Staff Training Progress"} — {prop.sn}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:8}}>
@@ -469,14 +471,14 @@ export default function TrainingView({user,prop,lang}){
                 <div key={m.id} style={{padding:"10px 12px",background:C.bg,borderRadius:10,borderLeft:`3px solid ${barC}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",background:barC,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:11,fontWeight:700}}>{m.n[0]}</div>
+                      <div style={{width:26,height:26,borderRadius:"50%",background:barC,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:10,fontWeight:700}}>{m.n[0]}</div>
                       <div>
-                        <div style={{fontSize:12,fontWeight:700}}>{m.n}</div>
-                        <div style={{fontSize:10,color:C.tl}}>{m.deptName}{m.propName?` · ${m.propName}`:""}</div>
+                        <div style={{fontSize:11,fontWeight:700}}>{m.n}</div>
+                        <div style={{fontSize:9,color:C.tl}}>{m.deptName}{m.propName?` · ${m.propName}`:""}</div>
                       </div>
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:barC}}>{m.pct}%</div>
+                      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:barC}}>{m.pct}%</div>
                       <div style={{fontSize:8,color:C.tl}}>{m.watched}/{m.total}</div>
                     </div>
                   </div>
@@ -492,16 +494,16 @@ export default function TrainingView({user,prop,lang}){
 
       {/* ═══ CHEMICAL GUIDE TAB ═══ */}
       {tab==="chem"&&<div>
-        <p style={{fontSize:11,color:C.tl,margin:"0 0 10px"}}>Kleanfix Industries · kleanfix.com · +91 98189 98806</p>
+        <p style={{fontSize:10,color:C.tl,margin:"0 0 10px"}}>Kleanfix Industries · kleanfix.com · +91 98189 98806</p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
           {CHEM_DATA.map((sec,si)=>(
             <div key={si} style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-              <div style={{background:"linear-gradient(135deg,#2D2D2D,#4a4a4a)",padding:"8px 12px",color:"#fff",fontSize:13,fontWeight:700}}>{sec.area}</div>
+              <div style={{background:"linear-gradient(135deg,#2D2D2D,#4a4a4a)",padding:"8px 12px",color:"#fff",fontSize:12,fontWeight:700}}>{sec.area}</div>
               <div style={{padding:"4px 10px"}}>
                 {sec.items.map((it,ii)=>(
                   <div key={ii} style={{padding:"6px 0",borderBottom:ii<sec.items.length-1?`1px solid ${C.border}`:"none"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:C.maroon}}>{it.p}</div>
-                    <div style={{fontSize:10,color:C.tl}}>{it.u}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:C.maroon}}>{it.p}</div>
+                    <div style={{fontSize:9,color:C.tl}}>{it.u}</div>
                   </div>
                 ))}
               </div>
@@ -518,6 +520,7 @@ export default function TrainingView({user,prop,lang}){
         onClose={()=>setAV(null)}
         onCompleted={markDone}
         userId={user.id}
+        user={user}
         lang={lang}
       />}
       {/* Quiz Manager (admin only) */}

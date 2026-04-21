@@ -225,10 +225,10 @@ export default function OrgChart({ lang }) {
 
       {/* Header */}
       <div style={{ marginBottom: 12 }}>
-        <h1 style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: C.maroon, margin: "0 0 3px" }}>
+        <h1 style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.maroon, margin: "0 0 3px" }}>
           🏢 {H ? "संगठन संरचना" : "Organisation Chart"}
         </h1>
-        <p style={{ fontSize:12, color: C.tl, margin: 0 }}>
+        <p style={{ fontSize:11, color: C.tl, margin: 0 }}>
           {H ? "नाम पर क्लिक करें — टीम दाईं तरफ खुलती है" : "Click any name to expand the team to the right"}
         </p>
       </div>
@@ -237,13 +237,13 @@ export default function OrgChart({ lang }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button
           onClick={() => setExpanded(Object.fromEntries(ALL_KEYS.map(k => [k, true])))}
-          style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontFamily: F.b, fontSize:12, cursor: "pointer", color: C.text }}
+          style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontFamily: F.b, fontSize:11, cursor: "pointer", color: C.text }}
         >
           ⊞ {H ? "सब खोलें" : "Expand All"}
         </button>
         <button
           onClick={() => setExpanded({})}
-          style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontFamily: F.b, fontSize:12, cursor: "pointer", color: C.text }}
+          style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontFamily: F.b, fontSize:11, cursor: "pointer", color: C.text }}
         >
           ⊟ {H ? "सब बंद करें" : "Collapse All"}
         </button>
@@ -261,7 +261,7 @@ export default function OrgChart({ lang }) {
           { c: "#6B21A8", l: "🛡️ Security" },
         ].map(leg => (
           <span key={leg.l} style={{
-            fontSize:10, padding: "3px 8px", borderRadius: 6, fontWeight: 700,
+            fontSize:9, padding: "3px 8px", borderRadius: 6, fontWeight: 700,
             background: leg.c + "15", color: leg.c, border: `1px solid ${leg.c}28`,
           }}>
             {leg.l}
@@ -278,7 +278,7 @@ export default function OrgChart({ lang }) {
         </div>
       </div>
 
-      <p style={{ fontSize:11, color: C.tl, margin: "8px 0 0", textAlign: "center" }}>
+      <p style={{ fontSize:10, color: C.tl, margin: "8px 0 0", textAlign: "center" }}>
         ← {H ? "स्क्रॉल करें" : "Scroll left/right to see full tree"} →
       </p>
     </div>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F } from "./constants.js";
+import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 
 const PASS_SCORE = 0.6; // 60% to pass
 
-function QuizModal({ video, userId, lang, onPass, onFail, onClose }) {
+function QuizModal({ video, userId, user, lang, onPass, onFail, onClose }) {
   const H = lang === "hi";
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,15 @@ function QuizModal({ video, userId, lang, onPass, onFail, onClose }) {
       total,
       passed,
       answers: ans,
+    });
+    const pct = Math.round((sc / total) * 100);
+    const videoTitle = video.topic || video.title || "Unknown";
+    const userName = user?.name || "Unknown";
+    const userProp = user?.prop || user?.property || null;
+    getSAAndAdminIds(userProp).then(ids => {
+      const type = passed ? "quiz_passed" : "quiz_failed";
+      const icon = passed ? "📝✅" : "📝❌";
+      notifyMultiple(type, icon+" "+userName+(passed?" passed":" failed")+" quiz: "+videoTitle+" ("+sc+"/"+total+" = "+pct+"%)",userId,userName,ids,userProp);
     });
     if (passed) onPass();
   };

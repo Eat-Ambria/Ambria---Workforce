@@ -150,10 +150,10 @@ export default function ChemicalGuide({ lang }) {
 
   return (
     <div style={{ fontFamily: F.b }}>
-      <h1 style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: C.maroon, margin: "0 0 4px" }}>
+      <h1 style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.maroon, margin: "0 0 4px" }}>
         🧪 {lang === "hi" ? "केमिकल गाइड" : "Chemical Guide"}
       </h1>
-      <p style={{ fontSize:11, color: C.tl, margin: "0 0 12px" }}>
+      <p style={{ fontSize:10, color: C.tl, margin: "0 0 12px" }}>
         Kleanfix Industries · kleanfix.com · +91 98189 98806
       </p>
 
@@ -165,7 +165,7 @@ export default function ChemicalGuide({ lang }) {
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
-            fontFamily: F.b, fontSize:13, fontWeight: 700,
+            fontFamily: F.b, fontSize:12, fontWeight: 700,
             background: tab === t.id ? C.maroon : "transparent",
             color: tab === t.id ? C.white : C.maroon
           }}>{t.label}</button>
@@ -176,7 +176,7 @@ export default function ChemicalGuide({ lang }) {
         <div>
           {/* ── Property Selector ── */}
           <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
+            <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
               🏛️ {L.selectPropertyCalc}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
@@ -187,8 +187,8 @@ export default function ChemicalGuide({ lang }) {
                   background: selectedProp === k ? C.maroonSoft : C.white,
                   color: selectedProp === k ? C.maroon : C.text
                 }}>
-                  <div style={{ fontSize:19, marginBottom: 2 }}>{PROPS[k]?.icon}</div>
-                  <div style={{ fontSize:11, fontWeight: 700 }}>{s.label}</div>
+                  <div style={{ fontSize:18, marginBottom: 2 }}>{PROPS[k]?.icon}</div>
+                  <div style={{ fontSize:10, fontWeight: 700 }}>{s.label}</div>
                 </button>
               ))}
             </div>
@@ -202,9 +202,9 @@ export default function ChemicalGuide({ lang }) {
                 { label: "Glass/Hall", val: spec.glass > 0 ? `${spec.glass.toLocaleString()} sqft` : "N/A", icon: "🪟" },
               ].map(s => (
                 <div key={s.label} style={{ padding: 8, background: C.bg, borderRadius: 8, textAlign: "center" }}>
-                  <div style={{ fontSize:17, marginBottom: 2 }}>{s.icon}</div>
-                  <div style={{ fontSize:12, fontWeight: 700, color: C.text }}>{s.val}</div>
-                  <div style={{ fontSize:10, color: C.tl }}>{s.label}</div>
+                  <div style={{ fontSize:16, marginBottom: 2 }}>{s.icon}</div>
+                  <div style={{ fontSize:11, fontWeight: 700, color: C.text }}>{s.val}</div>
+                  <div style={{ fontSize:9, color: C.tl }}>{s.label}</div>
                 </div>
               ))}
             </div>
@@ -214,11 +214,11 @@ export default function ChemicalGuide({ lang }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
             <div style={{ background: C.bBg, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.blue}30` }}>
               <div style={{ fontFamily: F.d, fontSize:24, fontWeight: 700, color: C.blue }}>{totalLitres} L</div>
-              <div style={{ fontSize:11, color: C.blue, fontWeight: 600 }}>Total Liquid Chemicals / Month</div>
+              <div style={{ fontSize:10, color: C.blue, fontWeight: 600 }}>Total Liquid Chemicals / Month</div>
             </div>
             <div style={{ background: C.gBg, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.green}30` }}>
               <div style={{ fontFamily: F.d, fontSize:24, fontWeight: 700, color: C.green }}>{totalKg} kg</div>
-              <div style={{ fontSize:11, color: C.green, fontWeight: 600 }}>Total Dry / Solid Chemicals / Month</div>
+              <div style={{ fontSize:10, color: C.green, fontWeight: 600 }}>Total Dry / Solid Chemicals / Month</div>
             </div>
           </div>
 
@@ -232,16 +232,16 @@ export default function ChemicalGuide({ lang }) {
                 <div style={{ padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                      <span style={{ padding: "1px 6px", borderRadius: 4, background: c.color + "20", color: c.color, fontSize:10, fontWeight: 700 }}>{c.code}</span>
-                      <span style={{ fontSize:12, fontWeight: 700 }}>{c.name}</span>
+                      <span style={{ padding: "1px 6px", borderRadius: 4, background: c.color + "20", color: c.color, fontSize:9, fontWeight: 700 }}>{c.code}</span>
+                      <span style={{ fontSize:11, fontWeight: 700 }}>{c.name}</span>
                     </div>
-                    <div style={{ fontSize:10, color: C.tl, marginBottom: 4 }}>{c.area}</div>
-                    <div style={{ fontSize:10, color: C.tl, fontStyle: "italic" }}>📐 {c.formula}</div>
-                    <div style={{ fontSize:10, color: C.tl, marginTop: 2 }}>💧 {c.note}</div>
+                    <div style={{ fontSize:9, color: C.tl, marginBottom: 4 }}>{c.area}</div>
+                    <div style={{ fontSize:9, color: C.tl, fontStyle: "italic" }}>📐 {c.formula}</div>
+                    <div style={{ fontSize:9, color: C.tl, marginTop: 2 }}>💧 {c.note}</div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-                    <div style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: c.color }}>{c.qty}</div>
-                    <div style={{ fontSize:10, color: C.tl, fontWeight: 600 }}>{c.unit}/month</div>
+                    <div style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: c.color }}>{c.qty}</div>
+                    <div style={{ fontSize:9, color: C.tl, fontWeight: 600 }}>{c.unit}/month</div>
                   </div>
                 </div>
               </div>
@@ -261,13 +261,13 @@ export default function ChemicalGuide({ lang }) {
                 <div style={{
                   width: 36, height: 36, borderRadius: 8, background: C.maroon,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  color: C.white, fontFamily: F.b, fontSize:10, fontWeight: 700,
+                  color: C.white, fontFamily: F.b, fontSize:9, fontWeight: 700,
                   flexShrink: 0, textAlign: "center", padding: 2
                 }}>{p.code}</div>
                 <div>
-                  <div style={{ fontSize:13, fontWeight: 700 }}>{p.name}</div>
-                  <div style={{ fontSize:11, color: C.tl, marginTop: 2 }}>📋 {p.use}</div>
-                  <div style={{ fontSize:10, color: C.blue, marginTop: 2 }}>💧 {p.dilution}</div>
+                  <div style={{ fontSize:12, fontWeight: 700 }}>{p.name}</div>
+                  <div style={{ fontSize:10, color: C.tl, marginTop: 2 }}>📋 {p.use}</div>
+                  <div style={{ fontSize:9, color: C.blue, marginTop: 2 }}>💧 {p.dilution}</div>
                 </div>
               </div>
             ))}

@@ -58,10 +58,10 @@ export default function AreasView({ tasks, prop, lang }) {
     <div style={{ fontFamily: F.b }}>
       {/* Page header */}
       <div style={{ marginBottom: 14 }}>
-        <h1 style={{ fontFamily: F.d, fontSize:23, fontWeight: 700, color: C.maroon, margin: "0 0 2px" }}>
+        <h1 style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.maroon, margin: "0 0 2px" }}>
           🏗️ {L.areas} — {prop.sn}
         </h1>
-        <p style={{ fontSize:11, color: C.tl, margin: 0 }}>
+        <p style={{ fontSize:10, color: C.tl, margin: 0 }}>
           Green = all SOPs done · Yellow = in progress · Red = issues
         </p>
       </div>
@@ -122,7 +122,7 @@ export default function AreasView({ tasks, prop, lang }) {
                 {/* Sqft / capacity spec */}
                 {a.s && (
                   <span style={{
-                    fontSize:12,
+                    fontSize:11,
                     color: "rgba(255,255,255,0.97)",
                     fontWeight: 700,
                     background: "rgba(0,0,0,0.28)",
@@ -141,7 +141,7 @@ export default function AreasView({ tasks, prop, lang }) {
                     top: 8, right: 8,
                     background: "rgba(255,255,255,0.22)",
                     borderRadius: 7, padding: "2px 8px",
-                    fontSize:10, color: "#FFF", fontWeight: 700,
+                    fontSize:9, color: "#FFF", fontWeight: 700,
                     border: "1px solid rgba(255,255,255,0.4)",
                     backdropFilter: "blur(2px)",
                   }}>
@@ -155,7 +155,7 @@ export default function AreasView({ tasks, prop, lang }) {
                     position: "absolute",
                     bottom: 6, left: 0, right: 0,
                     textAlign: "center",
-                    fontSize:10, color: "rgba(255,255,255,0.65)",
+                    fontSize:9, color: "rgba(255,255,255,0.65)",
                     fontStyle: "italic",
                   }}>
                     No SOPs assigned
@@ -167,7 +167,7 @@ export default function AreasView({ tasks, prop, lang }) {
               <div style={{ padding: "10px 12px" }}>
                 {/* Area name */}
                 <div style={{
-                  fontFamily: F.d, fontSize:14, fontWeight: 700,
+                  fontFamily: F.d, fontSize:13, fontWeight: 700,
                   color: C.maroon, marginBottom: 8,
                 }}>
                   {a.n}
@@ -197,20 +197,20 @@ export default function AreasView({ tasks, prop, lang }) {
                 }}>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     <span style={{
-                      fontSize:10, padding: "2px 5px", borderRadius: 4,
+                      fontSize:9, padding: "2px 5px", borderRadius: 4,
                       background: C.gBg, color: C.green, fontWeight: 600,
                     }}>
                       ✅ {ad}
                     </span>
                     <span style={{
-                      fontSize:10, padding: "2px 5px", borderRadius: 4,
+                      fontSize:9, padding: "2px 5px", borderRadius: 4,
                       background: C.yBg, color: C.yellow, fontWeight: 600,
                     }}>
                       ⏳ {ap}
                     </span>
                     {ai > 0 && (
                       <span style={{
-                        fontSize:10, padding: "2px 5px", borderRadius: 4,
+                        fontSize:9, padding: "2px 5px", borderRadius: 4,
                         background: C.rBg, color: C.red, fontWeight: 600,
                       }}>
                         ⚠️ {ai}
@@ -219,7 +219,7 @@ export default function AreasView({ tasks, prop, lang }) {
                   </div>
                   {at.length > 0 && (
                     <span style={{
-                      fontSize:13, fontWeight: 700,
+                      fontSize:12, fontWeight: 700,
                       color: allDone ? C.green : C.maroon,
                     }}>
                       {pc}%
@@ -238,7 +238,7 @@ export default function AreasView({ tasks, prop, lang }) {
         border: `1px solid ${C.border}`, padding: 14,
       }}>
         <div style={{
-          fontFamily: F.d, fontSize:15, fontWeight: 700,
+          fontFamily: F.d, fontSize:14, fontWeight: 700,
           color: C.maroon, marginBottom: 10,
         }}>
           📊 Area Summary — {prop.sn}
@@ -254,12 +254,12 @@ export default function AreasView({ tasks, prop, lang }) {
               borderRadius: 8, textAlign: "center",
             }}>
               <div style={{
-                fontFamily: F.d, fontSize:23,
+                fontFamily: F.d, fontSize:22,
                 fontWeight: 700, color: s.color,
               }}>
                 {s.count}
               </div>
-              <div style={{ fontSize:11, color: s.color, fontWeight: 600 }}>
+              <div style={{ fontSize:10, color: s.color, fontWeight: 600 }}>
                 {s.icon} {s.label}
               </div>
             </div>

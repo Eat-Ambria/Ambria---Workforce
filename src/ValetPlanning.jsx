@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
+import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 
 // ─── STAFF CALCULATOR DATA ────────────────────────────────────────────────────
 const VALET_DATA = {
@@ -170,12 +171,12 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
   };
 
   const isPremium = f.priority==="high" || f.priority==="critical";
-  const F2 = {width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",boxSizing:"border-box",background:C.bg};
-  const Lb = {fontSize:12,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
+  const F2 = {width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:C.bg};
+  const Lb = {fontSize:11,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
 
   return(
     <div style={{background:C.white,borderRadius:12,padding:16,border:`2px solid ${C.maroon}`,marginBottom:14}}>
-      <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,marginBottom:12}}>
+      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:12}}>
         {isEdit?"✏️ Edit Booking":"➕ New Valet Booking"}
       </div>
 
@@ -207,7 +208,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
               <option key={k} value={k}>{v.icon} {lang==="hi"?v.lH:v.l}</option>
             ))}
           </select>
-          <div style={{fontSize:11,color:C.tl,marginTop:3}}>
+          <div style={{fontSize:10,color:C.tl,marginTop:3}}>
             Car ratio: ×{EVENT_TYPES[f.event_type]?.carRatio} per guest
             {EVENT_TYPES[f.event_type]?.vip && <span style={{marginLeft:6,color:C.accent,fontWeight:700}}>⭐ VIP — 1 valet per 10 cars</span>}
           </div>
@@ -235,7 +236,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
 
         {/* Premium event warning */}
         {isPremium&&<div style={{gridColumn:"1/-1",background:f.priority==="critical"?C.rBg:"#FFF7ED",border:`1px solid ${f.priority==="critical"?C.red:C.accent}`,borderRadius:8,padding:"8px 12px"}}>
-          <div style={{fontSize:12,fontWeight:700,color:f.priority==="critical"?C.red:C.accent}}>
+          <div style={{fontSize:11,fontWeight:700,color:f.priority==="critical"?C.red:C.accent}}>
             ⚠️ {lang==="hi"?"प्रीमियम इवेंट — अतिरिक्त वैलेट और सीनियर स्टाफ सुनिश्चित करें":"Premium event — ensure extra valets and senior staff on duty"}
           </div>
         </div>}
@@ -244,7 +245,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
             <label style={{...Lb,marginBottom:0}}>🚗 {lang==="hi"?"अनुमानित कारें":"Expected Cars"}</label>
-            {f.guest_count>0&&<button type="button" onClick={()=>{carsEdited.current=false;valetsEdited.current=false;const c=calcCars(f.guest_count,f.event_type);sF(p=>({...p,expected_cars:c,valets_needed:calcValets(c,p.event_type)}));}} style={{fontSize:10,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
+            {f.guest_count>0&&<button type="button" onClick={()=>{carsEdited.current=false;valetsEdited.current=false;const c=calcCars(f.guest_count,f.event_type);sF(p=>({...p,expected_cars:c,valets_needed:calcValets(c,p.event_type)}));}} style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
           </div>
           <input type="number" min={0} value={f.expected_cars}
             onChange={e=>{carsEdited.current=true;inp("expected_cars",e.target.value);}}
@@ -253,7 +254,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
             <label style={{...Lb,marginBottom:0}}>👤 {lang==="hi"?"वैलेट स्टाफ":"Valets Needed"}</label>
-            {f.expected_cars>0&&<button type="button" onClick={()=>{valetsEdited.current=false;sF(p=>({...p,valets_needed:calcValets(p.expected_cars,p.event_type)}));}} style={{fontSize:10,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
+            {f.expected_cars>0&&<button type="button" onClick={()=>{valetsEdited.current=false;sF(p=>({...p,valets_needed:calcValets(p.expected_cars,p.event_type)}));}} style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
           </div>
           <input type="number" min={0} value={f.valets_needed}
             onChange={e=>{valetsEdited.current=true;inp("valets_needed",e.target.value);}}
@@ -299,10 +300,10 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
       </div>
 
       <div style={{display:"flex",gap:8}}>
-        <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:14,fontWeight:700,cursor:"pointer"}}>
+        <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
           {isEdit?"💾 Update":"✅ Save Booking"}
         </button>
-        <button onClick={onCancel} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,color:C.text,fontFamily:F.b,fontSize:14,cursor:"pointer"}}>
+        <button onClick={onCancel} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,color:C.text,fontFamily:F.b,fontSize:13,cursor:"pointer"}}>
           {lang==="hi"?"रद्द":"Cancel"}
         </button>
       </div>
@@ -358,6 +359,9 @@ function CalendarView({user, lang}){
       await supabase.from("valet_bookings").update(payload).eq("id",f.id);
     } else {
       await supabase.from("valet_bookings").insert({...payload,created_by:f.created_by});
+      const dateFmt = payload.event_date ? new Date(payload.event_date).toLocaleDateString("en-IN",{day:"numeric",month:"short"}) : "";
+      const propName = PROPS[payload.property]?.sn || payload.property || "";
+      getSAAndAdminIds(null).then(ids => notifyMultiple("valet_booking","🚗 New valet booking: "+(payload.event_type||"Event")+" at "+propName+" on "+dateFmt,f.created_by||"system",f.created_by||"admin",ids,payload.property));
     }
     setSF(false);setEB(null);setPD(null);load();
   };
@@ -390,12 +394,12 @@ function CalendarView({user, lang}){
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={prevM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-          <span style={{fontFamily:F.d,fontSize:17,fontWeight:700,color:C.maroon,minWidth:150,textAlign:"center"}}>{mns[mo]} {yr}</span>
-          <button onClick={nextM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+          <button onClick={prevM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+          <span style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,minWidth:150,textAlign:"center"}}>{mns[mo]} {yr}</span>
+          <button onClick={nextM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
         </div>
         <button onClick={()=>{setPD(null);setEB(null);setSF(true);}}
-          style={{padding:"7px 14px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+          style={{padding:"7px 14px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>
           ➕ {lang==="hi"?"नई बुकिंग":"New Booking"}
         </button>
       </div>
@@ -404,11 +408,11 @@ function CalendarView({user, lang}){
       <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
         {PROP_OPTS.map(p=>(
           <button key={p.v} onClick={()=>setPF(p.v)}
-            style={{padding:"5px 10px",borderRadius:7,border:propF===p.v?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:propF===p.v?C.maroonSoft:C.white,fontFamily:F.b,fontSize:11,fontWeight:propF===p.v?700:400,color:propF===p.v?C.maroon:C.tl,cursor:"pointer"}}>
+            style={{padding:"5px 10px",borderRadius:7,border:propF===p.v?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:propF===p.v?C.maroonSoft:C.white,fontFamily:F.b,fontSize:10,fontWeight:propF===p.v?700:400,color:propF===p.v?C.maroon:C.tl,cursor:"pointer"}}>
             {p.v!=="all"&&PROPS[p.v]?.icon+" "}{p.v==="all"?"All":PROPS[p.v]?.sn}
           </button>
         ))}
-        {loading&&<span style={{fontSize:11,color:C.tl,fontFamily:F.b,alignSelf:"center"}}>Loading...</span>}
+        {loading&&<span style={{fontSize:10,color:C.tl,fontFamily:F.b,alignSelf:"center"}}>Loading...</span>}
       </div>
 
       {/* Booking form */}
@@ -417,7 +421,7 @@ function CalendarView({user, lang}){
       {/* Calendar grid */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:C.maroonSoft,borderBottom:`1px solid ${C.border}`}}>
-          {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:11,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{d}</div>)}
+          {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:10,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{d}</div>)}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
           {cells.map((day,idx)=>{
@@ -429,7 +433,7 @@ function CalendarView({user, lang}){
             return(
               <div key={day} onClick={()=>setSD(isSel?null:ds)}
                 style={{minHeight:62,padding:"4px 3px 3px 5px",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:isSel?C.maroonSoft:C.white,position:"relative",transition:"background 0.1s"}}>
-                <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:11,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>{day}</div>
+                <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:10,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>{day}</div>
                 <div style={{display:"flex",flexDirection:"column",gap:1}}>
                   {dayBks.slice(0,2).map(b=>{
                     const cs=chipStyle(b);
@@ -442,7 +446,7 @@ function CalendarView({user, lang}){
                   {dayBks.length>2&&<div style={{fontSize:7,color:C.tl,fontFamily:F.b}}>+{dayBks.length-2}</div>}
                 </div>
                 <button onClick={e=>{e.stopPropagation();setPD(ds);setEB(null);setSF(true);}}
-                  style={{position:"absolute",top:2,right:2,width:14,height:14,borderRadius:3,border:`1px solid ${C.border}`,background:C.white,color:C.tl,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,opacity:0.6}}>+</button>
+                  style={{position:"absolute",top:2,right:2,width:14,height:14,borderRadius:3,border:`1px solid ${C.border}`,background:C.white,color:C.tl,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,opacity:0.6}}>+</button>
               </div>
             );
           })}
@@ -453,17 +457,17 @@ function CalendarView({user, lang}){
       {selDate&&(
         <div style={{background:C.white,borderRadius:14,border:`2px solid ${C.maroon}`,padding:14,marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon}}>📅 {fmtD(selDate)}</div>
+            <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>📅 {fmtD(selDate)}</div>
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>{setPD(selDate);setEB(null);setSF(true);}}
-                style={{padding:"5px 12px",borderRadius:7,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                style={{padding:"5px 12px",borderRadius:7,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:11,fontWeight:700,cursor:"pointer"}}>
                 ➕ {lang==="hi"?"जोड़ें":"Add"}
               </button>
-              <button onClick={()=>setSD(null)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+              <button onClick={()=>setSD(null)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
             </div>
           </div>
           {(byDate[selDate]||[]).length===0
-            ?<div style={{textAlign:"center",padding:"14px 0",color:C.tl,fontSize:13,fontFamily:F.b}}>No bookings — click ➕ to add one</div>
+            ?<div style={{textAlign:"center",padding:"14px 0",color:C.tl,fontSize:12,fontFamily:F.b}}>No bookings — click ➕ to add one</div>
             :(byDate[selDate]||[]).map(b=>{
               const st=STATUS[b.status]||STATUS.planned;
               const pri=PRIORITIES[b.priority||"normal"]||PRIORITIES.normal;
@@ -472,33 +476,33 @@ function CalendarView({user, lang}){
                 <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:8,borderLeft:`4px solid ${st.c}`,border:`1px solid ${C.border}`,borderLeftWidth:4,borderLeftColor:st.c}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:700,fontSize:14,color:C.text,marginBottom:4}}>
-                        {et.icon} {b.event_name||"Event"} <span style={{fontSize:11,color:C.tl,fontWeight:400}}>— {PROPS[b.property]?.sn}</span>
+                      <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:4}}>
+                        {et.icon} {b.event_name||"Event"} <span style={{fontSize:10,color:C.tl,fontWeight:400}}>— {PROPS[b.property]?.sn}</span>
                       </div>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
-                        <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:st.bg,color:st.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?st.lH:st.l}</span>
-                        <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pri.bg,color:pri.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?pri.lH:pri.l}</span>
-                        <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>{et.icon} {lang==="hi"?et.lH:et.l}</span>
-                        {b.guest_count>0&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>👥 {b.guest_count} guests</span>}
-                        {b.expected_cars>0&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>🚗 {b.expected_cars} cars</span>}
-                        {b.valets_needed>0&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:C.maroonSoft,color:C.maroon,fontFamily:F.b}}>👤 {b.valets_needed} valets</span>}
-                        {(b.shift_start||b.shift_end)&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>⏰ {fmtT(b.shift_start)}–{fmtT(b.shift_end)}</span>}
+                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:st.bg,color:st.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?st.lH:st.l}</span>
+                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:pri.bg,color:pri.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?pri.lH:pri.l}</span>
+                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>{et.icon} {lang==="hi"?et.lH:et.l}</span>
+                        {b.guest_count>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>👥 {b.guest_count} guests</span>}
+                        {b.expected_cars>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>🚗 {b.expected_cars} cars</span>}
+                        {b.valets_needed>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.maroonSoft,color:C.maroon,fontFamily:F.b}}>👤 {b.valets_needed} valets</span>}
+                        {(b.shift_start||b.shift_end)&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>⏰ {fmtT(b.shift_start)}–{fmtT(b.shift_end)}</span>}
                       </div>
                       {b.vendor_name&&(
-                        <div style={{fontSize:12,color:C.tl,fontFamily:F.b,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
+                        <div style={{fontSize:11,color:C.tl,fontFamily:F.b,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
                           <span>🏢 {b.vendor_name}</span>
                           {b.vendor_phone&&<a href={`tel:${b.vendor_phone}`} style={{color:C.blue,fontWeight:600,textDecoration:"none"}}>📞 {b.vendor_phone}</a>}
                         </div>
                       )}
                       {b.special_instructions&&(
-                        <div style={{background:"#FFFBF0",border:`1px solid ${C.accent}`,borderRadius:6,padding:"5px 8px",fontSize:11,color:C.accent,fontFamily:F.b,marginTop:3}}>
+                        <div style={{background:"#FFFBF0",border:`1px solid ${C.accent}`,borderRadius:6,padding:"5px 8px",fontSize:10,color:C.accent,fontFamily:F.b,marginTop:3}}>
                           📋 {b.special_instructions}
                         </div>
                       )}
                     </div>
                     <div style={{display:"flex",gap:4,flexShrink:0}}>
-                      <button onClick={()=>{setEB(b);setPD(null);setSF(true);}} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:12}}>✏️</button>
-                      <button onClick={()=>{if(window.confirm("Delete this booking?"))del(b.id);}} style={{padding:"5px 8px",borderRadius:6,border:"none",background:C.rBg,cursor:"pointer",fontSize:12,color:C.red}}>🗑️</button>
+                      <button onClick={()=>{setEB(b);setPD(null);setSF(true);}} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:11}}>✏️</button>
+                      <button onClick={()=>{if(window.confirm("Delete this booking?"))del(b.id);}} style={{padding:"5px 8px",borderRadius:6,border:"none",background:C.rBg,cursor:"pointer",fontSize:11,color:C.red}}>🗑️</button>
                     </div>
                   </div>
                 </div>
@@ -513,12 +517,12 @@ function CalendarView({user, lang}){
         {Object.entries(STATUS).map(([k,v])=>(
           <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
             <div style={{width:10,height:10,borderRadius:2,background:v.bg,border:`2px solid ${v.c}`}}/>
-            <span style={{fontSize:11,fontFamily:F.b,color:C.tl}}>{lang==="hi"?v.lH:v.l}</span>
+            <span style={{fontSize:10,fontFamily:F.b,color:C.tl}}>{lang==="hi"?v.lH:v.l}</span>
           </div>
         ))}
         <div style={{display:"flex",alignItems:"center",gap:4}}>
           <div style={{width:10,height:10,borderRadius:2,background:C.rBg,border:`2px solid ${C.red}`}}/>
-          <span style={{fontSize:11,fontFamily:F.b,color:C.tl}}>Critical / Luxury</span>
+          <span style={{fontSize:10,fontFamily:F.b,color:C.tl}}>Critical / Luxury</span>
         </div>
       </div>
     </div>
@@ -545,10 +549,10 @@ function RoleCard({roleKey,count,lang}){
   const meta=ROLE_META[roleKey];
   return(
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:C.white,borderRadius:10,border:`1px solid ${C.border}`,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-      <div style={{width:36,height:36,borderRadius:9,background:C.maroonSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{meta.icon}</div>
+      <div style={{width:36,height:36,borderRadius:9,background:C.maroonSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{meta.icon}</div>
       <div style={{flex:1}}>
-        <div style={{fontSize:11,color:C.tl,fontFamily:F.b,fontWeight:500}}>{lang==="hi"?meta.labelHi:meta.label}</div>
-        <div style={{fontSize:23,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1.1}}>{count}</div>
+        <div style={{fontSize:10,color:C.tl,fontFamily:F.b,fontWeight:500}}>{lang==="hi"?meta.labelHi:meta.label}</div>
+        <div style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1.1}}>{count}</div>
       </div>
     </div>
   );
@@ -573,15 +577,15 @@ function StaffCalculator({user, lang}){
 
   return(
     <div style={{maxWidth:680,margin:"0 auto"}}>
-      <div style={{fontSize:12,color:C.tl,fontFamily:F.b,marginBottom:16}}>{L?"स्टाफ की संख्या ऊपर की ओर गोल की गई है।":"Staff counts rounded up — always better to have more than less."}</div>
+      <div style={{fontSize:11,color:C.tl,fontFamily:F.b,marginBottom:16}}>{L?"स्टाफ की संख्या ऊपर की ओर गोल की गई है।":"Staff counts rounded up — always better to have more than less."}</div>
 
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {Object.entries(VENUE_CFG).map(([k,v])=>{
           const a=venue===k;
           return(
             <button key={k} onClick={()=>{setVenue(k);setPax(v.min+Math.round((v.max-v.min)*0.3/v.step)*v.step);}}
-              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:10,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:13,fontWeight:a?700:400,color:a?C.maroon:C.tl}}>
-              <span style={{fontSize:15}}>{v.icon}</span><span>{v.name}</span>
+              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:10,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:a?700:400,color:a?C.maroon:C.tl}}>
+              <span style={{fontSize:14}}>{v.icon}</span><span>{v.name}</span>
             </button>
           );
         })}
@@ -589,9 +593,9 @@ function StaffCalculator({user, lang}){
 
       <div style={{background:C.white,borderRadius:14,padding:"16px 18px 18px",border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:10}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.tl,fontFamily:F.b}}>{L?"अपेक्षित मेहमान":"Expected Guests (Pax)"}</div>
+          <div style={{fontSize:12,fontWeight:600,color:C.tl,fontFamily:F.b}}>{L?"अपेक्षित मेहमान":"Expected Guests (Pax)"}</div>
           <div style={{fontSize:30,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1,display:"flex",alignItems:"baseline",gap:4}}>
-            {clamped}<span style={{fontSize:12,color:C.tl,fontWeight:400}}>{L?"मेहमान":"guests"}</span>
+            {clamped}<span style={{fontSize:11,color:C.tl,fontWeight:400}}>{L?"मेहमान":"guests"}</span>
           </div>
         </div>
         <div style={{position:"relative",height:4,borderRadius:2,background:C.border,marginBottom:6}}>
@@ -604,80 +608,80 @@ function StaffCalculator({user, lang}){
           {data.map(d=><div key={d.pax} style={{fontSize:8,color:d.pax===clamped?C.maroon:C.tl,fontWeight:d.pax===clamped?700:400,fontFamily:F.b}}>{d.pax>=1000?"1K":d.pax}</div>)}
         </div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-          {data.map(d=><button key={d.pax} onClick={()=>setPax(d.pax)} style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,background:clamped===d.pax?C.maroon:C.bg,color:clamped===d.pax?C.white:C.tl}}>{d.pax}</button>)}
+          {data.map(d=><button key={d.pax} onClick={()=>setPax(d.pax)} style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,background:clamped===d.pax?C.maroon:C.bg,color:clamped===d.pax?C.white:C.tl}}>{d.pax}</button>)}
         </div>
       </div>
 
       <div style={{background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,borderRadius:14,padding:"16px 18px 14px",marginBottom:14,boxShadow:`0 4px 16px ${C.maroon}33`}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",fontFamily:F.b,fontWeight:600}}>{cfg.icon} {cfg.name} · {clamped} {L?"मेहमान":"guests"}</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:F.b,marginTop:2}}>{alloc.isExact?(L?"(सटीक)":"(exact)"):(L?"(अनुमानित)":"(interpolated)")}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontFamily:F.b,fontWeight:600}}>{cfg.icon} {cfg.name} · {clamped} {L?"मेहमान":"guests"}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:F.b,marginTop:2}}>{alloc.isExact?(L?"(सटीक)":"(exact)"):(L?"(अनुमानित)":"(interpolated)")}</div>
           </div>
           <div style={{textAlign:"right"}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontFamily:F.b}}>{L?"कुल वैलेट स्टाफ":"Total Valet Staff"}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",fontFamily:F.b}}>{L?"कुल वैलेट स्टाफ":"Total Valet Staff"}</div>
             <div style={{fontSize:48,fontWeight:700,fontFamily:F.d,color:"#fff",lineHeight:1}}>{total}</div>
           </div>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {active.map(r=>(
             <div key={r} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:7,background:"rgba(255,255,255,0.15)"}}>
-              <span style={{fontSize:13}}>{ROLE_META[r].icon}</span>
-              <span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:F.b}}>{alloc[r]} {L?ROLE_META[r].labelHi:ROLE_META[r].label}</span>
+              <span style={{fontSize:12}}>{ROLE_META[r].icon}</span>
+              <span style={{fontSize:11,fontWeight:700,color:"#fff",fontFamily:F.b}}>{alloc[r]} {L?ROLE_META[r].labelHi:ROLE_META[r].label}</span>
             </div>
           ))}
         </div>
       </div>
 
       {active.length>0&&<div style={{marginBottom:14}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"स्टाफ विवरण":"Staff Breakdown"}</div>
+        <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"स्टाफ विवरण":"Staff Breakdown"}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
           {active.map(r=><RoleCard key={r} roleKey={r} count={alloc[r]} lang={lang}/>)}
         </div>
       </div>}
 
       <div style={{background:C.white,borderRadius:14,padding:14,border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:10}}>🚘 {L?"कार अनुमान":"Car Estimate"}</div>
+        <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:10}}>🚘 {L?"कार अनुमान":"Car Estimate"}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
           {[{n:4,cars:Math.ceil(clamped/4),label:L?"4/कार (परिवार)":"4 per car (family)",bg:"#EBF5F0",c:C.green},{n:3,cars:Math.ceil(clamped/3),label:L?"3/कार (औसत)":"3 per car (avg)",bg:C.bBg,c:C.blue},{n:2,cars:Math.ceil(clamped/2),label:L?"2/कार (VIP)":"2 per car (VIP)",bg:C.maroonSoft,c:C.maroon}].map(x=>(
             <div key={x.n} style={{textAlign:"center",padding:"12px 6px",background:x.bg,borderRadius:10}}>
               <div style={{fontSize:26,fontWeight:700,fontFamily:F.d,color:x.c,lineHeight:1}}>{x.cars}</div>
-              <div style={{fontSize:10,color:x.c,fontFamily:F.b,fontWeight:600,marginTop:2}}>{L?"कारें":"cars"}</div>
-              <div style={{fontSize:10,color:C.tl,fontFamily:F.b,marginTop:4,lineHeight:1.3}}>{x.label}</div>
+              <div style={{fontSize:9,color:x.c,fontFamily:F.b,fontWeight:600,marginTop:2}}>{L?"कारें":"cars"}</div>
+              <div style={{fontSize:9,color:C.tl,fontFamily:F.b,marginTop:4,lineHeight:1.3}}>{x.label}</div>
             </div>
           ))}
         </div>
       </div>
 
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,marginBottom:14,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <button onClick={()=>setShowCost(!showCost)} style={{width:"100%",padding:"12px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",fontFamily:F.b,fontSize:14,fontWeight:600,color:C.maroon}}>
+        <button onClick={()=>setShowCost(!showCost)} style={{width:"100%",padding:"12px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",fontFamily:F.b,fontSize:13,fontWeight:600,color:C.maroon}}>
           <span>💰 {showCost?(L?"लागत छुपाएं":"Hide Cost"):(L?"लागत अनुमान":"Show Cost Estimate")}</span>
-          <span style={{fontSize:12,color:C.tl}}>{showCost?"▲":"▼"}</span>
+          <span style={{fontSize:11,color:C.tl}}>{showCost?"▲":"▼"}</span>
         </button>
         {showCost&&<div style={{padding:"0 16px 14px",borderTop:`1px solid ${C.border}`}}>
           <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
             {active.map(r=>(
               <div key={r} style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:15}}>{ROLE_META[r].icon}</span>
-                <span style={{flex:1,fontSize:13,fontFamily:F.b,fontWeight:500}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}<span style={{color:C.tl,fontWeight:400}}> × {alloc[r]}</span></span>
-                <div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:12,color:C.tl}}>₹</span><input type="number" min={0} step={100} value={rates[r]} onChange={e=>setRates(p=>({...p,[r]:Number(e.target.value)}))} style={{width:76,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,textAlign:"right",outline:"none"}}/></div>
-                <div style={{width:68,textAlign:"right",fontSize:13,fontWeight:700,color:C.maroon,fontFamily:F.b}}>₹{(alloc[r]*rates[r]).toLocaleString("en-IN")}</div>
+                <span style={{fontSize:14}}>{ROLE_META[r].icon}</span>
+                <span style={{flex:1,fontSize:12,fontFamily:F.b,fontWeight:500}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}<span style={{color:C.tl,fontWeight:400}}> × {alloc[r]}</span></span>
+                <div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:11,color:C.tl}}>₹</span><input type="number" min={0} step={100} value={rates[r]} onChange={e=>setRates(p=>({...p,[r]:Number(e.target.value)}))} style={{width:76,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,textAlign:"right",outline:"none"}}/></div>
+                <div style={{width:68,textAlign:"right",fontSize:12,fontWeight:700,color:C.maroon,fontFamily:F.b}}>₹{(alloc[r]*rates[r]).toLocaleString("en-IN")}</div>
               </div>
             ))}
           </div>
           <div style={{marginTop:10,padding:"10px 14px",borderRadius:10,background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:F.b}}>💰 {L?"कुल लागत":"Total Cost"}</span>
-            <span style={{fontSize:21,fontWeight:700,fontFamily:F.d,color:"#fff"}}>₹{totalCost.toLocaleString("en-IN")}</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F.b}}>💰 {L?"कुल लागत":"Total Cost"}</span>
+            <span style={{fontSize:20,fontWeight:700,fontFamily:F.d,color:"#fff"}}>₹{totalCost.toLocaleString("en-IN")}</span>
           </div>
         </div>}
       </div>
 
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:14,fontWeight:700,color:C.maroon}}>
           📋 {L?"पूरी संदर्भ तालिका":"Full Reference Table"} — {cfg.icon} {cfg.name}
         </div>
         <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:F.b,fontSize:12}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:F.b,fontSize:11}}>
             <thead>
               <tr style={{background:C.maroonSoft}}>
                 <th style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:C.maroon}}>{L?"पैक्स":"Pax"}</th>
@@ -704,7 +708,7 @@ function StaffCalculator({user, lang}){
             </tbody>
           </table>
         </div>
-        <div style={{padding:"6px 12px",fontSize:10,color:C.tl,fontFamily:F.b,borderTop:`1px solid ${C.border}`}}>
+        <div style={{padding:"6px 12px",fontSize:9,color:C.tl,fontFamily:F.b,borderTop:`1px solid ${C.border}`}}>
           👆 {L?"किसी पंक्ति पर टैप करें":"Tap any row to jump to that pax"}
         </div>
       </div>
@@ -723,11 +727,11 @@ export default function ValetPlanning({user, lang}){
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-        <h1 style={{fontFamily:F.d,fontSize:23,fontWeight:700,color:C.maroon,margin:0}}>🚗 {lang==="hi"?"वैलेट प्लानिंग":"Valet Planning"}</h1>
+        <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>🚗 {lang==="hi"?"वैलेट प्लानिंग":"Valet Planning"}</h1>
         <div style={{display:"flex",background:C.maroonSoft,borderRadius:10,padding:3,gap:2}}>
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
-              style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:13,fontWeight:600,background:tab===t.id?C.maroon:"transparent",color:tab===t.id?C.white:C.maroon}}>
+              style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:600,background:tab===t.id?C.maroon:"transparent",color:tab===t.id?C.white:C.maroon}}>
               {t.i} {lang==="hi"?t.lH:t.l}
             </button>
           ))}
