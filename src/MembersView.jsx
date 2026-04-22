@@ -44,7 +44,7 @@ function EditMemberModal({ member, onSave, onClose, L }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Member</div>
+        <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Member</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Full Name</label>
@@ -111,7 +111,7 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize:12, fontWeight: 700, textDecoration: isActive ? "none" : "line-through" }}>
           {member.n}
-          {member.isCustom && <span style={{ marginLeft: 5, fontSize:8, color: C.blue, fontWeight: 600 }}>NEW</span>}
+          {member.isCustom && <span style={{ marginLeft: 5, fontSize:9, color: C.blue, fontWeight: 600 }}>NEW</span>}
         </div>
         <div style={{ fontSize:9, color: C.tl }}>
           {member.deptIcon} {member.deptName}
@@ -361,7 +361,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
           if (filtered.length === 0) return null;
           return (
             <div key={pk} style={{ background: C.white, borderRadius: 12, padding: 14, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-              <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
+              <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
                 {prop.icon} {prop.sn}
                 <span style={{ fontSize:12, fontWeight: 400, color: C.tl, marginLeft: 6 }}>
                   ({filtered.length} {tab === "active" ? "active" : "past"})

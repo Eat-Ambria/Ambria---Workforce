@@ -162,7 +162,7 @@ function VideoForm({init,onSave,onCancel,lang}){
 
   return(
     <div style={{background:C.white,borderRadius:12,padding:14,border:`2px solid ${C.maroon}`,marginBottom:14}}>
-      <div style={{fontFamily:F.d,fontSize:14,fontWeight:700,color:C.maroon,marginBottom:10}}>
+      <div style={{fontFamily:F.d,fontSize:13,fontWeight:700,color:C.maroon,marginBottom:10}}>
         {init?.id?"✏️ Edit Video":"➕ Add Training Video"}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -360,7 +360,7 @@ export default function TrainingView({user,prop,lang}){
         {!loading&&<div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,padding:"10px 14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
             <span style={{fontSize:11,fontWeight:600,color:C.text}}>{user.name} — {H?"ट्रेनिंग प्रगति":"Training Progress"}</span>
-            <span style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:myPct===100?C.green:C.maroon}}>{totalWatched}/{myDeptVideos.length} ({myPct}%)</span>
+            <span style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:myPct===100?C.green:C.maroon}}>{totalWatched}/{myDeptVideos.length} ({myPct}%)</span>
           </div>
           <div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${myPct}%`,background:myPct===100?C.green:C.maroon,borderRadius:3,transition:"width 0.5s"}}/>
@@ -421,13 +421,13 @@ export default function TrainingView({user,prop,lang}){
                         onError={e=>{e.target.style.display="none";}}/>
                     :<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5}}>
                        <span style={{fontSize:26}}>{dm.icon}</span>
-                       <span style={{fontSize:8,color:C.tl,fontFamily:F.b,textAlign:"center",padding:"0 6px"}}>{H?"वीडियो नहीं जोड़ा":"No video linked"}</span>
+                       <span style={{fontSize:9,color:C.tl,fontFamily:F.b,textAlign:"center",padding:"0 6px"}}>{H?"वीडियो नहीं जोड़ा":"No video linked"}</span>
                      </div>
                   }
                   {/* Play button overlay */}
                   {canPlay&&!watched&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.15)"}}>
                     <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,0.92)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>
-                      <span style={{fontSize:14,marginLeft:3,color:C.maroon}}>▶</span>
+                      <span style={{fontSize:13,marginLeft:3,color:C.maroon}}>▶</span>
                     </div>
                   </div>}
                   {/* Watched checkmark */}
@@ -436,7 +436,7 @@ export default function TrainingView({user,prop,lang}){
                   </div>}
                   {/* Dept badge */}
                   <div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,0.5)",borderRadius:4,padding:"1px 5px"}}>
-                    <span style={{color:"#fff",fontSize:8,fontFamily:F.b}}>{dm.icon}</span>
+                    <span style={{color:"#fff",fontSize:9,fontFamily:F.b}}>{dm.icon}</span>
                   </div>
                 </div>
                 {/* Title row */}
@@ -479,7 +479,7 @@ export default function TrainingView({user,prop,lang}){
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:barC}}>{m.pct}%</div>
-                      <div style={{fontSize:8,color:C.tl}}>{m.watched}/{m.total}</div>
+                      <div style={{fontSize:9,color:C.tl}}>{m.watched}/{m.total}</div>
                     </div>
                   </div>
                   <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}>

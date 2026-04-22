@@ -142,7 +142,7 @@ function LoginScreen({onLogin,lang,setLang}){
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:11,cursor:"pointer",fontWeight:600,color:C.maroon}}>{lang==="en"?"हिंदी":"English"}</button></div>
-      <div style={{textAlign:"center",marginBottom:28}}><div style={{width:60,height:60,borderRadius:"50%",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:F.d,color:C.white,fontSize:30,fontWeight:700,marginBottom:10}}>A</div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 4px",lineHeight:1.2}}>Ambria Work Force</h1></div>
+      <div style={{textAlign:"center",marginBottom:28}}><div style={{width:60,height:60,borderRadius:"50%",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:F.d,color:C.white,fontSize:30,fontWeight:700,marginBottom:10}}>A</div><h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:"0 0 4px",lineHeight:1.2}}>Ambria Work Force</h1></div>
       <div style={{marginBottom:14}}><label style={{fontSize:12,fontWeight:600,marginBottom:5,display:"block"}}>{L.username}</label><input type="text" value={u} onChange={e=>sU(e.target.value)} placeholder={L.enterUser} onKeyDown={e=>{if(e.key==="Enter")go();}} style={{width:"100%",padding:"12px 16px",borderRadius:10,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:14,outline:"none",boxSizing:"border-box",background:C.bg}}/></div>
       <div style={{marginBottom:12}}><label style={{fontSize:12,fontWeight:600,marginBottom:5,display:"block"}}>{L.password}</label><div style={{position:"relative"}}><input type={sh?"text":"password"} value={p} onChange={e=>sP(e.target.value)} placeholder={L.enterPass} onKeyDown={e=>{if(e.key==="Enter")go();}} style={{width:"100%",padding:"12px 16px",paddingRight:44,borderRadius:10,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:14,outline:"none",boxSizing:"border-box",background:C.bg}}/><button onClick={()=>sSh(!sh)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",cursor:"pointer",fontSize:16}}>{sh?"🙈":"👁️"}</button></div></div>
       <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,cursor:"pointer",fontSize:12,color:C.tl}}><div onClick={()=>setRem(!rem)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${rem?C.maroon:C.border}`,background:rem?C.maroon:C.white,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{rem&&<span style={{color:C.white,fontSize:11,fontWeight:700}}>✓</span>}</div>{lang==="hi"?"पासवर्ड याद रखें":"Remember me"}</label>
@@ -158,7 +158,7 @@ function PhotoUp({photos,onUp,onRetake,disabled,L}){
   const has=photos?.length>0;
   return(<div>
     {!has?(<div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={()=>ref.current?.click()} disabled={disabled} style={{padding:"10px 16px",borderRadius:10,border:`2px dashed ${!disabled?C.accent:C.border}`,background:!disabled?"#FFF7ED":C.bg,cursor:disabled?"default":"pointer",fontFamily:F.b,fontSize:12,fontWeight:700,color:!disabled?C.accent:C.tl,opacity:disabled?0.5:1}}>📸 {L.uploadPhoto}</button>{!disabled&&<span style={{fontSize:10,color:C.red,fontWeight:600}}>⚠️ {L.photoNeeded}</span>}</div>)
-    :(<div><div style={{display:"inline-flex",flexDirection:"column",borderRadius:12,overflow:"hidden",border:`2px solid ${C.green}`}}><img src={photos[0].data} alt="" style={{width:120,height:120,objectFit:"cover"}}/><div style={{background:"rgba(0,0,0,0.75)",color:C.white,padding:"4px 8px",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:9}}>📸 {photos[0].time}</span><span style={{fontSize:8}}>{photos[0].date}</span></div></div>
+    :(<div><div style={{display:"inline-flex",flexDirection:"column",borderRadius:12,overflow:"hidden",border:`2px solid ${C.green}`}}><img src={photos[0].data} alt="" style={{width:120,height:120,objectFit:"cover"}}/><div style={{background:"rgba(0,0,0,0.75)",color:C.white,padding:"4px 8px",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:9}}>📸 {photos[0].time}</span><span style={{fontSize:9}}>{photos[0].date}</span></div></div>
       {!disabled&&<div style={{marginTop:8}}><button onClick={()=>{onRetake();setTimeout(()=>ref.current?.click(),100);}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${C.yellow}`,background:C.yBg,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:700,color:C.yellow}}>🔄 {L.retakePhoto}</button></div>}</div>)}
     <input ref={ref} type="file" accept="image/*" capture="environment" onChange={hndl} style={{display:"none"}}/>
   </div>);
@@ -267,12 +267,12 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
     </div>
     <div style={{padding:"8px 6px",borderTop:`1px solid ${C.border}`}}>
       <button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{width:"100%",padding:"5px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:10,cursor:"pointer",fontWeight:600,color:C.maroon,marginBottom:5}}>🌐 {lang==="en"?L.hi:L.en}</button>
-      <div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",background:C.bg,borderRadius:8,marginBottom:5}}><div style={{width:24,height:24,borderRadius:"50%",background:C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:10}}>{u.name[0]}</div><div><div style={{fontSize:10,fontWeight:600}}>{u.name}</div><div style={{fontSize:8,color:C.tl}}>{rL[u.role]}</div></div></div>
+      <div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",background:C.bg,borderRadius:8,marginBottom:5}}><div style={{width:24,height:24,borderRadius:"50%",background:C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:10}}>{u.name[0]}</div><div><div style={{fontSize:10,fontWeight:600}}>{u.name}</div><div style={{fontSize:9,color:C.tl}}>{rL[u.role]}</div></div></div>
       <button onClick={onLogout} style={{width:"100%",padding:"6px",borderRadius:8,border:`1px solid ${C.red}`,background:C.rBg,color:C.red,fontFamily:F.b,fontSize:10,fontWeight:600,cursor:"pointer"}}>🚪 {L.logout}</button>
     </div></div>);
 }
 
-function NPanel({ns,onClose,onClr,L,onClickNotif}){return(<div style={{position:"fixed",top:0,right:0,width:320,height:"100vh",background:C.white,boxShadow:"-4px 0 20px rgba(0,0,0,0.1)",zIndex:100,display:"flex",flexDirection:"column"}}><div style={{padding:"12px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between"}}><span style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>🔔 {L.notif}</span><div style={{display:"flex",gap:4}}><Btn2 small onClick={onClr}>{L.clearAll}</Btn2><button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:14}}>✕</button></div></div>
+function NPanel({ns,onClose,onClr,L,onClickNotif}){return(<div style={{position:"fixed",top:0,right:0,width:320,height:"100vh",background:C.white,boxShadow:"-4px 0 20px rgba(0,0,0,0.1)",zIndex:100,display:"flex",flexDirection:"column"}}><div style={{padding:"12px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between"}}><span style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>🔔 {L.notif}</span><div style={{display:"flex",gap:4}}><Btn2 small onClick={onClr}>{L.clearAll}</Btn2><button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:12}}>✕</button></div></div>
   <div style={{flex:1,overflowY:"auto",padding:8}}>{ns.length===0?<div style={{textAlign:"center",padding:24,color:C.tl,fontSize:11}}>{L.noNotif}</div>:ns.map((n,i)=>{
     const isApproval=n.type==="approval";const bgC=isApproval?"#FFF7ED":n.type==="issue"?C.rBg:C.gBg;const txC=isApproval?C.accent:n.type==="issue"?C.red:C.green;
     return(<div key={i} onClick={()=>{if(isApproval&&onClickNotif){onClickNotif(n);onClose();}}} style={{padding:10,borderRadius:8,background:bgC,marginBottom:5,cursor:isApproval?"pointer":"default",border:isApproval?`2px solid ${C.accent}`:"none"}}>
@@ -310,19 +310,19 @@ function AttView({user:u,att,setAtt,prop,L}){
     if(present){if(ex){await supabase.from("attendance").update({user_name:name,check_in:"present"}).eq("user_id",slot.id).eq("date",tk);setAtt(p=>p.map(a=>a.uid===slot.id&&a.date===tk?{...a,name,ci:"present"}:a));}else{const{error}=await supabase.from("attendance").insert({user_id:slot.id,user_name:name,date:tk,check_in:"present"});if(!error)setAtt(p=>[...p,{uid:slot.id,name,date:tk,ci:"present",co:null,ciPhoto:null,coPhoto:null}]);}}
     else{await supabase.from("attendance").delete().eq("user_id",slot.id).eq("date",tk);setAtt(p=>p.filter(a=>!(a.uid===slot.id&&a.date===tk)));}
   };
-  return(<div><h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:"0 0 12px"}}>🕐 {L.attendance} - {prop.sn}</h1>
+  return(<div><h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:"0 0 12px"}}>🕐 {L.attendance} - {prop.sn}</h1>
     <input ref={attRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{display:"none"}}/>
     {(u.role==="e"||u.role==="a")&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:16}}><div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{L.today} - {tk}</div>
       {!mr?<Btn2 primary onClick={doCheckIn}>📸📍 {L.checkIn} (Photo)</Btn2>
       :!mr.co?<div style={{display:"flex",gap:8,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>✅ {mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>}<Btn2 onClick={doCheckIn} style={{background:C.yBg,color:C.yellow}}>📸🚪 {L.checkOut}</Btn2></div>
       :<div style={{display:"flex",gap:6,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>In:{mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:28,height:28,borderRadius:4,objectFit:"cover"}}/>}<Bdg color={C.blue} bg={C.bBg}>Out:{mr.co}</Bdg>{mr.coPhoto&&<img src={mr.coPhoto} alt="" style={{width:28,height:28,borderRadius:4,objectFit:"cover"}}/>}</div>}</div>}
-    {isA&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:12}}><h3 style={{fontFamily:F.d,fontSize:14,margin:"0 0 10px",color:C.maroon}}>{tk}</h3>{allM.map(m=>{const r=att.find(a=>a.uid===m.id&&a.date===tk);return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:r?C.gBg:C.bg,borderRadius:8,marginBottom:4}}>
+    {isA&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:12}}><h3 style={{fontFamily:F.d,fontSize:13,margin:"0 0 10px",color:C.maroon}}>{tk}</h3>{allM.map(m=>{const r=att.find(a=>a.uid===m.id&&a.date===tk);return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:r?C.gBg:C.bg,borderRadius:8,marginBottom:4}}>
       <div style={{width:24,height:24,borderRadius:"50%",background:m.dc||C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:9,fontWeight:700}}>{m.n[0]}</div>
       <div style={{flex:1}}><div style={{fontSize:11,fontWeight:600}}>{m.n}</div></div>
       {r?<div style={{display:"flex",gap:3,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>{r.ci}</Bdg>{r.ciPhoto&&<img src={r.ciPhoto} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover"}}/>}{r.co?<><Bdg color={C.blue} bg={C.bBg}>{r.co}</Bdg>{r.coPhoto&&<img src={r.coPhoto} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover"}}/>}</>:<Bdg color={C.yellow} bg={C.yBg}>Working</Bdg>}</div>:<Bdg color={C.red} bg={C.rBg}>{L.notCheckedIn}</Bdg>}
     </div>);})}</div>}
     {isA&&tpSlots.length>0&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.purple}`}}>
-      <h3 style={{fontFamily:F.d,fontSize:14,margin:"0 0 12px",color:C.purple}}>🛡️ 3rd Party Guards</h3>
+      <h3 style={{fontFamily:F.d,fontSize:13,margin:"0 0 12px",color:C.purple}}>🛡️ 3rd Party Guards</h3>
       {tpSlots.map(slot=>{const rec=att.find(a=>a.uid===slot.id&&a.date===tk);const isP=!!rec?.ci;return(<div key={slot.id} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",background:isP?C.gBg:C.bg,borderRadius:8,marginBottom:6}}>
         <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,fontWeight:700,background:slot.shift==="day"?"#FFF7ED":"#EDE9FE",color:slot.shift==="day"?C.accent:C.purple,flexShrink:0,whiteSpace:"nowrap"}}>{slot.shift==="day"?"🌅 Day":"🌙 Night"}</span>
         <div style={{flex:1,minWidth:0}}>
@@ -354,7 +354,7 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:6}}>
-      <h1 style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,margin:0}}>{vt==="mytasks"?L.myTasks:"Daily Tasks"} - {prop.sn}</h1>
+      <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>{vt==="mytasks"?L.myTasks:"Daily Tasks"} - {prop.sn}</h1>
       <div style={{display:"flex",gap:5}}>
         {<div style={{display:"flex",gap:2,background:C.maroonSoft,borderRadius:8,padding:2}}>{cO.map(v=><button key={v} onClick={()=>setCV(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,background:cv===v?C.maroon:"transparent",color:cv===v?C.white:C.maroon}}>{cL[v]}</button>)}</div>}
         {isA&&<Btn2 primary small onClick={()=>setSA(!sa)}>➕ {L.addTask}</Btn2>}
@@ -362,17 +362,17 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
     </div>
     {vt==="mytasks"&&!isA&&<div style={{background:C.white,borderRadius:12,padding:12,border:`1px solid ${C.border}`,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
       <div style={{width:40,height:40,borderRadius:"50%",background:C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontFamily:F.d,fontSize:18,fontWeight:700}}>{u.name[0]}</div>
-      <div style={{flex:1}}><div style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon}}>{u.name}</div></div>
-      <div style={{fontFamily:F.d,fontSize:24,fontWeight:700,color:C.maroon}}>{myPc}%</div>
+      <div style={{flex:1}}><div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>{u.name}</div></div>
+      <div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon}}>{myPc}%</div>
     </div>}
     {vt==="mytasks"&&!isA&&<div style={{background:C.maroonSoft,borderRadius:8,padding:"7px 12px",marginBottom:10,fontSize:11}}>{L.steps}</div>}
     <Modal isOpen={sa&&isA} onClose={()=>setSA(false)} title={L.addTask} size="lg">
       <AddTF prop={prop} onAdd={(t)=>setTasks(prev=>[...prev,t])} onClose={()=>setSA(false)} L={L}/>
     </Modal>
     {vt==="tasks"&&<div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}><Sel2 value={fD} onChange={sFD} options={[{v:"all",l:"All"},...Object.entries(prop?.depts||{}).map(([k,d])=>({v:k,l:`${d.i} ${d.n}`}))]}/><Sel2 value={fS} onChange={sFS} options={[{v:"all",l:"All"},{v:"pending",l:"⏳"},{v:"completed",l:"✅"},{v:"issue",l:"⚠️"}]}/><Sel2 value={fC} onChange={sFC} options={[{v:"all",l:"All"},{v:"daily",l:L.daily},{v:"weekly",l:L.weekly},{v:"monthly",l:L.monthly}]}/></div>}
-    {cO.filter(c=>gr[c]).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8}}><span style={{width:4,height:12,borderRadius:2,background:cC[cat]}}/><h3 style={{fontFamily:F.d,fontSize:14,fontWeight:700,margin:0}}>{cL[cat]}</h3><Bdg color={cC[cat]} bg={`${cC[cat]}15`}>{gr[cat].length}</Bdg></div>
+    {cO.filter(c=>gr[c]).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8}}><span style={{width:4,height:12,borderRadius:2,background:cC[cat]}}/><h3 style={{fontFamily:F.d,fontSize:13,fontWeight:700,margin:0}}>{cL[cat]}</h3><Bdg color={cC[cat]} bg={`${cC[cat]}15`}>{gr[cat].length}</Bdg></div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>{gr[cat].map(task=><TC key={task.id} task={task} uTask={uT} delTask={isA?dT:null} depts={prop?.depts||{}} areas={prop?.areas||[]} user={u} allM={allM} L={L} lang={lang}/>)}</div></div>))}
-    {fl.length===0&&<div style={{background:C.white,borderRadius:12,padding:24,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:24}}>🎉</div><div style={{fontFamily:F.d,fontSize:14,fontWeight:700,marginTop:4}}>{L.noTasks}</div></div>}
+    {fl.length===0&&<div style={{background:C.white,borderRadius:12,padding:24,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:22}}>🎉</div><div style={{fontFamily:F.d,fontSize:13,fontWeight:700,marginTop:4}}>{L.noTasks}</div></div>}
   </div>);
 }
 
@@ -461,7 +461,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
 
     {/* TASK GRID */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
-      {filteredDirs.length===0&&<div style={{gridColumn:"1/-1",background:C.white,borderRadius:12,padding:30,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:24}}>📝</div><div style={{fontFamily:F.d,fontSize:14,fontWeight:700,marginTop:4}}>{L.noDirectives}</div></div>}
+      {filteredDirs.length===0&&<div style={{gridColumn:"1/-1",background:C.white,borderRadius:12,padding:30,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:22}}>📝</div><div style={{fontFamily:F.d,fontSize:13,fontWeight:700,marginTop:4}}>{L.noDirectives}</div></div>}
       {filteredDirs.map(dir=><ATCard key={dir.id} dir={dir} user={u} setDirs={setDirs} L={L} setNs={setNs}/>)}
     </div>
   </div>);
@@ -621,7 +621,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
           const rBg=r.type==="approved"?C.gBg:r.type==="rejected"?C.rBg:r.type==="approval_requested"||r.type==="approval_req"?"#FFF7ED":r.type==="completed"?C.gBg:C.bg;
           const rC2=r.type==="approved"?C.green:r.type==="rejected"?C.red:r.type==="approval_requested"||r.type==="approval_req"?C.accent:r.type==="completed"?C.green:C.blue;
           return(<div key={r.id||i} style={{display:"flex",gap:6,marginBottom:6,padding:8,background:rBg,borderRadius:8}}>
-            <div style={{width:22,height:22,borderRadius:"50%",background:rC2,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:8,fontWeight:700,flexShrink:0}}>{r.by[0]}</div>
+            <div style={{width:22,height:22,borderRadius:"50%",background:rC2,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:9,fontWeight:700,flexShrink:0}}>{r.by[0]}</div>
             <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600}}>{r.by} <span style={{fontWeight:400,color:C.tl}}>{r.time}</span></div>
               {r.text&&<div style={{fontSize:11,marginTop:2}}>{r.text}</div>}
               {r.photo&&<img src={r.photo} alt="" style={{width:70,height:70,borderRadius:6,objectFit:"cover",marginTop:4}}/>}
@@ -695,7 +695,7 @@ function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L}
     {showMore&&<div style={{position:"fixed",bottom:60,left:0,right:0,background:C.white,borderTop:`1px solid ${C.border}`,zIndex:98,padding:"8px 8px 4px",boxShadow:"0 -4px 16px rgba(0,0,0,0.12)"}}>
       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         {more.map(n=><button key={n.id} onClick={()=>{setView(n.id);setShowMore(false);}} style={{flex:"1 1 auto",minWidth:100,padding:"10px 8px",display:"flex",alignItems:"center",gap:8,border:"none",background:view===n.id?C.maroonSoft:"transparent",cursor:"pointer",borderRadius:10,color:view===n.id?C.maroon:C.text,fontFamily:F.b,fontSize:13,fontWeight:view===n.id?700:400}}>
-          <span style={{fontSize:20}}>{n.i}</span><span>{n.l}</span>
+          <span style={{fontSize:22}}>{n.i}</span><span>{n.l}</span>
           {n.badge>0&&<span style={{background:C.red,color:C.white,borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:700,marginLeft:"auto"}}>{n.badge}</span>}
         </button>)}
       </div>
@@ -814,7 +814,7 @@ export default function App(){
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
-    {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon,lineHeight:1.2}}>Ambria Work Force</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
+    {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,lineHeight:1.2}}>Ambria Work Force</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
     <div className="desktop-sidebar"><Sidebar view={view} setView={sV} user={user} effectiveUser={eU} onLogout={onLogout} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allDbUsers={allDbUsers} dirs={dirs} aP={aP}/></div>
     {isMobile&&<BottomNav nav={navForBottom} view={view} setView={sV} onLogout={onLogout} user={user} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L}/>}
     {sN&&<NPanel ns={ns} onClose={()=>{setSN(false);if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>setNs([]));else setNs([]);}}} onClr={()=>{if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>{setNs([]);setSN(false);});else{setNs([]);setSN(false);}}else setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}

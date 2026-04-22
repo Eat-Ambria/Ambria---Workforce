@@ -81,7 +81,7 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360 }}>
-        <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 4 }}>✏️ Edit Shift</div>
+        <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 4 }}>✏️ Edit Shift</div>
         <div style={{ fontSize:11, color: C.tl, marginBottom: 14 }}>{member.n} · {date}</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
@@ -155,7 +155,7 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360 }}>
-        <div style={{ fontFamily: F.d, fontSize:16, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Guard Shift — {entry.label}</div>
+        <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>✏️ Edit Guard Shift — {entry.label}</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Guard / Staff</label>

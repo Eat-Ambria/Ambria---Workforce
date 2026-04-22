@@ -395,7 +395,7 @@ function CalendarView({user, lang}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={prevM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-          <span style={{fontFamily:F.d,fontSize:16,fontWeight:700,color:C.maroon,minWidth:150,textAlign:"center"}}>{mns[mo]} {yr}</span>
+          <span style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,minWidth:150,textAlign:"center"}}>{mns[mo]} {yr}</span>
           <button onClick={nextM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
         </div>
         <button onClick={()=>{setPD(null);setEB(null);setSF(true);}}
@@ -438,7 +438,7 @@ function CalendarView({user, lang}){
                   {dayBks.slice(0,2).map(b=>{
                     const cs=chipStyle(b);
                     return(
-                      <div key={b.id} style={{fontSize:8,fontFamily:F.b,fontWeight:600,padding:"1px 3px",borderRadius:3,background:cs.bg,color:cs.c,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
+                      <div key={b.id} style={{fontSize:9,fontFamily:F.b,fontWeight:600,padding:"1px 3px",borderRadius:3,background:cs.bg,color:cs.c,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
                         {EVENT_TYPES[b.event_type]?.icon||PROPS[b.property]?.icon}{b.event_name?" "+b.event_name.slice(0,7):""}
                       </div>
                     );
@@ -585,7 +585,7 @@ function StaffCalculator({user, lang}){
           return(
             <button key={k} onClick={()=>{setVenue(k);setPax(v.min+Math.round((v.max-v.min)*0.3/v.step)*v.step);}}
               style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:10,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:a?700:400,color:a?C.maroon:C.tl}}>
-              <span style={{fontSize:14}}>{v.icon}</span><span>{v.name}</span>
+              <span style={{fontSize:13}}>{v.icon}</span><span>{v.name}</span>
             </button>
           );
         })}
@@ -594,7 +594,7 @@ function StaffCalculator({user, lang}){
       <div style={{background:C.white,borderRadius:14,padding:"16px 18px 18px",border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:600,color:C.tl,fontFamily:F.b}}>{L?"अपेक्षित मेहमान":"Expected Guests (Pax)"}</div>
-          <div style={{fontSize:30,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1,display:"flex",alignItems:"baseline",gap:4}}>
+          <div style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1,display:"flex",alignItems:"baseline",gap:4}}>
             {clamped}<span style={{fontSize:11,color:C.tl,fontWeight:400}}>{L?"मेहमान":"guests"}</span>
           </div>
         </div>
@@ -605,7 +605,7 @@ function StaffCalculator({user, lang}){
           style={{width:"100%",margin:"0 0 4px",WebkitAppearance:"none",appearance:"none",height:20,background:"transparent",cursor:"pointer",outline:"none"}}/>
         <style>{`input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;box-shadow:0 2px 6px ${C.maroon}44;margin-top:-9px;}input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;border:none;}input[type=range]::-webkit-slider-runnable-track{height:4px;background:transparent;}input[type=range]::-moz-range-track{height:4px;background:transparent;}`}</style>
         <div style={{display:"flex",justifyContent:"space-between",marginTop:2,marginBottom:10}}>
-          {data.map(d=><div key={d.pax} style={{fontSize:8,color:d.pax===clamped?C.maroon:C.tl,fontWeight:d.pax===clamped?700:400,fontFamily:F.b}}>{d.pax>=1000?"1K":d.pax}</div>)}
+          {data.map(d=><div key={d.pax} style={{fontSize:9,color:d.pax===clamped?C.maroon:C.tl,fontWeight:d.pax===clamped?700:400,fontFamily:F.b}}>{d.pax>=1000?"1K":d.pax}</div>)}
         </div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
           {data.map(d=><button key={d.pax} onClick={()=>setPax(d.pax)} style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,background:clamped===d.pax?C.maroon:C.bg,color:clamped===d.pax?C.white:C.tl}}>{d.pax}</button>)}
@@ -662,7 +662,7 @@ function StaffCalculator({user, lang}){
           <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
             {active.map(r=>(
               <div key={r} style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:14}}>{ROLE_META[r].icon}</span>
+                <span style={{fontSize:13}}>{ROLE_META[r].icon}</span>
                 <span style={{flex:1,fontSize:12,fontFamily:F.b,fontWeight:500}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}<span style={{color:C.tl,fontWeight:400}}> × {alloc[r]}</span></span>
                 <div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:11,color:C.tl}}>₹</span><input type="number" min={0} step={100} value={rates[r]} onChange={e=>setRates(p=>({...p,[r]:Number(e.target.value)}))} style={{width:76,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,textAlign:"right",outline:"none"}}/></div>
                 <div style={{width:68,textAlign:"right",fontSize:12,fontWeight:700,color:C.maroon,fontFamily:F.b}}>₹{(alloc[r]*rates[r]).toLocaleString("en-IN")}</div>
@@ -671,13 +671,13 @@ function StaffCalculator({user, lang}){
           </div>
           <div style={{marginTop:10,padding:"10px 14px",borderRadius:10,background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F.b}}>💰 {L?"कुल लागत":"Total Cost"}</span>
-            <span style={{fontSize:20,fontWeight:700,fontFamily:F.d,color:"#fff"}}>₹{totalCost.toLocaleString("en-IN")}</span>
+            <span style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:"#fff"}}>₹{totalCost.toLocaleString("en-IN")}</span>
           </div>
         </div>}
       </div>
 
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:14,fontWeight:700,color:C.maroon}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:13,fontWeight:700,color:C.maroon}}>
           📋 {L?"पूरी संदर्भ तालिका":"Full Reference Table"} — {cfg.icon} {cfg.name}
         </div>
         <div style={{overflowX:"auto"}}>
@@ -687,7 +687,7 @@ function StaffCalculator({user, lang}){
                 <th style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:C.maroon}}>{L?"पैक्स":"Pax"}</th>
                 {["keyMan","driver","guard","rider","gunMan","bouncer"].map(r=>(
                   <th key={r} style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>
-                    {ROLE_META[r].icon}<div style={{fontSize:8,fontWeight:500,color:C.tl}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}</div>
+                    {ROLE_META[r].icon}<div style={{fontSize:9,fontWeight:500,color:C.tl}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}</div>
                   </th>
                 ))}
                 <th style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>{L?"कुल":"Total"}</th>

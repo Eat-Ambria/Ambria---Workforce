@@ -176,7 +176,7 @@ export default function ChemicalGuide({ lang }) {
         <div>
           {/* ── Property Selector ── */}
           <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
+            <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
               🏛️ {L.selectPropertyCalc}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
@@ -213,11 +213,11 @@ export default function ChemicalGuide({ lang }) {
           {/* ── Monthly totals ── */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
             <div style={{ background: C.bBg, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.blue}30` }}>
-              <div style={{ fontFamily: F.d, fontSize:24, fontWeight: 700, color: C.blue }}>{totalLitres} L</div>
+              <div style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.blue }}>{totalLitres} L</div>
               <div style={{ fontSize:10, color: C.blue, fontWeight: 600 }}>Total Liquid Chemicals / Month</div>
             </div>
             <div style={{ background: C.gBg, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.green}30` }}>
-              <div style={{ fontFamily: F.d, fontSize:24, fontWeight: 700, color: C.green }}>{totalKg} kg</div>
+              <div style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.green }}>{totalKg} kg</div>
               <div style={{ fontSize:10, color: C.green, fontWeight: 600 }}>Total Dry / Solid Chemicals / Month</div>
             </div>
           </div>

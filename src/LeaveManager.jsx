@@ -244,8 +244,8 @@ export default function LeaveManager({ prop, user, lang }) {
         <div style={{ textAlign: "center", padding: 24, color: C.tl, fontSize:12 }}>Loading...</div>
       ) : displayed.length === 0 ? (
         <div style={{ background: C.white, borderRadius: 12, padding: 24, textAlign: "center", border: `1px solid ${C.border}` }}>
-          <div style={{ fontSize:28 }}>🏖️</div>
-          <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, marginTop: 4, color: C.tl }}>{L.noLeaves}</div>
+          <div style={{ fontSize:22 }}>🏖️</div>
+          <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, marginTop: 4, color: C.tl }}>{L.noLeaves}</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

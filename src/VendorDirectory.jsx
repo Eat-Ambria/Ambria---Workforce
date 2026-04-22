@@ -1,36 +1,143 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 
 // ─── CATEGORY CONFIG ──────────────────────────────────────────────────────────
-const CATEGORIES = [
-  "Electrician","Plumber","Carpenter","Painter","Pest Control",
-  "AC/HVAC","Generator/DG","CCTV/Security","Catering","Tent/Pandal",
-  "Florist","DJ/Sound","Lighting","Valet","Cleaning Supplies",
-  "Laundry","Water Tanker","Gardening","Other",
+const CAT_GROUPS = [
+  { label: "Maintenance & Repairs", items: [
+    "Carpenter","Electrician","False Ceiling","Glass & Aluminium Work",
+    "Mason / Civil Work","Painter","Plumber","Tile & Marble Work",
+    "Waterproofing","Welder / Fabrication",
+  ]},
+  { label: "MEP (Mechanical, Electrical, Plumbing)", items: [
+    "AC / HVAC","Borewell","Electrical Panel / Transformer",
+    "Elevator / Lift","Fire Fighting System","Generator / DG Set",
+    "Solar Panel","STP / WTP Plant","UPS / Inverter / Battery","Water Pump & Motor",
+  ]},
+  { label: "Security & Surveillance", items: [
+    "Access Control / Biometric","Boom Barrier / Bollards","CCTV / Security Systems",
+    "Fire Alarm System","Security Guard Agency",
+  ]},
+  { label: "Event & Hospitality", items: [
+    "Anchor / Emcee","Band / Music","Catering","Crockery & Cutlery Rental",
+    "DJ / Sound System","Fireworks / Pyrotechnics","Florist / Decoration",
+    "Furniture Rental","Lighting & LED","Photography / Videography",
+    "Portable Toilet / Washroom","Stage & Backdrop","Tent / Pandal / Shamiyana",
+    "Valet Parking Service",
+  ]},
+  { label: "Cleaning & Hygiene", items: [
+    "Cleaning Supplies (Kleanfix etc)","Deep Cleaning Service","Fumigation",
+    "Garbage / Waste Disposal","Laundry / Dry Cleaning","Pest Control",
+    "Water Tanker",
+  ]},
+  { label: "Horticulture & Garden", items: [
+    "Artificial Grass","Fertilizer & Pesticide","Gardening / Landscaping",
+    "Lawn Mower & Tools","Nursery / Plant Supplier","Tree Cutting Service",
+  ]},
+  { label: "Office & IT", items: [
+    "Computer / Laptop Repair","EPABX / Intercom","Internet / WiFi Provider",
+    "Printer / Copier Service","Signage & Printing","Stationery Supplier",
+  ]},
+  { label: "Transport & Logistics", items: [
+    "Courier / Delivery","Crane / JCB / Heavy Equipment",
+    "Staff Bus / Van","Tempo / Truck / Transport",
+  ]},
+  { label: "Government & Compliance", items: [
+    "Fire NOC Consultant","Health License Consultant","Insurance Agent",
+    "Labour Compliance","Pollution Control",
+  ]},
+  { label: "Miscellaneous", items: [
+    "Architect","Chartered Accountant","Interior Designer",
+    "Legal / Advocate","Other",
+  ]},
 ];
 
+const CATEGORIES = CAT_GROUPS.flatMap(g => g.items);
+
 const CAT_COLORS = {
-  "Electrician":       { c:"#B45309", bg:"#FEF3C7" },
-  "Plumber":           { c:"#1D4ED8", bg:"#DBEAFE" },
-  "Carpenter":         { c:"#92400E", bg:"#FDE68A" },
-  "Painter":           { c:"#7C3AED", bg:"#EDE9FE" },
-  "Pest Control":      { c:"#065F46", bg:"#D1FAE5" },
-  "AC/HVAC":           { c:"#0E7490", bg:"#CFFAFE" },
-  "Generator/DG":      { c:"#B91C1C", bg:"#FEE2E2" },
-  "CCTV/Security":     { c:"#6B21A8", bg:"#F3E8FF" },
-  "Catering":          { c:"#C2410C", bg:"#FFEDD5" },
-  "Tent/Pandal":       { c:"#0F766E", bg:"#CCFBF1" },
-  "Florist":           { c:"#BE185D", bg:"#FCE7F3" },
-  "DJ/Sound":          { c:"#4338CA", bg:"#E0E7FF" },
-  "Lighting":          { c:"#A16207", bg:"#FEF9C3" },
-  "Valet":             { c:C.maroon, bg:C.maroonSoft },
-  "Cleaning Supplies": { c:"#166534", bg:"#DCFCE7" },
-  "Laundry":           { c:"#0369A1", bg:"#E0F2FE" },
-  "Water Tanker":      { c:"#0284C7", bg:"#BAE6FD" },
-  "Gardening":         { c:"#15803D", bg:"#DCFCE7" },
-  "Other":             { c:"#374151", bg:"#F3F4F6" },
+  // Maintenance
+  "Electrician":                    { c:"#B45309", bg:"#FEF3C7" },
+  "Plumber":                        { c:"#1D4ED8", bg:"#DBEAFE" },
+  "Carpenter":                      { c:"#92400E", bg:"#FDE68A" },
+  "Painter":                        { c:"#7C3AED", bg:"#EDE9FE" },
+  "Mason / Civil Work":             { c:"#78350F", bg:"#FEF3C7" },
+  "Welder / Fabrication":           { c:"#991B1B", bg:"#FEE2E2" },
+  "Glass & Aluminium Work":         { c:"#0369A1", bg:"#E0F2FE" },
+  "Waterproofing":                  { c:"#0E7490", bg:"#CFFAFE" },
+  "False Ceiling":                  { c:"#6B21A8", bg:"#F3E8FF" },
+  "Tile & Marble Work":             { c:"#9D174D", bg:"#FCE7F3" },
+  // MEP
+  "AC / HVAC":                      { c:"#0E7490", bg:"#CFFAFE" },
+  "Generator / DG Set":             { c:"#B91C1C", bg:"#FEE2E2" },
+  "Elevator / Lift":                { c:"#4338CA", bg:"#E0E7FF" },
+  "Fire Fighting System":           { c:"#DC2626", bg:"#FEE2E2" },
+  "UPS / Inverter / Battery":       { c:"#D97706", bg:"#FEF3C7" },
+  "Electrical Panel / Transformer": { c:"#B45309", bg:"#FEF3C7" },
+  "STP / WTP Plant":                { c:"#0369A1", bg:"#DBEAFE" },
+  "Solar Panel":                    { c:"#15803D", bg:"#DCFCE7" },
+  "Water Pump & Motor":             { c:"#0284C7", bg:"#BAE6FD" },
+  "Borewell":                       { c:"#1D4ED8", bg:"#DBEAFE" },
+  // Security
+  "CCTV / Security Systems":        { c:"#6B21A8", bg:"#F3E8FF" },
+  "Access Control / Biometric":     { c:"#7C3AED", bg:"#EDE9FE" },
+  "Security Guard Agency":          { c:"#4338CA", bg:"#E0E7FF" },
+  "Boom Barrier / Bollards":        { c:"#1E40AF", bg:"#DBEAFE" },
+  "Fire Alarm System":              { c:"#DC2626", bg:"#FEE2E2" },
+  // Event
+  "Catering":                       { c:"#C2410C", bg:"#FFEDD5" },
+  "Tent / Pandal / Shamiyana":      { c:"#0F766E", bg:"#CCFBF1" },
+  "Florist / Decoration":           { c:"#BE185D", bg:"#FCE7F3" },
+  "DJ / Sound System":              { c:"#4338CA", bg:"#E0E7FF" },
+  "Lighting & LED":                 { c:"#A16207", bg:"#FEF9C3" },
+  "Valet Parking Service":          { c:"#7B1E2F", bg:"#F9F0F2" },
+  "Photography / Videography":      { c:"#1E3A5F", bg:"#DBEAFE" },
+  "Anchor / Emcee":                 { c:"#9D174D", bg:"#FCE7F3" },
+  "Band / Music":                   { c:"#6D28D9", bg:"#EDE9FE" },
+  "Fireworks / Pyrotechnics":       { c:"#B91C1C", bg:"#FEE2E2" },
+  "Stage & Backdrop":               { c:"#0F766E", bg:"#CCFBF1" },
+  "Furniture Rental":               { c:"#92400E", bg:"#FDE68A" },
+  "Crockery & Cutlery Rental":      { c:"#78350F", bg:"#FEF3C7" },
+  "Portable Toilet / Washroom":     { c:"#0369A1", bg:"#E0F2FE" },
+  // Cleaning
+  "Cleaning Supplies (Kleanfix etc)":{ c:"#166534", bg:"#DCFCE7" },
+  "Pest Control":                   { c:"#065F46", bg:"#D1FAE5" },
+  "Laundry / Dry Cleaning":         { c:"#0369A1", bg:"#E0F2FE" },
+  "Water Tanker":                   { c:"#0284C7", bg:"#BAE6FD" },
+  "Garbage / Waste Disposal":       { c:"#374151", bg:"#F3F4F6" },
+  "Deep Cleaning Service":          { c:"#1E3A5F", bg:"#DBEAFE" },
+  "Fumigation":                     { c:"#065F46", bg:"#D1FAE5" },
+  // Horticulture
+  "Gardening / Landscaping":        { c:"#15803D", bg:"#DCFCE7" },
+  "Nursery / Plant Supplier":       { c:"#166534", bg:"#D1FAE5" },
+  "Fertilizer & Pesticide":         { c:"#4D7C0F", bg:"#ECFCCB" },
+  "Lawn Mower & Tools":             { c:"#65A30D", bg:"#F7FEE7" },
+  "Tree Cutting Service":           { c:"#78350F", bg:"#FEF3C7" },
+  "Artificial Grass":               { c:"#16A34A", bg:"#DCFCE7" },
+  // Office & IT
+  "Printer / Copier Service":       { c:"#374151", bg:"#F3F4F6" },
+  "Internet / WiFi Provider":       { c:"#1D4ED8", bg:"#DBEAFE" },
+  "Computer / Laptop Repair":       { c:"#1E40AF", bg:"#EFF6FF" },
+  "EPABX / Intercom":               { c:"#4338CA", bg:"#E0E7FF" },
+  "Stationery Supplier":            { c:"#6B21A8", bg:"#F3E8FF" },
+  "Signage & Printing":             { c:"#B45309", bg:"#FEF3C7" },
+  // Transport
+  "Tempo / Truck / Transport":      { c:"#374151", bg:"#F3F4F6" },
+  "Staff Bus / Van":                { c:"#1D4ED8", bg:"#DBEAFE" },
+  "Courier / Delivery":             { c:"#0E7490", bg:"#CFFAFE" },
+  "Crane / JCB / Heavy Equipment":  { c:"#B45309", bg:"#FEF3C7" },
+  // Government
+  "Fire NOC Consultant":            { c:"#DC2626", bg:"#FEE2E2" },
+  "Health License Consultant":      { c:"#0369A1", bg:"#E0F2FE" },
+  "Pollution Control":              { c:"#065F46", bg:"#D1FAE5" },
+  "Labour Compliance":              { c:"#6B21A8", bg:"#F3E8FF" },
+  "Insurance Agent":                { c:"#0F766E", bg:"#CCFBF1" },
+  // Misc
+  "Interior Designer":              { c:"#BE185D", bg:"#FCE7F3" },
+  "Architect":                      { c:"#1E3A5F", bg:"#DBEAFE" },
+  "Legal / Advocate":               { c:"#374151", bg:"#F3F4F6" },
+  "Chartered Accountant":           { c:"#166534", bg:"#DCFCE7" },
+  "Other":                          { c:"#374151", bg:"#F3F4F6" },
 };
 
 const PROP_OPTS = [
@@ -41,6 +148,79 @@ const PROP_OPTS = [
   { v:"rs",  l:"Restro" },
 ];
 
+// ─── CATEGORY SEARCH SELECT ──────────────────────────────────────────────────
+function CatSelect({ value, onChange }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const filtered = q.trim()
+    ? CAT_GROUPS.map(g => ({ ...g, items: g.items.filter(i => i.toLowerCase().includes(q.toLowerCase())) })).filter(g => g.items.length > 0)
+    : CAT_GROUPS;
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <div onClick={() => setOpen(p => !p)} style={{
+        display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"8px 10px", borderRadius:8, border:`1px solid ${C.border}`,
+        background:C.bg, cursor:"pointer", minHeight:38,
+      }}>
+        <span style={{ fontSize:12, color: value ? C.text : C.tl, fontFamily:F.b }}>
+          {value || "Select category..."}
+        </span>
+        <span style={{ fontSize:9, color:C.tl }}>▾</span>
+      </div>
+      {open && (
+        <div style={{
+          position:"absolute", top:"100%", left:0, right:0, zIndex:200,
+          background:C.white, borderRadius:10, border:`1px solid ${C.border}`,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.12)", marginTop:4,
+          display:"flex", flexDirection:"column",
+        }}>
+          <div style={{ padding:"6px 8px", borderBottom:`1px solid ${C.border}` }}>
+            <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
+              placeholder="Search categories..."
+              style={{ width:"100%", padding:"5px 8px", borderRadius:6,
+                border:`1px solid ${C.border}`, fontFamily:F.b, fontSize:12,
+                outline:"none", boxSizing:"border-box" }}/>
+          </div>
+          <div style={{ maxHeight:240, overflowY:"auto" }}>
+            {filtered.map(g => (
+              <div key={g.label}>
+                <div style={{ padding:"5px 10px 2px", fontSize:9, fontWeight:700,
+                  color:C.tl, textTransform:"uppercase", letterSpacing:"0.5px",
+                  background:C.bg, borderTop:`1px solid ${C.border}` }}>
+                  {g.label}
+                </div>
+                {g.items.map(item => (
+                  <div key={item} onMouseDown={() => { onChange(item); setOpen(false); setQ(""); }}
+                    style={{ padding:"7px 14px", cursor:"pointer", fontSize:12, fontFamily:F.b,
+                      background: item === value ? C.maroonSoft : "transparent",
+                      color: item === value ? C.maroon : C.text,
+                      fontWeight: item === value ? 600 : 400 }}>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ padding:"12px 10px", fontSize:11, color:C.tl, textAlign:"center" }}>
+                No categories found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── STAR RATING ─────────────────────────────────────────────────────────────
 function Stars({ rating, onChange }) {
   return (
@@ -48,7 +228,7 @@ function Stars({ rating, onChange }) {
       {[1,2,3,4,5].map(i => (
         <span key={i}
           onClick={onChange ? () => onChange(i) : undefined}
-          style={{ fontSize:14, color: i <= (rating||0) ? "#F59E0B" : "#D1D5DB", cursor: onChange ? "pointer" : "default", lineHeight:1 }}>★</span>
+          style={{ fontSize:13, color: i <= (rating||0) ? "#F59E0B" : "#D1D5DB", cursor: onChange ? "pointer" : "default", lineHeight:1 }}>★</span>
       ))}
     </div>
   );
@@ -94,11 +274,9 @@ function VendorForm({ init, onSave, onCancel, user, lang }) {
           <label style={Lb}>✉️ {L?"ईमेल":"Email"}</label>
           <input type="email" value={f.email} onChange={e=>inp("email",e.target.value)} placeholder="email@example.com" style={F2}/>
         </div>
-        <div>
+        <div style={{ gridColumn:"1/-1" }}>
           <label style={Lb}>🏷️ {L?"श्रेणी":"Category"}</label>
-          <select value={f.category} onChange={e=>inp("category",e.target.value)} style={F2}>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <CatSelect value={f.category} onChange={v=>inp("category",v)} />
         </div>
         <div>
           <label style={Lb}>🏛️ {L?"वेन्यू":"Property"}</label>
@@ -148,7 +326,7 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
         {/* Header row */}
         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8, marginBottom:8 }}>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ fontWeight:700, fontSize:13, color:C.text, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {v.name}
             </div>
             {v.company && (
@@ -335,7 +513,7 @@ export default function VendorDirectory({ user, lang }) {
       {/* Empty state */}
       {!loading && filtered.length === 0 && (
         <div style={{ background:C.white, borderRadius:12, padding:32, textAlign:"center", border:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:28, marginBottom:8 }}>📞</div>
+          <div style={{ fontSize:22, marginBottom:8 }}>📞</div>
           <div style={{ fontFamily:F.d, fontSize:15, fontWeight:700, color:C.maroon, marginBottom:4 }}>
             {search || catFilter !== "all" ? "No vendors match your search" : "No vendors added yet"}
           </div>
@@ -352,7 +530,7 @@ export default function VendorDirectory({ user, lang }) {
           <div key={cat} style={{ marginBottom:20 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
               <span style={{ width:4, height:14, borderRadius:2, background:cc.c, display:"block" }}/>
-              <h3 style={{ fontFamily:F.d, fontSize:14, fontWeight:700, color:cc.c, margin:0 }}>{cat}</h3>
+              <h3 style={{ fontFamily:F.d, fontSize:13, fontWeight:700, color:cc.c, margin:0 }}>{cat}</h3>
               <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:cc.bg, color:cc.c, fontFamily:F.b, fontWeight:600 }}>{groups[cat].length}</span>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:10 }}>

@@ -50,7 +50,7 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
       display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 12, alignItems: "center"
     }}>
       <div>
-        <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color: C.maroon }}>
+        <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.maroon }}>
           🕐 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
         </div>
         <div style={{ fontSize:10, color: C.tl, marginTop: 2 }}>
@@ -74,7 +74,7 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
           {absent.length === 0 ? L.allPresent : L.absentToday}
         </div>
         {absent.length > 0 && (
-          <div style={{ fontSize:8, color: C.tl, marginTop: 2 }}>
+          <div style={{ fontSize:9, color: C.tl, marginTop: 2 }}>
             {absent.slice(0, 3).map(m => m.n).join(", ")}{absent.length > 3 ? ` +${absent.length - 3}` : ""}
           </div>
         )}
@@ -84,7 +84,7 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
         <div style={{ fontFamily: F.d, fontSize:18, fontWeight: 700, color: C.yellow }}>{onLeaveStaff.length}</div>
         <div style={{ fontSize:9, color: C.yellow, fontWeight: 600 }}>{L.onLeave}</div>
         {onLeaveStaff.length > 0 && (
-          <div style={{ fontSize:8, color: C.tl, marginTop: 2 }}>
+          <div style={{ fontSize:9, color: C.tl, marginTop: 2 }}>
             {onLeaveStaff.slice(0, 2).map(m => m.n).join(", ")}
           </div>
         )}
@@ -109,7 +109,7 @@ function CriticalPanel({ tasks, L }) {
 
   return (
     <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14, height: "100%" }}>
-      <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color: C.red, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.red, marginBottom: 8 }}>
         🚨 {L.criticalActions}
       </div>
       {allOk ? (
@@ -155,7 +155,7 @@ function StaffPerf({ tasks, prop, L }) {
 
   return (
     <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14, height: "100%" }}>
-      <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color: C.maroon, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.maroon, marginBottom: 8 }}>
         🏆 {L.staffPerformance}
       </div>
       {perf.length === 0 ? (
@@ -167,7 +167,7 @@ function StaffPerf({ tasks, prop, L }) {
               <div style={{
                 width: 20, height: 20, borderRadius: "50%", background: i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : m.dc,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: C.white, fontSize:8, fontWeight: 700, flexShrink: 0
+                color: C.white, fontSize:9, fontWeight: 700, flexShrink: 0
               }}>{i < 3 ? ["🥇", "🥈", "🥉"][i] : m.n[0]}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
@@ -198,7 +198,7 @@ function Suggestions({ tasks, L }) {
 
   return (
     <div style={{ background: C.white, borderRadius: 12, border: `1px solid ${C.border}`, padding: 14 }}>
-      <div style={{ fontFamily: F.d, fontSize:14, fontWeight: 700, color: C.green, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.green, marginBottom: 8 }}>
         📈 {L.suggestions}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
@@ -242,7 +242,7 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div>
-          <h1 style={{ fontFamily: F.d, fontSize:20, fontWeight: 700, color: C.maroon, margin: 0 }}>
+          <h1 style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.maroon, margin: 0 }}>
             📊 {prop.name}
           </h1>
           <p style={{ fontSize:10, color: C.tl, margin: "2px 0 0" }}>
@@ -250,7 +250,7 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
           </p>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontFamily: F.d, fontSize:28, fontWeight: 700, color: pct >= 70 ? C.green : pct >= 40 ? C.yellow : C.red }}>{pct}%</div>
+          <div style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: pct >= 70 ? C.green : pct >= 40 ? C.yellow : C.red }}>{pct}%</div>
           <div style={{ fontSize:9, color: C.tl }}>{done}/{total} {L.done}</div>
         </div>
       </div>
