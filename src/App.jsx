@@ -7,7 +7,7 @@ import Dashboard from "./Dashboard.jsx";
 import DutyRoster from "./DutyRoster.jsx";
 import LeaveManager from "./LeaveManager.jsx";
 import ChemicalGuide from "./ChemicalGuide.jsx";
-import AreasView from "./AreasView.jsx";
+import PhotoViewer from "./PhotoViewer.jsx";
 import TrainingView from "./TrainingView.jsx";
 import TeamPage from "./TeamPage.jsx";
 import ValetPlanning from "./ValetPlanning.jsx";
@@ -110,6 +110,9 @@ function dIn(y,m){return new Date(y,m+1,0).getDate();}function gFD(y,m){return n
 
 // ═══ SUPABASE HELPERS ═══
 const syncTask=(task)=>{const todayStr=new Date().toISOString().split("T")[0];supabase.from("tasks").upsert({id:"task_"+task.id+"_"+todayStr,property:task.prop,task_date:todayStr,status:task.status,notes:task.notes||null,completed_at:task.completedAt||null,completed_by:task.completedBy||null},{onConflict:"id"}).then(({error})=>{if(error)console.error("task sync:",error.message);});};
+
+const compressImage=(dataUrl,maxKB=80)=>new Promise(resolve=>{const img=new Image();img.onload=()=>{let w=img.width,h=img.height;const mx=1200;if(w>mx||h>mx){if(w>h){h=Math.round(h*mx/w);w=mx;}else{w=Math.round(w*mx/h);h=mx;}}const cv=document.createElement("canvas");cv.width=w;cv.height=h;const ctx=cv.getContext("2d");ctx.drawImage(img,0,0,w,h);let q=0.8;const go=()=>{const r=cv.toDataURL("image/jpeg",q);const kb=(r.length*3/4)/1024;if(kb<=maxKB||q<=0.1){resolve(r);}else{q-=0.1;go();}};go();};img.src=dataUrl;});
+const parsePhotos=(raw)=>{if(!raw)return[];if(typeof raw==="string"){if(raw.startsWith("[")){try{return JSON.parse(raw);}catch{return[raw];}}return[raw];}if(raw&&raw.data)return[raw.data];return[];};
 
 // ═══ UI ═══
 function Bdg({children,color=C.tl,bg=C.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
@@ -237,7 +240,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:"Team"},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
     <div style={{padding:"14px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -470,13 +473,17 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
 function ATCard({dir,user:u,setDirs,L,setNs}){
   const[showComplete,setShowComplete]=useState(false);
   const[cNote,setCNote]=useState("");
-  const[cPhoto,setCPhoto]=useState(null);
+  const[cPhotos,setCPhotos]=useState([]);
   const[showReply,setShowReply]=useState(false);
   const[rText,setRText]=useState("");
-  const[rPhoto,setRPhoto]=useState(null);
+  const[rPhotos,setRPhotos]=useState([]);
   const[showRemarks,setShowRemarks]=useState(false);
   const[remarks,setRemarks]=useState("");
-  const cRef=useRef(null);const rRef=useRef(null);
+  const[showViewer,setShowViewer]=useState(false);
+  const[viewerPhotos,setViewerPhotos]=useState([]);
+  const[viewerIdx,setViewerIdx]=useState(0);
+  const cRef=useRef(null);const cGallRef=useRef(null);
+  const rRef=useRef(null);const rGallRef=useRef(null);
   const isSA=u.role==="sa";const isTarget=dir.to===u.id||(!!u.username&&dir.to===u.username);
   const tgt=ADMIN_TARGETS.find(t=>t.id===dir.to||t.username===dir.to);
   const mC=tgt?.color||C.blue;
@@ -494,30 +501,35 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const isOverdue=dir.dueDate&&new Date(dir.dueDate)<td&&status==="sent";
   const dueFmt=dir.dueDate?new Date(dir.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"";
 
-  // MARK COMPLETE — photo REQUIRED, tries Supabase Storage, falls back to base64
+  // MARK COMPLETE — at least 1 photo REQUIRED, compress + upload all
   const handleComplete=async()=>{
-    if(!cPhoto)return;
-    let photoUrl=null;
-    try{
-      const fn=`at_${dir.id}_${Date.now()}.jpg`;
-      const b64=cPhoto.data.split(",")[1];
-      const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
-      const{error:upErr}=await supabase.storage.from("photos").upload(fn,bytes,{contentType:"image/jpeg",upsert:true});
-      if(!upErr){const{data:uD}=supabase.storage.from("photos").getPublicUrl(fn);photoUrl=uD.publicUrl;}
-    }catch(e){}
-    if(!photoUrl)photoUrl=cPhoto.data;
+    if(!cPhotos.length)return;
+    const uploadedUrls=[];
+    for(let i=0;i<cPhotos.length;i++){
+      const compressed=await compressImage(cPhotos[i].data);
+      let url=compressed;
+      try{
+        const fn=`assigned/${dir.id}/${Date.now()}_${i}.jpg`;
+        const b64=compressed.split(",")[1];
+        const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+        const{error:upErr}=await supabase.storage.from("photos").upload(fn,bytes,{contentType:"image/jpeg",upsert:true});
+        if(!upErr){const{data:uD}=supabase.storage.from("photos").getPublicUrl(fn);url=uD.publicUrl;}
+      }catch(e){}
+      uploadedUrls.push(url);
+    }
+    const photoJson=JSON.stringify(uploadedUrls);
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
     const dt=new Date().toLocaleDateString("en-IN");
     const replyText="✅ "+(L.markComplete||"Marked Complete")+(cNote.trim()?" — "+cNote.trim():"");
     const[,{data:repRow}]=await Promise.all([
-      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:photoUrl}).eq("id",dir.id),
-      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,photo_url:photoUrl,reply_type:"completed"}).select().single()
+      supabase.from("assigned_tasks").update({status:"completed",completed_at:new Date().toISOString(),completion_note:cNote.trim()||null,completion_photo:photoJson}).eq("id",dir.id),
+      supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:replyText,photo_url:photoJson,reply_type:"completed"}).select().single()
     ]);
-    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:photoUrl,type:"completed",time:tm,date:dt};
-    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:{data:photoUrl},replies:[...d.replies,newReply]}:d));
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:photoJson,type:"completed",time:tm,date:dt};
+    setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:photoJson,replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"completed",task:"✅ Completed: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.from},...p]);
     notifyMultiple("assigned_completed","📸 "+u.name+" completed: "+dir.text.slice(0,80),u.id,u.name,[dir.from],dir.prop);
-    setCNote("");setCPhoto(null);setShowComplete(false);
+    setCNote("");setCPhotos([]);setShowComplete(false);
   };
 
   // SEND FOR APPROVAL — from "sent" OR "rejected"
@@ -535,12 +547,29 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   };
 
   const addReply=async()=>{
-    if(!rText.trim()&&!rPhoto)return;
+    if(!rText.trim()&&!rPhotos.length)return;
+    let photoJson=null;
+    if(rPhotos.length>0){
+      const uploadedUrls=[];
+      for(let i=0;i<rPhotos.length;i++){
+        const compressed=await compressImage(rPhotos[i].data);
+        let url=compressed;
+        try{
+          const fn=`assigned/reply_${dir.id}/${Date.now()}_${i}.jpg`;
+          const b64=compressed.split(",")[1];
+          const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+          const{error:upErr}=await supabase.storage.from("photos").upload(fn,bytes,{contentType:"image/jpeg",upsert:true});
+          if(!upErr){const{data:uD}=supabase.storage.from("photos").getPublicUrl(fn);url=uD.publicUrl;}
+        }catch(e){}
+        uploadedUrls.push(url);
+      }
+      photoJson=JSON.stringify(uploadedUrls);
+    }
     const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-    const{data:repRow}=await supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:rText.trim(),photo_url:rPhoto?.data||null,reply_type:"reply"}).select().single();
-    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:rText.trim(),photo:rPhoto?.data||null,type:"reply",time:tm,date:new Date().toLocaleDateString("en-IN")};
+    const{data:repRow}=await supabase.from("assigned_task_replies").insert({task_id:dir.id,by_user:u.id,by_name:u.name,text:rText.trim(),photo_url:photoJson,reply_type:"reply"}).select().single();
+    const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:rText.trim(),photo:photoJson,type:"reply",time:tm,date:new Date().toLocaleDateString("en-IN")};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,replies:[...d.replies,newReply]}:d));
-    setRText("");setRPhoto(null);setShowReply(false);
+    setRText("");setRPhotos([]);setShowReply(false);
   };
 
   const handleOk=async()=>{
@@ -608,12 +637,12 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
       </div>}
 
       {/* COMPLETION PROOF */}
-      {isCompleted&&<div style={{background:C.gBg,border:`1px solid #b8dcc8`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
-        <div style={{fontSize:10,fontWeight:700,color:C.green,marginBottom:4}}>✅ {L.completedWork||"Completed"}</div>
-        {dir.completionNote&&<div style={{fontSize:11,marginBottom:4,color:C.text}}>{dir.completionNote}</div>}
-        {dir.completionPhoto&&<img src={dir.completionPhoto.data||dir.completionPhoto} alt="" style={{width:100,height:100,borderRadius:8,objectFit:"cover",border:`1px solid #b8dcc8`}}/>}
-        {dir.completedAt&&<div style={{fontSize:9,color:C.tl,marginTop:4}}>{new Date(dir.completedAt).toLocaleString("en-IN")}</div>}
-      </div>}
+      {isCompleted&&(()=>{const cphotos=parsePhotos(dir.completionPhoto);return(<div style={{background:C.gBg,border:`1px solid #b8dcc8`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.green,marginBottom:4}}>✅ {L.completedWork||"Completed"} {cphotos.length>0&&`(${cphotos.length} photo${cphotos.length>1?"s":""})`}</div>
+        {dir.completionNote&&<div style={{fontSize:11,marginBottom:6,color:C.text}}>{dir.completionNote}</div>}
+        {cphotos.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{cphotos.map((p,i)=><img key={i} src={p} alt="" onClick={()=>{setViewerPhotos(cphotos);setViewerIdx(i);setShowViewer(true);}} style={{width:64,height:64,borderRadius:6,objectFit:"cover",border:`1px solid #b8dcc8`,cursor:"pointer"}}/>)}</div>}
+        {dir.completedAt&&<div style={{fontSize:9,color:C.tl,marginTop:2}}>{new Date(dir.completedAt).toLocaleString("en-IN")}</div>}
+      </div>);})()}
 
       {/* REPLIES THREAD */}
       {dir.replies.length>0&&<div style={{borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:4}}>
@@ -624,7 +653,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
             <div style={{width:22,height:22,borderRadius:"50%",background:rC2,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:9,fontWeight:700,flexShrink:0}}>{r.by[0]}</div>
             <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600}}>{r.by} <span style={{fontWeight:400,color:C.tl}}>{r.time}</span></div>
               {r.text&&<div style={{fontSize:11,marginTop:2}}>{r.text}</div>}
-              {r.photo&&<img src={r.photo} alt="" style={{width:70,height:70,borderRadius:6,objectFit:"cover",marginTop:4}}/>}
+              {r.photo&&(()=>{const rps=parsePhotos(r.photo);return rps.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{rps.map((p,pi)=><img key={pi} src={p} alt="" onClick={()=>{setViewerPhotos(rps);setViewerIdx(pi);setShowViewer(true);}} style={{width:56,height:56,borderRadius:5,objectFit:"cover",cursor:"pointer",border:`1px solid ${C.border}`}}/>)}</div>;})()}
             </div>
           </div>);
         })}
@@ -655,28 +684,35 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
 
       {/* MARK COMPLETE — modal */}
       <Modal isOpen={showComplete&&isTarget&&(status==="sent"||status==="rejected"||status==="approved")} onClose={()=>setShowComplete(false)} title={`📸 ${L.markComplete||"Mark Complete"}`} size="sm">
-        <div style={{fontSize:10,color:C.tl,marginBottom:8}}>Photo proof is <strong>required</strong> to complete this task.</div>
+        <div style={{fontSize:10,color:C.tl,marginBottom:8}}>At least 1 photo is <strong>required</strong>. Add multiple for better proof.</div>
         <textarea placeholder={L.completionNote||"Completion note (optional)"} value={cNote} onChange={e=>setCNote(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:60,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
-        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
-          <button onClick={()=>cRef.current?.click()} style={{padding:"7px 12px",borderRadius:8,border:`2px ${cPhoto?"solid":"dashed"} ${cPhoto?C.green:C.red}`,background:cPhoto?C.gBg:"#FFF5F5",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:cPhoto?C.green:C.red}}>{cPhoto?"✅ Photo taken — retake?":"📸 Take Photo (Required)"}</button>
-          {cPhoto&&<img src={cPhoto.data} alt="" style={{width:40,height:40,borderRadius:6,objectFit:"cover"}}/>}
-          <input ref={cRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r2=new FileReader();r2.onload=ev=>setCPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
+        {/* Thumbnails */}
+        {cPhotos.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{cPhotos.map((p,i)=><div key={i} style={{position:"relative",width:60,height:60}}><img src={p.data} alt="" style={{width:60,height:60,borderRadius:6,objectFit:"cover",border:`1px solid ${C.green}`}}/><button onClick={()=>setCPhotos(prev=>prev.filter((_,j)=>j!==i))} style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",border:"none",background:C.red,color:C.white,fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button></div>)}</div>}
+        {/* Add buttons */}
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          <button onClick={()=>cRef.current?.click()} style={{padding:"7px 12px",borderRadius:8,border:`2px dashed ${cPhotos.length?C.green:C.red}`,background:cPhotos.length?C.gBg:"#FFF5F5",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:cPhotos.length?C.green:C.red}}>📷 Camera</button>
+          <button onClick={()=>cGallRef.current?.click()} style={{padding:"7px 12px",borderRadius:8,border:`2px dashed ${C.blue}`,background:C.bBg,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:C.blue}}>🖼 Gallery {cPhotos.length>0&&"(+more)"}</button>
+          <input ref={cRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f||!f.type.startsWith("image/"))return;const r2=new FileReader();r2.onload=ev=>setCPhotos(prev=>[...prev,{data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}]);r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
+          <input ref={cGallRef} type="file" accept="image/*" multiple onChange={e=>{const files=Array.from(e.target.files||[]);files.forEach(f=>{if(!f.type.startsWith("image/"))return;const r2=new FileReader();r2.onload=ev=>setCPhotos(prev=>[...prev,{data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}]);r2.readAsDataURL(f);});e.target.value="";}} style={{display:"none"}}/>
         </div>
-        {!cPhoto&&<div style={{fontSize:10,color:C.red,marginBottom:8}}>📸 Please take a photo to enable completion</div>}
-        <Btn2 primary small onClick={handleComplete} style={{background:cPhoto?C.green:"#aaa",cursor:cPhoto?"pointer":"not-allowed",opacity:cPhoto?1:0.6}}>✅ {L.markComplete||"Mark Complete"}</Btn2>
+        {!cPhotos.length&&<div style={{fontSize:10,color:C.red,marginBottom:8}}>📸 Take or select at least 1 photo to complete</div>}
+        <Btn2 primary small onClick={handleComplete} style={{background:cPhotos.length?C.green:"#aaa",cursor:cPhotos.length?"pointer":"not-allowed",opacity:cPhotos.length?1:0.6}}>✅ {L.markComplete||"Mark Complete"} {cPhotos.length>0&&`(${cPhotos.length} photo${cPhotos.length>1?"s":""})`}</Btn2>
       </Modal>
 
       {/* REPLY — modal */}
       <Modal isOpen={showReply} onClose={()=>setShowReply(false)} title={`💬 ${L.reply||"Reply"}`} size="sm">
-        <textarea placeholder={L.replyHere||"Write reply..."} value={rText} onChange={e=>setRText(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:70,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <button onClick={()=>rRef.current?.click()} style={{padding:"6px 12px",borderRadius:6,border:`1px dashed ${C.accent}`,background:"#FFF7ED",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,color:C.accent}}>📸</button>
-          {rPhoto&&<img src={rPhoto.data} alt="" style={{width:30,height:30,borderRadius:4,objectFit:"cover"}}/>}
-          <input ref={rRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r2=new FileReader();r2.onload=ev=>setRPhoto({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
-          <Btn2 primary small onClick={addReply}>{L.send||"Send"}</Btn2>
+        <textarea placeholder={L.replyHere||"Write reply..."} value={rText} onChange={e=>setRText(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,minHeight:70,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:8}}/>
+        {rPhotos.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>{rPhotos.map((p,i)=><div key={i} style={{position:"relative",width:52,height:52}}><img src={p.data} alt="" style={{width:52,height:52,borderRadius:5,objectFit:"cover",border:`1px solid ${C.border}`}}/><button onClick={()=>setRPhotos(prev=>prev.filter((_,j)=>j!==i))} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",border:"none",background:C.red,color:C.white,fontSize:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button></div>)}</div>}
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <button onClick={()=>rRef.current?.click()} style={{padding:"6px 10px",borderRadius:6,border:`1px dashed ${C.accent}`,background:"#FFF7ED",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,color:C.accent}}>📷</button>
+          <button onClick={()=>rGallRef.current?.click()} style={{padding:"6px 10px",borderRadius:6,border:`1px dashed ${C.blue}`,background:C.bBg,cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,color:C.blue}}>🖼</button>
+          <input ref={rRef} type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f||!f.type.startsWith("image/"))return;const r2=new FileReader();r2.onload=ev=>setRPhotos(prev=>[...prev,{data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}]);r2.readAsDataURL(f);e.target.value="";}} style={{display:"none"}}/>
+          <input ref={rGallRef} type="file" accept="image/*" multiple onChange={e=>{const files=Array.from(e.target.files||[]);files.forEach(f=>{if(!f.type.startsWith("image/"))return;const r2=new FileReader();r2.onload=ev=>setRPhotos(prev=>[...prev,{data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}]);r2.readAsDataURL(f);});e.target.value="";}} style={{display:"none"}}/>
+          <Btn2 primary small onClick={addReply}>{L.send||"Send"} {rPhotos.length>0&&`📸${rPhotos.length}`}</Btn2>
         </div>
       </Modal>
     </div>
+    <PhotoViewer photos={viewerPhotos} isOpen={showViewer} onClose={()=>setShowViewer(false)}/>
   </div>);
 }
 
@@ -810,7 +846,7 @@ export default function App(){
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
-  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:"Team"},{id:"areas",i:"🏗️",l:L.areas},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
@@ -826,7 +862,6 @@ export default function App(){
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
         {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
-        {view==="areas"&&<AreasView tasks={tasks} prop={prop} lang={lang}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
         {view==="roster"&&<DutyRoster prop={prop} user={eU} lang={lang}/>}
         {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
