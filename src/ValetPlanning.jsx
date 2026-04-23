@@ -4,87 +4,126 @@ import { C, F, PROPS } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
-// ─── STAFF CALCULATOR DATA ────────────────────────────────────────────────────
-const VALET_DATA = {
-  pp: [
-    { pax:100,  keyMan:1, driver:3,  guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:200,  keyMan:1, driver:4,  guard:1, rider:0, gunMan:0, bouncer:0 },
-    { pax:300,  keyMan:1, driver:5,  guard:1, rider:0, gunMan:0, bouncer:0 },
-    { pax:400,  keyMan:1, driver:7,  guard:2, rider:0, gunMan:0, bouncer:0 },
-    { pax:500,  keyMan:1, driver:10, guard:2, rider:1, gunMan:0, bouncer:0 },
-    { pax:600,  keyMan:1, driver:12, guard:3, rider:1, gunMan:0, bouncer:0 },
-    { pax:700,  keyMan:2, driver:14, guard:3, rider:2, gunMan:0, bouncer:0 },
-    { pax:800,  keyMan:2, driver:16, guard:3, rider:2, gunMan:0, bouncer:0 },
-    { pax:900,  keyMan:2, driver:18, guard:4, rider:2, gunMan:0, bouncer:0 },
-    { pax:1000, keyMan:2, driver:20, guard:4, rider:2, gunMan:0, bouncer:0 },
-  ],
-  mk: [
-    { pax:100,  keyMan:1, driver:3,  guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:200,  keyMan:1, driver:4,  guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:300,  keyMan:1, driver:5,  guard:1, rider:0, gunMan:0, bouncer:0 },
-    { pax:400,  keyMan:1, driver:6,  guard:2, rider:0, gunMan:0, bouncer:0 },
-    { pax:500,  keyMan:1, driver:8,  guard:2, rider:0, gunMan:0, bouncer:0 },
-    { pax:600,  keyMan:1, driver:11, guard:3, rider:1, gunMan:0, bouncer:0 },
-    { pax:700,  keyMan:2, driver:13, guard:3, rider:1, gunMan:0, bouncer:0 },
-    { pax:800,  keyMan:2, driver:15, guard:3, rider:2, gunMan:0, bouncer:0 },
-    { pax:900,  keyMan:2, driver:17, guard:4, rider:2, gunMan:0, bouncer:0 },
-    { pax:1000, keyMan:2, driver:19, guard:4, rider:2, gunMan:0, bouncer:0 },
-  ],
-  ex: [
-    { pax:100,  keyMan:1, driver:2,  guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:200,  keyMan:1, driver:3,  guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:300,  keyMan:1, driver:5,  guard:1, rider:0, gunMan:0, bouncer:0 },
-    { pax:400,  keyMan:1, driver:6,  guard:2, rider:0, gunMan:0, bouncer:0 },
-    { pax:500,  keyMan:1, driver:8,  guard:2, rider:0, gunMan:0, bouncer:0 },
-    { pax:600,  keyMan:1, driver:10, guard:2, rider:1, gunMan:0, bouncer:0 },
-    { pax:700,  keyMan:2, driver:12, guard:2, rider:1, gunMan:0, bouncer:0 },
-    { pax:800,  keyMan:2, driver:14, guard:2, rider:1, gunMan:0, bouncer:0 },
-    { pax:900,  keyMan:2, driver:17, guard:3, rider:1, gunMan:0, bouncer:0 },
-    { pax:1000, keyMan:2, driver:19, guard:3, rider:1, gunMan:0, bouncer:0 },
-  ],
-  rs: [
-    { pax:100, keyMan:1, driver:5, guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:150, keyMan:1, driver:6, guard:0, rider:0, gunMan:0, bouncer:0 },
-    { pax:200, keyMan:1, driver:6, guard:1, rider:0, gunMan:0, bouncer:0 },
-    { pax:215, keyMan:1, driver:7, guard:1, rider:0, gunMan:0, bouncer:0 },
-  ],
+console.log(
+  "Run in Supabase if staff_allocation column missing:",
+  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS staff_allocation JSONB;",
+  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS override_reason TEXT;"
+);
+
+// ─── ALLOCATION MATRICES ──────────────────────────────────────────────────────
+const VALET_ALLOCATIONS = {
+  pp: {
+    name: "Pushpanjali",
+    ranges: [
+      { min:100, max:150,  label:"100-150"  },
+      { min:200, max:250,  label:"200-250"  },
+      { min:300, max:350,  label:"300-350"  },
+      { min:400, max:500,  label:"400-500"  },
+      { min:600, max:800,  label:"600-800"  },
+      { min:900, max:1000, label:"900-1000" },
+    ],
+    roles: {
+      "Key Man": [1,  1,  1,  1,  1,  1 ],
+      "Driver":  [2,  4,  6,  7,  10, 13],
+      "Guard":   [0,  1,  1,  1,  2,  2 ],
+      "Rider":   [0,  0,  0,  0,  1,  1 ],
+      "Gun Man": [0,  0,  0,  0,  0,  0 ],
+      "Bouncer": [0,  0,  0,  0,  0,  0 ],
+    },
+    totals: [3, 6, 8, 9, 14, 17],
+  },
+  ex: {
+    name: "Exotica",
+    ranges: [
+      { min:100,  max:100,  label:"100"  },
+      { min:200,  max:200,  label:"200"  },
+      { min:300,  max:300,  label:"300"  },
+      { min:400,  max:400,  label:"400"  },
+      { min:500,  max:500,  label:"500"  },
+      { min:600,  max:600,  label:"600"  },
+      { min:700,  max:700,  label:"700"  },
+      { min:800,  max:800,  label:"800"  },
+      { min:900,  max:900,  label:"900"  },
+      { min:1000, max:1000, label:"1000" },
+    ],
+    roles: {
+      "Key Man": [1, 1,  1,  1,  1,  1,  2,  2,  2,  2 ],
+      "Driver":  [2, 3,  5,  6,  8,  10, 12, 14, 17, 19],
+      "Guard":   [0, 0,  1,  2,  2,  2,  2,  2,  3,  3 ],
+      "Rider":   [0, 0,  0,  0,  0,  1,  1,  1,  1,  1 ],
+      "Gun Man": [0, 0,  0,  0,  0,  0,  0,  0,  0,  0 ],
+      "Bouncer": [0, 0,  0,  0,  0,  0,  0,  0,  0,  0 ],
+    },
+    totals: [3, 4, 7, 9, 11, 14, 17, 19, 23, 25],
+  },
+  mk: {
+    name: "Manaktala",
+    ranges: [
+      { min:100, max:150, label:"100-150" },
+      { min:200, max:250, label:"200-250" },
+      { min:300, max:350, label:"300-350" },
+      { min:400, max:450, label:"400-450" },
+      { min:500, max:550, label:"500-550" },
+      { min:600, max:700, label:"600-700" },
+      { min:800, max:900, label:"800-900" },
+    ],
+    roles: {
+      "Key Man": [1, 1, 1, 1,  1,  1,  1 ],
+      "Driver":  [2, 4, 5, 6,  8,  9,  11],
+      "Guard":   [0, 0, 0, 1,  1,  1,  3 ],
+      "Rider":   [0, 0, 0, 0,  0,  1,  1 ],
+      "Gun Man": [0, 0, 0, 0,  0,  0,  0 ],
+      "Bouncer": [0, 0, 0, 0,  0,  0,  0 ],
+    },
+    totals: [3, 5, 6, 8, 10, 12, 16],
+  },
+  rs: {
+    name: "Restro",
+    ranges: [
+      { min:100, max:100, label:"100" },
+      { min:150, max:150, label:"150" },
+      { min:200, max:200, label:"200" },
+    ],
+    roles: {
+      "Key Man": [1, 1, 1],
+      "Driver":  [3, 4, 5],
+      "Guard":   [0, 0, 1],
+      "Rider":   [0, 0, 0],
+      "Gun Man": [0, 0, 0],
+      "Bouncer": [0, 0, 0],
+    },
+    totals: [4, 5, 7],
+  },
 };
 
-const VENUE_CFG = {
-  pp: { name:"Pushpanjali", sn:"PP", icon:"🏛️", min:100, max:1000, step:50 },
-  mk: { name:"Manaktala",   sn:"MK", icon:"✨", min:100, max:1000, step:50 },
-  ex: { name:"Exotica",     sn:"EX", icon:"🌴", min:100, max:1000, step:50 },
-  rs: { name:"Restro",      sn:"RS", icon:"🍽️", min:100, max:215,  step:25 },
-};
+const ROLE_ORDER = ["Key Man", "Driver", "Guard", "Rider", "Gun Man", "Bouncer"];
 
 const ROLE_META = {
-  keyMan:  { label:"Key Man",  labelHi:"की मैन",  icon:"🔑" },
-  driver:  { label:"Driver",   labelHi:"ड्राइवर", icon:"🚗" },
-  guard:   { label:"Guard",    labelHi:"गार्ड",   icon:"🛡️" },
-  rider:   { label:"Rider",    labelHi:"राइडर",   icon:"🏍️" },
-  gunMan:  { label:"Gun Man",  labelHi:"गन मैन",  icon:"🔫" },
-  bouncer: { label:"Bouncer",  labelHi:"बाउंसर", icon:"💪" },
+  "Key Man": { icon:"🔑", color:"#7B1E2F", labelHi:"की मैन"  },
+  "Driver":  { icon:"🚗", color:"#1E66C8", labelHi:"ड्राइवर" },
+  "Guard":   { icon:"🛡️", color:"#7C3AED", labelHi:"गार्ड"   },
+  "Rider":   { icon:"🏍️", color:"#059669", labelHi:"राइडर"   },
+  "Gun Man": { icon:"🔫", color:"#DC2626", labelHi:"गन मैन"  },
+  "Bouncer": { icon:"💪", color:"#D97706", labelHi:"बाउंसर" },
 };
 
 // ─── EVENT TYPES ──────────────────────────────────────────────────────────────
 const EVENT_TYPES = {
-  standard_wedding: { l:"Standard Wedding",           lH:"स्टैंडर्ड शादी",    icon:"💒", carRatio:0.4, vip:false },
-  premium_wedding:  { l:"Premium Wedding",            lH:"प्रीमियम शादी",    icon:"👑", carRatio:0.5, vip:false },
-  corporate:        { l:"Corporate Event",            lH:"कॉर्पोरेट इवेंट",  icon:"🏢", carRatio:0.6, vip:false },
-  luxury_vip:       { l:"Luxury / VIP Event",         lH:"लग्ज़री / VIP",    icon:"⭐", carRatio:0.7, vip:true  },
-  birthday:         { l:"Birthday / Small Party",     lH:"जन्मदिन / पार्टी", icon:"🎂", carRatio:0.3, vip:false },
-  exhibition:       { l:"Exhibition / Large Gathering",lH:"प्रदर्शनी",        icon:"🎪", carRatio:0.5, vip:false },
-  other:            { l:"Other",                      lH:"अन्य",             icon:"📋", carRatio:0.4, vip:false },
+  standard_wedding: { l:"Standard Wedding",            lH:"स्टैंडर्ड शादी",    icon:"💒", carRatio:0.4, vip:false },
+  premium_wedding:  { l:"Premium Wedding",             lH:"प्रीमियम शादी",    icon:"👑", carRatio:0.5, vip:false },
+  corporate:        { l:"Corporate Event",             lH:"कॉर्पोरेट इवेंट",  icon:"🏢", carRatio:0.6, vip:false },
+  luxury_vip:       { l:"Luxury / VIP Event",          lH:"लग्ज़री / VIP",    icon:"⭐", carRatio:0.7, vip:true  },
+  birthday:         { l:"Birthday / Small Party",      lH:"जन्मदिन / पार्टी", icon:"🎂", carRatio:0.3, vip:false },
+  exhibition:       { l:"Exhibition / Large Gathering", lH:"प्रदर्शनी",        icon:"🎪", carRatio:0.5, vip:false },
+  other:            { l:"Other",                       lH:"अन्य",             icon:"📋", carRatio:0.4, vip:false },
 };
 
-// ─── PRIORITIES ───────────────────────────────────────────────────────────────
 const PRIORITIES = {
-  normal:   { l:"Normal",                  lH:"सामान्य",         c:C.tl,     bg:"#F0F0F0" },
+  normal:   { l:"Normal",                  lH:"सामान्य",          c:C.tl,     bg:"#F0F0F0" },
   high:     { l:"High — Elite Crowd",      lH:"हाई — एलीट क्राउड", c:"#d97706", bg:"#FFF7ED" },
   critical: { l:"Critical — Luxury Event", lH:"क्रिटिकल — लग्ज़री", c:C.red,    bg:C.rBg   },
 };
 
-// ─── CALENDAR HELPERS ─────────────────────────────────────────────────────────
 const MN_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MN_HI = ["जनवरी","फ़रवरी","मार्च","अप्रैल","मई","जून","जुलाई","अगस्त","सितंबर","अक्टूबर","नवंबर","दिसंबर"];
 const DY_EN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -110,17 +149,204 @@ const PROP_OPTS = [
   {v:"rs", l:"Restro"},
 ];
 
-// ─── AUTO-CALC HELPERS ────────────────────────────────────────────────────────
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 function calcCars(guests, eventType){
-  const gc = parseInt(guests) || 0;
+  const gc = parseInt(guests)||0;
   if(!gc) return "";
-  return String(Math.ceil(gc * (EVENT_TYPES[eventType]?.carRatio || 0.4)));
+  return String(Math.ceil(gc*(EVENT_TYPES[eventType]?.carRatio||0.4)));
 }
-function calcValets(cars, eventType){
-  const c = parseInt(cars) || 0;
-  if(!c) return "";
-  const isVip = EVENT_TYPES[eventType]?.vip;
-  return String(Math.max(2, Math.ceil(c / (isVip ? 10 : 15))));
+
+function findRange(prop, count){
+  const a = VALET_ALLOCATIONS[prop];
+  if(!a || !count) return 0;
+  for(let i=0;i<a.ranges.length;i++){
+    if(count <= a.ranges[i].max) return i;
+  }
+  return a.ranges.length-1;
+}
+
+function getRangeAlloc(prop, ri){
+  const a = VALET_ALLOCATIONS[prop];
+  if(!a) return {};
+  const out = {};
+  ROLE_ORDER.forEach(r=>{ out[r] = a.roles[r]?.[ri]??0; });
+  return out;
+}
+
+function computeFinalAlloc(prop, ri, overrideEnabled, overrides){
+  const base = getRangeAlloc(prop, ri);
+  if(!overrideEnabled) return base;
+  const out = {...base};
+  ROLE_ORDER.forEach(r=>{ if(overrides[r]!==undefined) out[r] = parseInt(overrides[r])||0; });
+  return out;
+}
+
+// ─── STAFF ALLOCATION TABLE ───────────────────────────────────────────────────
+function StaffAllocationTable({ prop, rangeIdx, guestCount, overrideEnabled, overrides, overrideReason, onToggleOverride, onOverrideChange, onReasonChange, lang }){
+  const a = VALET_ALLOCATIONS[prop];
+  if(!a) return null;
+  const range = a.ranges[rangeIdx];
+  const L = lang==="hi";
+
+  const getVal = r => (overrideEnabled && overrides[r]!==undefined)
+    ? (parseInt(overrides[r])||0)
+    : (a.roles[r]?.[rangeIdx]??0);
+
+  const total = ROLE_ORDER.reduce((s,r)=>s+getVal(r),0);
+  const visibleRoles = overrideEnabled ? ROLE_ORDER : ROLE_ORDER.filter(r=>getVal(r)>0);
+  const maxGuests = a.ranges[a.ranges.length-1].max;
+  const exceeded = guestCount && parseInt(guestCount)>maxGuests;
+
+  return(
+    <div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden",marginTop:8}}>
+      <div style={{background:C.maroonSoft,padding:"10px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:F.d,fontSize:13,fontWeight:700,color:C.maroon}}>
+          🚗 {L?"स्टाफ आवंटन":"Staff Allocation"}: {a.name}
+        </div>
+        {!!guestCount&&(
+          <div style={{fontSize:10,color:C.tl,fontFamily:F.b,marginTop:2}}>
+            {L?"मेहमान":"Guests"}: {guestCount} → {L?"रेंज":"Range"}: <strong style={{color:C.maroon}}>{range.label}</strong>
+            {exceeded&&<span style={{color:"#D97706",marginLeft:6}}>⚠️ {L?"अधिकतम सीमा":"Max range used"}</span>}
+          </div>
+        )}
+      </div>
+
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead>
+          <tr style={{background:C.bg}}>
+            <th style={{padding:"6px 12px",textAlign:"left",fontFamily:F.b,fontSize:10,fontWeight:700,color:C.tl}}>{L?"भूमिका":"Role"}</th>
+            <th style={{padding:"6px 12px",textAlign:"center",fontFamily:F.b,fontSize:10,fontWeight:700,color:C.tl}}>{L?"संख्या":"Required"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visibleRoles.map(role=>{
+            const meta = ROLE_META[role];
+            const val = getVal(role);
+            return(
+              <tr key={role} style={{borderLeft:`3px solid ${meta.color}`}}>
+                <td style={{padding:"9px 12px",fontFamily:F.b,fontSize:12,fontWeight:500,color:C.text,borderBottom:`1px solid ${C.border}`}}>
+                  {meta.icon} {L?meta.labelHi:role}
+                </td>
+                <td style={{padding:"9px 12px",textAlign:"center",borderBottom:`1px solid ${C.border}`}}>
+                  {overrideEnabled
+                    ?<input type="number" min={0} value={overrides[role]??a.roles[role]?.[rangeIdx]??0}
+                        onChange={e=>onOverrideChange(role,e.target.value)}
+                        style={{width:64,padding:"4px 6px",borderRadius:6,border:`1px solid ${meta.color}`,fontFamily:F.b,fontSize:13,textAlign:"center",outline:"none"}}/>
+                    :<span style={{fontFamily:F.d,fontSize:18,fontWeight:700,color:meta.color}}>{val}</span>
+                  }
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr style={{background:C.maroonSoft}}>
+            <td style={{padding:"9px 12px",fontFamily:F.b,fontSize:12,fontWeight:700,color:C.maroon}}>{L?"कुल स्टाफ":"TOTAL STAFF"}</td>
+            <td style={{padding:"9px 12px",textAlign:"center",fontFamily:F.d,fontSize:20,fontWeight:700,color:C.maroon}}>{total}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div style={{padding:"10px 14px",borderTop:`1px solid ${C.border}`,background:overrideEnabled?"#FFFBF0":C.white}}>
+        <button onClick={()=>onToggleOverride(!overrideEnabled)}
+          style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,
+            border:`1px solid ${overrideEnabled?"#D97706":C.border}`,
+            background:overrideEnabled?"#FFF7ED":C.bg,cursor:"pointer",
+            fontFamily:F.b,fontSize:11,fontWeight:overrideEnabled?700:400,
+            color:overrideEnabled?"#D97706":C.tl}}>
+          ⚙️ {L?"मैन्युअल ओवरराइड":"Manual Override"} <span style={{fontSize:13}}>{overrideEnabled?"●":"○"}</span>
+        </button>
+        {overrideEnabled&&(
+          <div style={{marginTop:8}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#D97706",fontFamily:F.b,marginBottom:4}}>
+              ⚠️ {L?"ओवरराइड का कारण (जरूरी)":"Reason for override (required)"}
+            </div>
+            <textarea value={overrideReason} onChange={e=>onReasonChange(e.target.value)}
+              placeholder="e.g. VIP event — extra drivers requested by sales team"
+              rows={2} style={{width:"100%",padding:"7px 10px",borderRadius:7,
+                border:`1px solid ${overrideReason?"#D97706":C.red}`,
+                fontFamily:F.b,fontSize:11,resize:"vertical",outline:"none",
+                boxSizing:"border-box",background:"#FFFBF0"}}/>
+            {!overrideReason&&<div style={{fontSize:9,color:C.red,fontFamily:F.b,marginTop:2}}>{L?"कारण जरूरी है":"Reason is required"}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── FULL ALLOCATION MATRIX ───────────────────────────────────────────────────
+function FullAllocationMatrix({ prop, activeRangeIdx, lang }){
+  const a = VALET_ALLOCATIONS[prop];
+  if(!a) return null;
+  const L = lang==="hi";
+
+  return(
+    <div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:13,fontWeight:700,color:C.maroon}}>
+        📊 {a.name} — {L?"पूरी आवंटन तालिका":"Full Allocation Table"}
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{borderCollapse:"collapse",fontFamily:F.b,fontSize:11,minWidth:"100%"}}>
+          <thead>
+            <tr>
+              <th style={{padding:"8px 12px",textAlign:"left",background:C.maroonSoft,color:C.maroon,fontWeight:700,whiteSpace:"nowrap",position:"sticky",left:0,zIndex:1,minWidth:90}}>
+                {L?"भूमिका":"Particulars"}
+              </th>
+              {a.ranges.map((r,i)=>(
+                <th key={i} style={{padding:"7px 10px",textAlign:"center",fontWeight:700,
+                  background:i===activeRangeIdx?C.maroon:C.maroonSoft,
+                  color:i===activeRangeIdx?C.white:C.maroon,
+                  whiteSpace:"nowrap",minWidth:56}}>
+                  {r.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ROLE_ORDER.map(role=>{
+              const meta = ROLE_META[role];
+              return(
+                <tr key={role}>
+                  <td style={{padding:"7px 12px",fontWeight:600,whiteSpace:"nowrap",
+                    background:C.bg,borderBottom:`1px solid ${C.border}`,
+                    position:"sticky",left:0,borderLeft:`3px solid ${meta.color}`,color:C.text}}>
+                    {meta.icon} {L?meta.labelHi:role}
+                  </td>
+                  {a.roles[role].map((val,ci)=>(
+                    <td key={ci} style={{padding:"7px 10px",textAlign:"center",borderBottom:`1px solid ${C.border}`,
+                      background:ci===activeRangeIdx?`${C.maroon}18`:val>0?"#F0FAF4":C.white,
+                      fontWeight:val>0?700:400,
+                      color:ci===activeRangeIdx?C.maroon:val>0?"#059669":C.border}}>
+                      {val>0?val:""}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td style={{padding:"8px 12px",fontWeight:700,background:C.maroonSoft,color:C.maroon,position:"sticky",left:0,fontFamily:F.b,fontSize:11}}>
+                {L?"कुल":"Total"}
+              </td>
+              {a.totals.map((t,i)=>(
+                <td key={i} style={{padding:"8px 10px",textAlign:"center",fontWeight:700,
+                  background:i===activeRangeIdx?C.maroon:C.maroonSoft,
+                  color:i===activeRangeIdx?C.white:C.maroon,
+                  fontFamily:F.d,fontSize:13}}>
+                  {t}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style={{padding:"6px 12px",fontSize:9,color:C.tl,fontFamily:F.b,borderTop:`1px solid ${C.border}`}}>
+        {L?"हाइलाइट किया गया कॉलम = वर्तमान चयन":"Highlighted column = current selection"}
+      </div>
+    </div>
+  );
 }
 
 // ─── BOOKING FORM ─────────────────────────────────────────────────────────────
@@ -130,14 +356,14 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
   const isEdit = !!init?.id;
   const initData = isEdit ? {
     ...init,
-    event_type: init.event_type || "other",
+    event_type: init.event_type||"other",
     guest_count: String(init.guest_count||""),
-    priority: init.priority || "normal",
-    special_instructions: init.special_instructions || init.notes || "",
+    priority: init.priority||"normal",
+    special_instructions: init.special_instructions||init.notes||"",
     expected_cars: String(init.expected_cars||""),
     valets_needed: String(init.valets_needed||""),
   } : {
-    property: defProp, event_date: prefillDate||"", event_name:"",
+    property:defProp, event_date:prefillDate||"", event_name:"",
     event_type:"standard_wedding", guest_count:"", expected_cars:"",
     valets_needed:"", priority:"normal", special_instructions:"",
     vendor_name:"", vendor_phone:"", shift_start:"18:00", shift_end:"23:30",
@@ -146,33 +372,53 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
   const [f, sF] = useState(initData);
   const inp = (k,v) => sF(p=>({...p,[k]:v}));
 
-  // Track whether cars/valets have been manually overridden
-  const carsEdited = useRef(isEdit && !!init?.expected_cars);
-  const valetsEdited = useRef(isEdit && !!init?.valets_needed);
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [overrides, setOverrides] = useState({});
+  const [overrideReason, setOverrideReason] = useState("");
 
-  // Auto-calculate when guest_count or event_type changes
+  const carsEdited = useRef(isEdit && !!init?.expected_cars);
+  const valetsEdited = useRef(false);
+
+  const gc = parseInt(f.guest_count)||0;
+  const rangeIdx = gc>0 ? findRange(f.property, gc) : 0;
+  const showAlloc = gc>0 && !!VALET_ALLOCATIONS[f.property];
+
+  // Auto-calc cars
   useEffect(()=>{
     if(carsEdited.current) return;
     const cars = calcCars(f.guest_count, f.event_type);
-    if(!cars) return;
-    sF(p=>{
-      const valets = valetsEdited.current ? p.valets_needed : calcValets(cars, p.event_type);
-      return {...p, expected_cars:cars, valets_needed:valets};
-    });
+    if(cars) sF(p=>({...p, expected_cars:cars}));
   },[f.guest_count, f.event_type]);
+
+  // Auto-sync valets from allocation total
+  useEffect(()=>{
+    if(valetsEdited.current) return;
+    const guestN = parseInt(f.guest_count)||0;
+    if(!guestN) return;
+    const ri = findRange(f.property, guestN);
+    const a = VALET_ALLOCATIONS[f.property];
+    if(a) sF(p=>({...p, valets_needed:String(a.totals[ri])}));
+  },[f.guest_count, f.property]);
+
+  // Reset overrides when property or guest count changes
+  useEffect(()=>{ setOverrides({}); setOverrideEnabled(false); },[f.property, f.guest_count]);
 
   const save = ()=>{
     if(!f.event_date||!f.property) return;
+    const finalAlloc = showAlloc ? computeFinalAlloc(f.property, rangeIdx, overrideEnabled, overrides) : null;
+    const totalStaff = finalAlloc ? ROLE_ORDER.reduce((s,r)=>s+(finalAlloc[r]||0),0) : (parseInt(f.valets_needed)||0);
     onSave({
       ...f,
       expected_cars: parseInt(f.expected_cars)||0,
-      valets_needed: parseInt(f.valets_needed)||0,
+      valets_needed: totalStaff,
       guest_count: parseInt(f.guest_count)||0,
+      staff_allocation: finalAlloc,
+      override_reason: (overrideEnabled&&overrideReason) ? overrideReason : null,
       created_by: f.created_by||user.id,
     });
   };
 
-  const isPremium = f.priority==="high" || f.priority==="critical";
+  const isPremium = f.priority==="high"||f.priority==="critical";
   const F2 = {width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:C.bg};
   const Lb = {fontSize:11,fontWeight:600,color:C.tl,marginBottom:3,display:"block"};
 
@@ -183,7 +429,6 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginBottom:10}}>
-        {/* Property + Date */}
         <div>
           <label style={Lb}>{lang==="hi"?"वेन्यू":"Property"}</label>
           <select value={f.property} onChange={e=>inp("property",e.target.value)} style={F2}>
@@ -195,28 +440,25 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
           <input type="date" value={f.event_date} onChange={e=>inp("event_date",e.target.value)} style={F2}/>
         </div>
 
-        {/* Event Name full width */}
         <div style={{gridColumn:"1/-1"}}>
           <label style={Lb}>{lang==="hi"?"इवेंट नाम":"Event Name"}</label>
           <input value={f.event_name} onChange={e=>inp("event_name",e.target.value)}
             placeholder="e.g. Sharma Wedding, TechCorp Annual Event" style={F2}/>
         </div>
 
-        {/* Event Type full width */}
         <div style={{gridColumn:"1/-1"}}>
           <label style={Lb}>{lang==="hi"?"इवेंट प्रकार":"Event Type"}</label>
-          <select value={f.event_type} onChange={e=>{carsEdited.current=false;valetsEdited.current=false;inp("event_type",e.target.value);}} style={F2}>
+          <select value={f.event_type} onChange={e=>{carsEdited.current=false;inp("event_type",e.target.value);}} style={F2}>
             {Object.entries(EVENT_TYPES).map(([k,v])=>(
               <option key={k} value={k}>{v.icon} {lang==="hi"?v.lH:v.l}</option>
             ))}
           </select>
           <div style={{fontSize:10,color:C.tl,marginTop:3}}>
             Car ratio: ×{EVENT_TYPES[f.event_type]?.carRatio} per guest
-            {EVENT_TYPES[f.event_type]?.vip && <span style={{marginLeft:6,color:C.accent,fontWeight:700}}>⭐ VIP — 1 valet per 10 cars</span>}
+            {EVENT_TYPES[f.event_type]?.vip&&<span style={{marginLeft:6,color:"#D97706",fontWeight:700}}>⭐ VIP</span>}
           </div>
         </div>
 
-        {/* Guest Count + Priority */}
         <div>
           <label style={Lb}>👥 {lang==="hi"?"अपेक्षित मेहमान":"Expected Guests"}</label>
           <input type="number" min={0} value={f.guest_count}
@@ -225,54 +467,61 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
         </div>
         <div>
           <label style={Lb}>🚨 {lang==="hi"?"प्राथमिकता":"Priority"}</label>
-          <select value={f.priority} onChange={e=>inp("priority",e.target.value)} style={{...F2,
-            background:PRIORITIES[f.priority]?.bg||C.bg,
-            color:PRIORITIES[f.priority]?.c||C.text,
-            fontWeight:f.priority!=="normal"?700:400,
-          }}>
+          <select value={f.priority} onChange={e=>inp("priority",e.target.value)}
+            style={{...F2,background:PRIORITIES[f.priority]?.bg||C.bg,color:PRIORITIES[f.priority]?.c||C.text,fontWeight:f.priority!=="normal"?700:400}}>
             {Object.entries(PRIORITIES).map(([k,v])=>(
               <option key={k} value={k}>{lang==="hi"?v.lH:v.l}</option>
             ))}
           </select>
         </div>
 
-        {/* Premium event warning */}
-        {isPremium&&<div style={{gridColumn:"1/-1",background:f.priority==="critical"?C.rBg:"#FFF7ED",border:`1px solid ${f.priority==="critical"?C.red:C.accent}`,borderRadius:8,padding:"8px 12px"}}>
-          <div style={{fontSize:11,fontWeight:700,color:f.priority==="critical"?C.red:C.accent}}>
-            ⚠️ {lang==="hi"?"प्रीमियम इवेंट — अतिरिक्त वैलेट और सीनियर स्टाफ सुनिश्चित करें":"Premium event — ensure extra valets and senior staff on duty"}
+        {isPremium&&<div style={{gridColumn:"1/-1",background:f.priority==="critical"?C.rBg:"#FFF7ED",border:`1px solid ${f.priority==="critical"?C.red:"#D97706"}`,borderRadius:8,padding:"8px 12px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:f.priority==="critical"?C.red:"#D97706"}}>
+            ⚠️ {lang==="hi"?"प्रीमियम इवेंट — अतिरिक्त वैलेट सुनिश्चित करें":"Premium event — ensure extra valets and senior staff on duty"}
           </div>
         </div>}
 
-        {/* Expected Cars + Valets (with auto-calc indicators) */}
+        {/* Inline Staff Allocation */}
+        {showAlloc&&<div style={{gridColumn:"1/-1"}}>
+          <StaffAllocationTable
+            prop={f.property} rangeIdx={rangeIdx} guestCount={f.guest_count}
+            overrideEnabled={overrideEnabled} overrides={overrides}
+            overrideReason={overrideReason}
+            onToggleOverride={v=>setOverrideEnabled(v)}
+            onOverrideChange={(role,val)=>setOverrides(p=>({...p,[role]:val}))}
+            onReasonChange={v=>setOverrideReason(v)}
+            lang={lang}
+          />
+        </div>}
+
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
             <label style={{...Lb,marginBottom:0}}>🚗 {lang==="hi"?"अनुमानित कारें":"Expected Cars"}</label>
-            {f.guest_count>0&&<button type="button" onClick={()=>{carsEdited.current=false;valetsEdited.current=false;const c=calcCars(f.guest_count,f.event_type);sF(p=>({...p,expected_cars:c,valets_needed:calcValets(c,p.event_type)}));}} style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
+            {f.guest_count>0&&<button type="button" onClick={()=>{carsEdited.current=false;const c=calcCars(f.guest_count,f.event_type);sF(p=>({...p,expected_cars:c}));}}
+              style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
           </div>
           <input type="number" min={0} value={f.expected_cars}
             onChange={e=>{carsEdited.current=true;inp("expected_cars",e.target.value);}}
-            placeholder={f.guest_count>0?`~${calcCars(f.guest_count,f.event_type)} suggested`:"Enter cars"} style={F2}/>
+            placeholder="Enter cars" style={F2}/>
         </div>
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
             <label style={{...Lb,marginBottom:0}}>👤 {lang==="hi"?"वैलेट स्टाफ":"Valets Needed"}</label>
-            {f.expected_cars>0&&<button type="button" onClick={()=>{valetsEdited.current=false;sF(p=>({...p,valets_needed:calcValets(p.expected_cars,p.event_type)}));}} style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
+            {showAlloc&&<button type="button" onClick={()=>{valetsEdited.current=false;const ri=findRange(f.property,parseInt(f.guest_count)||0);const a=VALET_ALLOCATIONS[f.property];if(a)sF(p=>({...p,valets_needed:String(a.totals[ri])}));}}
+              style={{fontSize:9,padding:"2px 6px",borderRadius:5,border:`1px solid ${C.accent}`,background:"#FFF7ED",color:C.accent,cursor:"pointer",fontFamily:F.b,fontWeight:700}}>↻ Auto</button>}
           </div>
           <input type="number" min={0} value={f.valets_needed}
             onChange={e=>{valetsEdited.current=true;inp("valets_needed",e.target.value);}}
-            placeholder={f.expected_cars>0?`~${calcValets(f.expected_cars,f.event_type)} suggested`:"Enter valets"} style={F2}/>
+            placeholder="Total valet staff" style={F2}/>
         </div>
 
-        {/* Special Instructions — amber highlight */}
         <div style={{gridColumn:"1/-1"}}>
-          <label style={{...Lb,color:C.accent}}>📋 {lang==="hi"?"सेल्स टीम के विशेष निर्देश":"Special Instructions from Sales Team"}</label>
-          <textarea value={f.special_instructions}
-            onChange={e=>inp("special_instructions",e.target.value)}
-            placeholder="e.g. VIP guest list, extra valets requested, specific parking arrangement, luxury cars expected"
+          <label style={{...Lb,color:"#D97706"}}>📋 {lang==="hi"?"सेल्स टीम के विशेष निर्देश":"Special Instructions from Sales Team"}</label>
+          <textarea value={f.special_instructions} onChange={e=>inp("special_instructions",e.target.value)}
+            placeholder="e.g. VIP guest list, extra valets requested, specific parking arrangement"
             rows={2} style={{...F2,background:"#FFFBF0",border:`1px solid ${C.accent}`,resize:"vertical"}}/>
         </div>
 
-        {/* Vendor + Phone */}
         <div>
           <label style={Lb}>🏢 {lang==="hi"?"वेंडर नाम":"Vendor Name"}</label>
           <input value={f.vendor_name} onChange={e=>inp("vendor_name",e.target.value)} placeholder="Valet company name" style={F2}/>
@@ -282,7 +531,6 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
           <input type="tel" value={f.vendor_phone} onChange={e=>inp("vendor_phone",e.target.value)} placeholder="+91 99999 99999" style={F2}/>
         </div>
 
-        {/* Shift times */}
         <div>
           <label style={Lb}>⏰ {lang==="hi"?"शिफ्ट शुरू":"Shift Start"}</label>
           <input type="time" value={f.shift_start} onChange={e=>inp("shift_start",e.target.value)} style={F2}/>
@@ -292,7 +540,6 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
           <input type="time" value={f.shift_end} onChange={e=>inp("shift_end",e.target.value)} style={F2}/>
         </div>
 
-        {/* Status */}
         <div>
           <label style={Lb}>{lang==="hi"?"स्थिति":"Status"}</label>
           <select value={f.status} onChange={e=>inp("status",e.target.value)} style={F2}>
@@ -301,11 +548,11 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
         </div>
       </div>
 
-      <div style={{display:"flex",gap:8}}>
-        <button onClick={save} style={{padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+      <div style={{display:"flex",gap:8,flexWrap:isMobile?"wrap":"nowrap"}}>
+        <button onClick={save} style={{flex:isMobile?"1 1 100%":"0 0 auto",padding:"9px 18px",borderRadius:8,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer",minHeight:44}}>
           {isEdit?"💾 Update":"✅ Save Booking"}
         </button>
-        <button onClick={onCancel} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,color:C.text,fontFamily:F.b,fontSize:13,cursor:"pointer"}}>
+        <button onClick={onCancel} style={{flex:isMobile?"1 1 100%":"0 0 auto",padding:"9px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,color:C.text,fontFamily:F.b,fontSize:13,cursor:"pointer",minHeight:44}}>
           {lang==="hi"?"रद्द":"Cancel"}
         </button>
       </div>
@@ -331,7 +578,7 @@ function CalendarView({user, lang}){
   const load = useCallback(async()=>{
     setLd(true);
     const y=String(yr),m=String(mo+1).padStart(2,"0");
-    const s=`${y}-${m}-01`, e=`${y}-${m}-${String(dIM(yr,mo)).padStart(2,"0")}`;
+    const s=`${y}-${m}-01`,e=`${y}-${m}-${String(dIM(yr,mo)).padStart(2,"0")}`;
     let q = supabase.from("valet_bookings").select("*").gte("event_date",s).lte("event_date",e).order("event_date");
     if(propF!=="all") q=q.eq("property",propF);
     const{data}=await q;
@@ -357,14 +604,16 @@ function CalendarView({user, lang}){
       notes:f.special_instructions||null,
       special_instructions:f.special_instructions||null,
       priority:f.priority||"normal", status:f.status,
+      staff_allocation:f.staff_allocation||null,
+      override_reason:f.override_reason||null,
     };
     if(f.id){
       await supabase.from("valet_bookings").update(payload).eq("id",f.id);
     } else {
       await supabase.from("valet_bookings").insert({...payload,created_by:f.created_by});
       const dateFmt = payload.event_date ? new Date(payload.event_date).toLocaleDateString("en-IN",{day:"numeric",month:"short"}) : "";
-      const propName = PROPS[payload.property]?.sn || payload.property || "";
-      getSAAndAdminIds(null).then(ids => notifyMultiple("valet_booking","🚗 New valet booking: "+(payload.event_type||"Event")+" at "+propName+" on "+dateFmt,f.created_by||"system",f.created_by||"admin",ids,payload.property));
+      const propName = PROPS[payload.property]?.sn||payload.property||"";
+      getSAAndAdminIds(null).then(ids=>notifyMultiple("valet_booking","🚗 New valet booking: "+(payload.event_type||"Event")+" at "+propName+" on "+dateFmt,f.created_by||"system",f.created_by||"admin",ids,payload.property));
     }
     setSF(false);setEB(null);setPD(null);load();
   };
@@ -383,7 +632,6 @@ function CalendarView({user, lang}){
   const cells=[]; for(let i=0;i<firstDay;i++)cells.push(null); for(let d=1;d<=days;d++)cells.push(d);
   const mns=lang==="hi"?MN_HI:MN_EN; const dys=lang==="hi"?DY_HI:DY_EN;
 
-  // Cell chip color: critical=red, high=orange, else status color
   const chipStyle=(b)=>{
     const pri=b.priority||"normal";
     if(pri==="critical") return {bg:C.rBg,c:C.red};
@@ -394,7 +642,6 @@ function CalendarView({user, lang}){
 
   return(
     <div>
-      {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={prevM} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
@@ -407,7 +654,6 @@ function CalendarView({user, lang}){
         </button>
       </div>
 
-      {/* Property filter */}
       <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
         {PROP_OPTS.map(p=>(
           <button key={p.v} onClick={()=>setPF(p.v)}
@@ -418,10 +664,8 @@ function CalendarView({user, lang}){
         {loading&&<span style={{fontSize:10,color:C.tl,fontFamily:F.b,alignSelf:"center"}}>Loading...</span>}
       </div>
 
-      {/* Booking form */}
       {showForm&&<BookingForm init={editB} prefillDate={prefDate} onSave={save} onCancel={()=>{setSF(false);setEB(null);setPD(null);}} user={user} lang={lang}/>}
 
-      {/* Calendar grid */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:C.maroonSoft,borderBottom:`1px solid ${C.border}`}}>
           {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:10,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{isMobile?d.slice(0,1):d}</div>)}
@@ -456,7 +700,6 @@ function CalendarView({user, lang}){
         </div>
       </div>
 
-      {/* Day panel */}
       {selDate&&(
         <div style={{background:C.white,borderRadius:14,border:`2px solid ${C.maroon}`,padding:14,marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -475,6 +718,7 @@ function CalendarView({user, lang}){
               const st=STATUS[b.status]||STATUS.planned;
               const pri=PRIORITIES[b.priority||"normal"]||PRIORITIES.normal;
               const et=EVENT_TYPES[b.event_type||"other"]||EVENT_TYPES.other;
+              const sa=b.staff_allocation;
               return(
                 <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:8,borderLeft:`4px solid ${st.c}`,border:`1px solid ${C.border}`,borderLeftWidth:4,borderLeftColor:st.c}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
@@ -485,12 +729,18 @@ function CalendarView({user, lang}){
                       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
                         <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:st.bg,color:st.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?st.lH:st.l}</span>
                         <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:pri.bg,color:pri.c,fontWeight:700,fontFamily:F.b}}>{lang==="hi"?pri.lH:pri.l}</span>
-                        <span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>{et.icon} {lang==="hi"?et.lH:et.l}</span>
-                        {b.guest_count>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>👥 {b.guest_count} guests</span>}
+                        {b.guest_count>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>👥 {b.guest_count}</span>}
                         {b.expected_cars>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bBg,color:C.blue,fontFamily:F.b}}>🚗 {b.expected_cars} cars</span>}
                         {b.valets_needed>0&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.maroonSoft,color:C.maroon,fontFamily:F.b}}>👤 {b.valets_needed} valets</span>}
                         {(b.shift_start||b.shift_end)&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:C.bg,color:C.tl,fontFamily:F.b}}>⏰ {fmtT(b.shift_start)}–{fmtT(b.shift_end)}</span>}
                       </div>
+                      {sa&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>
+                        {ROLE_ORDER.filter(r=>sa[r]>0).map(r=>{
+                          const m=ROLE_META[r];
+                          return<span key={r} style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:`${m.color}18`,color:m.color,fontFamily:F.b,fontWeight:600}}>{m.icon} {sa[r]} {r}</span>;
+                        })}
+                        {b.override_reason&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:"#FFF7ED",color:"#D97706",fontFamily:F.b}}>⚙️ {b.override_reason.slice(0,30)}{b.override_reason.length>30?"…":""}</span>}
+                      </div>}
                       {b.vendor_name&&(
                         <div style={{fontSize:11,color:C.tl,fontFamily:F.b,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
                           <span>🏢 {b.vendor_name}</span>
@@ -515,7 +765,6 @@ function CalendarView({user, lang}){
         </div>
       )}
 
-      {/* Legend */}
       <div style={{display:"flex",gap:12,flexWrap:"wrap",padding:"6px 0",marginBottom:4}}>
         {Object.entries(STATUS).map(([k,v])=>(
           <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
@@ -533,188 +782,194 @@ function CalendarView({user, lang}){
 }
 
 // ─── STAFF CALCULATOR ─────────────────────────────────────────────────────────
-function interpolate(data,pax){
-  const minPt=data[0],maxPt=data[data.length-1];
-  if(pax<=minPt.pax)return{...minPt,isExact:true};
-  if(pax>=maxPt.pax)return{...maxPt,isExact:true};
-  const ex=data.find(d=>d.pax===pax);
-  if(ex)return{...ex,isExact:true};
-  let lo=data[0],hi=data[data.length-1];
-  for(let i=0;i<data.length-1;i++){if(data[i].pax<=pax&&data[i+1].pax>=pax){lo=data[i];hi=data[i+1];break;}}
-  const t=(pax-lo.pax)/(hi.pax-lo.pax);
-  const roles=["keyMan","driver","guard","rider","gunMan","bouncer"];
-  const result={pax,isExact:false};
-  roles.forEach(r=>{result[r]=Math.ceil(lo[r]+t*(hi[r]-lo[r]));});
-  return result;
-}
-
-function RoleCard({roleKey,count,lang}){
-  const meta=ROLE_META[roleKey];
-  return(
-    <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:C.white,borderRadius:10,border:`1px solid ${C.border}`,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-      <div style={{width:36,height:36,borderRadius:9,background:C.maroonSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{meta.icon}</div>
-      <div style={{flex:1}}>
-        <div style={{fontSize:10,color:C.tl,fontFamily:F.b,fontWeight:500}}>{lang==="hi"?meta.labelHi:meta.label}</div>
-        <div style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1.1}}>{count}</div>
-      </div>
-    </div>
-  );
-}
-
 function StaffCalculator({user, lang}){
   const isMobile = useIsMobile();
-  const defVenue=VENUE_CFG[user.prop]?user.prop:"pp";
-  const [venue,setVenue]=useState(defVenue);
-  const [pax,setPax]=useState(300);
-  const [showCost,setShowCost]=useState(false);
-  const [rates,setRates]=useState({keyMan:1500,driver:1200,guard:1000,rider:800,gunMan:2000,bouncer:1500});
+  const defProp = VALET_ALLOCATIONS[user.prop] ? user.prop : "pp";
+  const [prop, setProp] = useState(defProp);
+  const [inputMode, setInputMode] = useState("range");
+  const [rangeIdx, setRangeIdx] = useState(0);
+  const [guestInput, setGuestInput] = useState("");
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [overrides, setOverrides] = useState({});
+  const [overrideReason, setOverrideReason] = useState("");
+  const [showMatrix, setShowMatrix] = useState(false);
+  const [showCost, setShowCost] = useState(false);
+  const [rates, setRates] = useState({"Key Man":1500,"Driver":1200,"Guard":1000,"Rider":800,"Gun Man":2000,"Bouncer":1500});
 
-  const cfg=VENUE_CFG[venue]; const data=VALET_DATA[venue];
-  const clamped=Math.min(Math.max(pax,cfg.min),cfg.max);
-  const alloc=interpolate(data,clamped);
-  const roles=["keyMan","driver","guard","rider","gunMan","bouncer"];
-  const active=roles.filter(r=>alloc[r]>0);
-  const total=roles.reduce((s,r)=>s+(alloc[r]||0),0);
-  const pct=((clamped-cfg.min)/(cfg.max-cfg.min))*100;
-  const totalCost=roles.reduce((s,r)=>s+(alloc[r]||0)*(rates[r]||0),0);
-  const L=lang==="hi";
+  const a = VALET_ALLOCATIONS[prop];
+  const L = lang==="hi";
+
+  const activeRangeIdx = inputMode==="range"
+    ? rangeIdx
+    : (guestInput ? findRange(prop, parseInt(guestInput)||0) : 0);
+
+  const finalAlloc = computeFinalAlloc(prop, activeRangeIdx, overrideEnabled, overrides);
+  const finalTotal = ROLE_ORDER.reduce((s,r)=>s+(finalAlloc[r]||0),0);
+  const baseTotal = a.totals[activeRangeIdx];
+
+  // Reset overrides when prop changes
+  const prevProp = useRef(prop);
+  useEffect(()=>{
+    if(prevProp.current!==prop){ setOverrides({}); setOverrideEnabled(false); setRangeIdx(0); setGuestInput(""); }
+    prevProp.current=prop;
+  },[prop]);
+
+  const resolvedGuestInput = inputMode==="count" && guestInput ? parseInt(guestInput)||0 : null;
+  const range = a.ranges[activeRangeIdx];
+
+  const F2 = {padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",boxSizing:"border-box",background:C.bg};
 
   return(
-    <div style={{maxWidth:680,margin:"0 auto"}}>
-      <div style={{fontSize:11,color:C.tl,fontFamily:F.b,marginBottom:16}}>{L?"स्टाफ की संख्या ऊपर की ओर गोल की गई है।":"Staff counts rounded up — always better to have more than less."}</div>
+    <div style={{maxWidth:700,margin:"0 auto"}}>
 
-      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-        {Object.entries(VENUE_CFG).map(([k,v])=>{
-          const a=venue===k;
-          return(
-            <button key={k} onClick={()=>{setVenue(k);setPax(v.min+Math.round((v.max-v.min)*0.3/v.step)*v.step);}}
-              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:10,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:a?700:400,color:a?C.maroon:C.tl}}>
-              <span style={{fontSize:13}}>{v.icon}</span><span>{v.name}</span>
+      {/* Property selector */}
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"वेन्यू":"Property"}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {Object.entries(VALET_ALLOCATIONS).map(([k,v])=>{
+            const active = prop===k;
+            return(
+              <button key={k} onClick={()=>setProp(k)}
+                style={{display:"flex",alignItems:"center",gap:5,padding:"8px 14px",borderRadius:10,
+                  border:active?`2px solid ${C.maroon}`:`1px solid ${C.border}`,
+                  background:active?C.maroonSoft:C.white,cursor:"pointer",
+                  fontFamily:F.b,fontSize:12,fontWeight:active?700:400,
+                  color:active?C.maroon:C.tl,minHeight:40}}>
+                <span style={{fontSize:14}}>{PROPS[k]?.icon||"🏛️"}</span>
+                <span>{v.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Input mode toggle */}
+      <div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        <div style={{display:"flex",background:C.bg,borderRadius:8,padding:3,gap:2,marginBottom:12,width:"fit-content"}}>
+          {[{id:"range",label:L?"रेंज चुनें":"Select Guest Range"},{id:"count",label:L?"संख्या दर्ज करें":"Enter Exact Count"}].map(m=>(
+            <button key={m.id} onClick={()=>setInputMode(m.id)}
+              style={{padding:"6px 12px",borderRadius:7,border:"none",cursor:"pointer",
+                fontFamily:F.b,fontSize:11,fontWeight:600,
+                background:inputMode===m.id?C.maroon:"transparent",
+                color:inputMode===m.id?C.white:C.tl}}>
+              {m.label}
             </button>
-          );
-        })}
-      </div>
-
-      <div style={{background:C.white,borderRadius:14,padding:"16px 18px 18px",border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:10}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.tl,fontFamily:F.b}}>{L?"अपेक्षित मेहमान":"Expected Guests (Pax)"}</div>
-          <div style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:C.maroon,lineHeight:1,display:"flex",alignItems:"baseline",gap:4}}>
-            {clamped}<span style={{fontSize:11,color:C.tl,fontWeight:400}}>{L?"मेहमान":"guests"}</span>
-          </div>
-        </div>
-        <div style={{position:"relative",height:4,borderRadius:2,background:C.border,marginBottom:6}}>
-          <div style={{position:"absolute",left:0,top:0,height:"100%",width:`${pct}%`,borderRadius:2,background:`linear-gradient(90deg,${C.maroon},${C.maroonLight})`}}/>
-        </div>
-        <input type="range" min={cfg.min} max={cfg.max} step={cfg.step} value={clamped} onChange={e=>setPax(Number(e.target.value))}
-          style={{width:"100%",margin:"0 0 4px",WebkitAppearance:"none",appearance:"none",height:20,background:"transparent",cursor:"pointer",outline:"none"}}/>
-        <style>{`input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;box-shadow:0 2px 6px ${C.maroon}44;margin-top:-9px;}input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:${C.maroon};cursor:pointer;border:none;}input[type=range]::-webkit-slider-runnable-track{height:4px;background:transparent;}input[type=range]::-moz-range-track{height:4px;background:transparent;}`}</style>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:2,marginBottom:10}}>
-          {data.map(d=><div key={d.pax} style={{fontSize:9,color:d.pax===clamped?C.maroon:C.tl,fontWeight:d.pax===clamped?700:400,fontFamily:F.b}}>{d.pax>=1000?"1K":d.pax}</div>)}
-        </div>
-        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-          {data.map(d=><button key={d.pax} onClick={()=>setPax(d.pax)} style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:10,fontWeight:600,background:clamped===d.pax?C.maroon:C.bg,color:clamped===d.pax?C.white:C.tl}}>{d.pax}</button>)}
-        </div>
-      </div>
-
-      <div style={{background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,borderRadius:14,padding:"16px 18px 14px",marginBottom:14,boxShadow:`0 4px 16px ${C.maroon}33`}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-          <div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontFamily:F.b,fontWeight:600}}>{cfg.icon} {cfg.name} · {clamped} {L?"मेहमान":"guests"}</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:F.b,marginTop:2}}>{alloc.isExact?(L?"(सटीक)":"(exact)"):(L?"(अनुमानित)":"(interpolated)")}</div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",fontFamily:F.b}}>{L?"कुल वैलेट स्टाफ":"Total Valet Staff"}</div>
-            <div style={{fontSize:48,fontWeight:700,fontFamily:F.d,color:"#fff",lineHeight:1}}>{total}</div>
-          </div>
-        </div>
-        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          {active.map(r=>(
-            <div key={r} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:7,background:"rgba(255,255,255,0.15)"}}>
-              <span style={{fontSize:12}}>{ROLE_META[r].icon}</span>
-              <span style={{fontSize:11,fontWeight:700,color:"#fff",fontFamily:F.b}}>{alloc[r]} {L?ROLE_META[r].labelHi:ROLE_META[r].label}</span>
-            </div>
           ))}
         </div>
+
+        {inputMode==="range" ? (
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:C.tl,fontFamily:F.b,display:"block",marginBottom:6}}>{L?"मेहमान रेंज":"Guest Range"}</label>
+            <select value={rangeIdx} onChange={e=>setRangeIdx(Number(e.target.value))}
+              style={{...F2,width:"100%",fontSize:13}}>
+              {a.ranges.map((r,i)=>(
+                <option key={i} value={i}>
+                  {r.label} {L?"मेहमान":"guests"} — {L?"कुल":"Total"}: {a.totals[i]} {L?"स्टाफ":"staff"}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:C.tl,fontFamily:F.b,display:"block",marginBottom:6}}>
+              👥 {L?"मेहमान संख्या":"Guest Count"}
+            </label>
+            <input type="number" min={0} value={guestInput}
+              onChange={e=>setGuestInput(e.target.value)}
+              placeholder={`e.g. 350 (max: ${a.ranges[a.ranges.length-1].max})`}
+              style={{...F2,width:"100%",fontSize:14}}/>
+            {guestInput&&(
+              <div style={{marginTop:6,fontSize:11,color:C.maroon,fontFamily:F.b,fontWeight:600}}>
+                → {L?"मिलान रेंज":"Matched range"}: <strong>{range.label}</strong>
+                {parseInt(guestInput)>a.ranges[a.ranges.length-1].max&&
+                  <span style={{color:"#D97706",marginLeft:8}}>⚠️ Exceeds max — using highest range</span>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {active.length>0&&<div style={{marginBottom:14}}>
-        <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"स्टाफ विवरण":"Staff Breakdown"}</div>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
-          {active.map(r=><RoleCard key={r} roleKey={r} count={alloc[r]} lang={lang}/>)}
-        </div>
-      </div>}
+      {/* Allocation table */}
+      <StaffAllocationTable
+        prop={prop}
+        rangeIdx={activeRangeIdx}
+        guestCount={resolvedGuestInput}
+        overrideEnabled={overrideEnabled}
+        overrides={overrides}
+        overrideReason={overrideReason}
+        onToggleOverride={v=>{setOverrideEnabled(v);if(!v)setOverrides({});}}
+        onOverrideChange={(role,val)=>setOverrides(p=>({...p,[role]:val}))}
+        onReasonChange={v=>setOverrideReason(v)}
+        lang={lang}
+      />
 
+      {/* Full matrix toggle */}
+      <div style={{marginTop:12,marginBottom:12}}>
+        <button onClick={()=>setShowMatrix(!showMatrix)}
+          style={{padding:"9px 16px",borderRadius:9,border:`1px solid ${C.maroon}`,background:showMatrix?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:600,color:C.maroon,display:"flex",alignItems:"center",gap:6}}>
+          📊 {showMatrix?(L?"तालिका छुपाएं":"Hide Full Table"):(L?"पूरी तालिका देखें":"View Full Allocation Table")}
+          <span style={{fontSize:10,color:C.tl}}>{showMatrix?"▲":"▼"}</span>
+        </button>
+        {showMatrix&&<div style={{marginTop:10}}><FullAllocationMatrix prop={prop} activeRangeIdx={activeRangeIdx} lang={lang}/></div>}
+      </div>
+
+      {/* Car estimate */}
       <div style={{background:C.white,borderRadius:14,padding:14,border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:10}}>🚘 {L?"कार अनुमान":"Car Estimate"}</div>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:8}}>
-          {[{n:4,cars:Math.ceil(clamped/4),label:L?"4/कार (परिवार)":"4 per car (family)",bg:"#EBF5F0",c:C.green},{n:3,cars:Math.ceil(clamped/3),label:L?"3/कार (औसत)":"3 per car (avg)",bg:C.bBg,c:C.blue},{n:2,cars:Math.ceil(clamped/2),label:L?"2/कार (VIP)":"2 per car (VIP)",bg:C.maroonSoft,c:C.maroon}].map(x=>(
-            <div key={x.n} style={{textAlign:"center",padding:"12px 6px",background:x.bg,borderRadius:10}}>
-              <div style={{fontSize:26,fontWeight:700,fontFamily:F.d,color:x.c,lineHeight:1}}>{x.cars}</div>
-              <div style={{fontSize:9,color:x.c,fontFamily:F.b,fontWeight:600,marginTop:2}}>{L?"कारें":"cars"}</div>
-              <div style={{fontSize:9,color:C.tl,fontFamily:F.b,marginTop:4,lineHeight:1.3}}>{x.label}</div>
-            </div>
-          ))}
-        </div>
+        {(resolvedGuestInput||a.ranges[activeRangeIdx].max)>0?(
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:8}}>
+            {[{n:4,label:L?"4/कार (परिवार)":"4 per car (family)",bg:"#EBF5F0",c:C.green},{n:3,label:L?"3/कार (औसत)":"3 per car (avg)",bg:C.bBg,c:C.blue},{n:2,label:L?"2/कार (VIP)":"2 per car (VIP)",bg:C.maroonSoft,c:C.maroon}].map(x=>{
+              const gc = resolvedGuestInput||Math.round((a.ranges[activeRangeIdx].min+a.ranges[activeRangeIdx].max)/2);
+              return(
+                <div key={x.n} style={{textAlign:"center",padding:"12px 6px",background:x.bg,borderRadius:10}}>
+                  <div style={{fontSize:26,fontWeight:700,fontFamily:F.d,color:x.c,lineHeight:1}}>{Math.ceil(gc/x.n)}</div>
+                  <div style={{fontSize:9,color:x.c,fontFamily:F.b,fontWeight:600,marginTop:2}}>{L?"कारें":"cars"}</div>
+                  <div style={{fontSize:9,color:C.tl,fontFamily:F.b,marginTop:4,lineHeight:1.3}}>{x.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        ):<div style={{fontSize:11,color:C.tl,fontFamily:F.b}}>Enter guest count to see car estimates</div>}
       </div>
 
+      {/* Cost estimator */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,marginBottom:14,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <button onClick={()=>setShowCost(!showCost)} style={{width:"100%",padding:"12px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",fontFamily:F.b,fontSize:13,fontWeight:600,color:C.maroon}}>
           <span>💰 {showCost?(L?"लागत छुपाएं":"Hide Cost"):(L?"लागत अनुमान":"Show Cost Estimate")}</span>
           <span style={{fontSize:11,color:C.tl}}>{showCost?"▲":"▼"}</span>
         </button>
-        {showCost&&<div style={{padding:"0 16px 14px",borderTop:`1px solid ${C.border}`}}>
-          <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
-            {active.map(r=>(
-              <div key={r} style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:13}}>{ROLE_META[r].icon}</span>
-                <span style={{flex:1,fontSize:12,fontFamily:F.b,fontWeight:500}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}<span style={{color:C.tl,fontWeight:400}}> × {alloc[r]}</span></span>
-                <div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:11,color:C.tl}}>₹</span><input type="number" min={0} step={100} value={rates[r]} onChange={e=>setRates(p=>({...p,[r]:Number(e.target.value)}))} style={{width:76,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,textAlign:"right",outline:"none"}}/></div>
-                <div style={{width:68,textAlign:"right",fontSize:12,fontWeight:700,color:C.maroon,fontFamily:F.b}}>₹{(alloc[r]*rates[r]).toLocaleString("en-IN")}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{marginTop:10,padding:"10px 14px",borderRadius:10,background:`linear-gradient(135deg,${C.maroon},${C.maroonLight})`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F.b}}>💰 {L?"कुल लागत":"Total Cost"}</span>
-            <span style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:"#fff"}}>₹{totalCost.toLocaleString("en-IN")}</span>
-          </div>
-        </div>}
-      </div>
-
-      <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,fontFamily:F.d,fontSize:13,fontWeight:700,color:C.maroon}}>
-          📋 {L?"पूरी संदर्भ तालिका":"Full Reference Table"} — {cfg.icon} {cfg.name}
-        </div>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:F.b,fontSize:11}}>
-            <thead>
-              <tr style={{background:C.maroonSoft}}>
-                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:C.maroon}}>{L?"पैक्स":"Pax"}</th>
-                {["keyMan","driver","guard","rider","gunMan","bouncer"].map(r=>(
-                  <th key={r} style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>
-                    {ROLE_META[r].icon}<div style={{fontSize:9,fontWeight:500,color:C.tl}}>{L?ROLE_META[r].labelHi:ROLE_META[r].label}</div>
-                  </th>
-                ))}
-                <th style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>{L?"कुल":"Total"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((d,i)=>{
-                const rt=roles.reduce((s,r)=>s+d[r],0);
-                const isA=d.pax===clamped;
+        {showCost&&(
+          <div style={{padding:"0 16px 14px",borderTop:`1px solid ${C.border}`}}>
+            <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
+              {ROLE_ORDER.filter(r=>finalAlloc[r]>0).map(r=>{
+                const meta = ROLE_META[r];
                 return(
-                  <tr key={d.pax} onClick={()=>setPax(d.pax)} style={{background:isA?C.maroonSoft:i%2===0?C.white:C.bg,cursor:"pointer"}}>
-                    <td style={{padding:"7px 10px",fontWeight:isA?700:500,color:isA?C.maroon:C.text}}>{d.pax}</td>
-                    {roles.map(r=><td key={r} style={{padding:"7px 8px",textAlign:"center",color:d[r]>0?C.text:C.border,fontWeight:d[r]>0?600:400}}>{d[r]>0?d[r]:"—"}</td>)}
-                    <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:C.maroon}}>{rt}</td>
-                  </tr>
+                  <div key={r} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13}}>{meta.icon}</span>
+                    <span style={{flex:1,fontSize:12,fontFamily:F.b,fontWeight:500}}>
+                      {L?meta.labelHi:r}<span style={{color:C.tl,fontWeight:400}}> × {finalAlloc[r]}</span>
+                    </span>
+                    <div style={{display:"flex",alignItems:"center",gap:3}}>
+                      <span style={{fontSize:11,color:C.tl}}>₹</span>
+                      <input type="number" min={0} step={100} value={rates[r]}
+                        onChange={e=>setRates(p=>({...p,[r]:Number(e.target.value)}))}
+                        style={{width:76,padding:"5px 7px",borderRadius:7,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,textAlign:"right",outline:"none"}}/>
+                    </div>
+                    <div style={{width:72,textAlign:"right",fontSize:12,fontWeight:700,color:C.maroon,fontFamily:F.b}}>
+                      ₹{(finalAlloc[r]*(rates[r]||0)).toLocaleString("en-IN")}
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-        <div style={{padding:"6px 12px",fontSize:9,color:C.tl,fontFamily:F.b,borderTop:`1px solid ${C.border}`}}>
-          👆 {L?"किसी पंक्ति पर टैप करें":"Tap any row to jump to that pax"}
-        </div>
+            </div>
+            <div style={{marginTop:10,padding:"10px 14px",borderRadius:10,background:`linear-gradient(135deg,${C.maroon},${C.maroonLight||"#a83251"})`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F.b}}>💰 {L?"कुल लागत":"Total Cost"}</span>
+              <span style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:"#fff"}}>
+                ₹{ROLE_ORDER.reduce((s,r)=>s+(finalAlloc[r]||0)*(rates[r]||0),0).toLocaleString("en-IN")}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
