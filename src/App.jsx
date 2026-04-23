@@ -12,6 +12,7 @@ import TrainingView from "./TrainingView.jsx";
 import TeamPage from "./TeamPage.jsx";
 import ValetPlanning from "./ValetPlanning.jsx";
 import VendorDirectory from "./VendorDirectory.jsx";
+import FireExtinguishers, { checkFireExtinguisherExpiry } from "./FireExtinguishers.jsx";
 
 
 const lnk=document.createElement("link");lnk.href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap";lnk.rel="stylesheet";document.head.appendChild(lnk);
@@ -240,7 +241,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
     <div style={{padding:"14px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -809,6 +810,8 @@ export default function App(){
         // 4. Notifications for current user
         const{data:notifData}=await supabase.from("notifications").select("*").eq("for_user",user.id).eq("is_read",false).order("created_at",{ascending:false}).limit(50);
         if(notifData&&notifData.length>0){setNs(notifData.map(n=>({id:n.id,type:n.type,task:n.task_text,by:n.by_name,prop:n.property,time:new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})})));}
+        // 5. Fire extinguisher expiry check — once per day for SA/Admin
+        if(user.role==="sa"||user.role==="a"){checkFireExtinguisherExpiry(user.id);}
       }catch(e){console.error("Load error:",e);}
       finally{setLoading(false);}
     })();
@@ -846,7 +849,7 @@ export default function App(){
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
-  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
@@ -856,9 +859,9 @@ export default function App(){
     {sN&&<NPanel ns={ns} onClose={()=>{setSN(false);if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>setNs([]));else setNs([]);}}} onClr={()=>{if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>{setNs([]);setSN(false);});else{setNs([]);setSN(false);}}else setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div className="main-content" style={{marginLeft:isMobile?0:185,padding:isMobile?"0 12px 18px":"0 18px 18px",minHeight:"100vh"}}>
       {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
-      {!pm&&!["members","roster","valet","vendors","team","chemicals"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
+      {!pm&&!["members","roster","valet","vendors","team","chemicals","fire"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
-        {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att}/>}
+        {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
         {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
@@ -869,6 +872,7 @@ export default function App(){
         {view==="chemicals"&&<ChemicalGuide lang={lang}/>}
         {view==="valet"&&<ValetPlanning user={eU} lang={lang}/>}
         {view==="vendors"&&<VendorDirectory user={eU} lang={lang}/>}
+        {view==="fire"&&<FireExtinguishers user={eU} lang={lang}/>}
       </>):(<>
         {view==="mytasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="mytasks" L={L} lang={lang}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}

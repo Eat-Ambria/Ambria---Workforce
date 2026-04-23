@@ -2,6 +2,42 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
 
+// ─── Fire Safety Widget ───────────────────────────────────────────────────────
+function FireSafetyWidget({ setView }) {
+  const [stat, setStat] = useState(null);
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const in30  = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+    supabase.from("fire_extinguishers").select("id,expiry_date,location,property").eq("status","active").lte("expiry_date", in30)
+      .then(({ data }) => {
+        if (!data) { setStat({ expired: 0, exp30: 0 }); return; }
+        setStat({ expired: data.filter(i => i.expiry_date < today).length, exp30: data.length });
+      });
+  }, []);
+
+  if (!stat) return null;
+  const bad = stat.exp30;
+  return (
+    <div onClick={() => setView("fire")} style={{
+      background: bad > 0 ? C.rBg : C.gBg,
+      border: `1px solid ${bad > 0 ? C.red : C.green}`,
+      borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between"
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 18 }}>🧯</span>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: bad > 0 ? C.red : C.green }}>
+            {bad > 0 ? `🚨 ${bad} extinguisher${bad > 1 ? "s" : ""} need attention` : "All fire extinguishers OK ✅"}
+          </div>
+          {stat.expired > 0 && <div style={{ fontSize: 10, color: C.red, marginTop: 1 }}>{stat.expired} already expired — action required</div>}
+        </div>
+      </div>
+      <span style={{ fontSize: 11, color: bad > 0 ? C.red : C.green, fontWeight: 600 }}>View →</span>
+    </div>
+  );
+}
+
 // ─── Ring ────────────────────────────────────────────────────────────────────
 function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
   const r = 15, circ = 2 * Math.PI * r;
@@ -215,7 +251,7 @@ function Suggestions({ tasks, L }) {
 }
 
 // ─── Dashboard (main export) ──────────────────────────────────────────────────
-export default function Dashboard({ tasks, prop, user, lang, att }) {
+export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
   const L = LANGS[lang];
   const [leaves, setLeaves] = useState([]);
   const today = new Date().toISOString().split("T")[0];
@@ -254,6 +290,9 @@ export default function Dashboard({ tasks, prop, user, lang, att }) {
           <div style={{ fontSize:9, color: C.tl }}>{done}/{total} {L.done}</div>
         </div>
       </div>
+
+      {/* ── Fire Safety Widget ── */}
+      {setView && <FireSafetyWidget setView={setView} />}
 
       {/* ── Absent Widget ── */}
       <AbsentWidget att={att} leaves={leaves} prop={prop} today={today} L={L} />
