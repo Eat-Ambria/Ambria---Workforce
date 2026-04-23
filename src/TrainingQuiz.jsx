@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 const PASS_SCORE = 0.6; // 60% to pass
 
 function QuizModal({ video, userId, user, lang, onPass, onFail, onClose }) {
   const H = lang === "hi";
+  const isMobile = useIsMobile();
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(0);
@@ -235,7 +237,7 @@ function QuizModal({ video, userId, user, lang, onPass, onFail, onClose }) {
                 cursor: selected !== null ? "default" : "pointer",
                 fontFamily: F.b, fontSize: 16, fontWeight: 600, color,
                 textAlign: "left", display: "flex", alignItems: "center", gap: 12,
-                transition: "all 0.2s", minHeight: 56
+                transition: "all 0.2s", minHeight: isMobile ? 52 : 56
               }}>
                 <span style={{
                   width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
@@ -259,6 +261,7 @@ function QuizModal({ video, userId, user, lang, onPass, onFail, onClose }) {
 // ── Admin: Add/Edit quiz questions for a video ──
 export function QuizManager({ video, lang, onClose }) {
   const H = lang === "hi";
+  const isMobile = useIsMobile();
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ question: "", question_hi: "", option_a: "", option_b: "", option_c: "", option_d: "", correct_option: "a" });
@@ -323,7 +326,7 @@ export function QuizManager({ video, lang, onClose }) {
           <div style={{ fontSize: 14, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>➕ Add Question</div>
           <input placeholder="Question (English)" value={form.question} onChange={e => inp("question", e.target.value)} style={iStyle} />
           <input placeholder="प्रश्न (Hindi - optional)" value={form.question_hi} onChange={e => inp("question_hi", e.target.value)} style={iStyle} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
             <input placeholder="Option A" value={form.option_a} onChange={e => inp("option_a", e.target.value)} style={{ ...iStyle, marginBottom: 0 }} />
             <input placeholder="Option B" value={form.option_b} onChange={e => inp("option_b", e.target.value)} style={{ ...iStyle, marginBottom: 0 }} />
             <input placeholder="Option C" value={form.option_c} onChange={e => inp("option_c", e.target.value)} style={{ ...iStyle, marginBottom: 0 }} />

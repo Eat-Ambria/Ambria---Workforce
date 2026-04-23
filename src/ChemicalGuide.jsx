@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { C, F, LANGS, PROPS } from "./constants.js";
+import { useIsMobile } from "./hooks.js";
 
 // Property specs for calculation
 const PROP_SPECS = {
@@ -140,6 +141,7 @@ const KLEANFIX_FULL = [
 
 export default function ChemicalGuide({ lang }) {
   const L = LANGS[lang];
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState("calc");
   const [selectedProp, setSelectedProp] = useState("pp");
 
@@ -179,7 +181,7 @@ export default function ChemicalGuide({ lang }) {
             <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.maroon, marginBottom: 10 }}>
               🏛️ {L.selectPropertyCalc}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
               {Object.entries(PROP_SPECS).map(([k, s]) => (
                 <button key={k} onClick={() => setSelectedProp(k)} style={{
                   padding: "10px 6px", borderRadius: 10, cursor: "pointer", fontFamily: F.b,
@@ -194,7 +196,7 @@ export default function ChemicalGuide({ lang }) {
             </div>
 
             {/* Specs summary */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 6 }}>
               {[
                 { label: "Banquet", val: `${spec.banquet.toLocaleString()} sqft`, icon: "🏛️" },
                 { label: "Lawn", val: `${spec.lawn.toLocaleString()} sqft`, icon: "🌿" },
@@ -223,7 +225,7 @@ export default function ChemicalGuide({ lang }) {
           </div>
 
           {/* ── Chemical breakdown ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
             {chemicals.map((c, i) => (
               <div key={i} style={{
                 background: C.white, borderRadius: 12, border: `1px solid ${C.border}`,
@@ -252,7 +254,7 @@ export default function ChemicalGuide({ lang }) {
 
       {tab === "guide" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
             {KLEANFIX_FULL.map((p, i) => (
               <div key={i} style={{
                 background: C.white, borderRadius: 10, border: `1px solid ${C.border}`,

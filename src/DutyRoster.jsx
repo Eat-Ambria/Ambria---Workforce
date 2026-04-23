@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 function SearchSelect({value,onChange,options,style:cs,placeholder}){
   const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
@@ -71,6 +72,7 @@ function ShiftBadge({ shiftType }) {
 }
 
 function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
+  const isMobile = useIsMobile();
   const [form, setForm] = useState({
     shift_type: existing?.shift_type || "day",
     shift_start: existing?.shift_start || "09:00",
@@ -101,7 +103,7 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
             </div>
           </div>
           {form.shift_type !== "off" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
               <div>
                 <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart||"Start"}</label>
                 <input type="time" value={form.shift_start} onChange={e => setForm({ ...form, shift_start: e.target.value })}
@@ -123,11 +125,13 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => onSave(form)} style={{
             flex: 1, padding: "10px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer"
+            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer",
+            minHeight: isMobile ? 44 : undefined,
           }}>{L.saveRoster||"Save"}</button>
           <button onClick={onClose} style={{
             padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-            background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer"
+            background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer",
+            minHeight: isMobile ? 44 : undefined,
           }}>{L.cancel||"Cancel"}</button>
         </div>
       </div>
@@ -136,6 +140,7 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
 }
 
 function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
+  const isMobile = useIsMobile();
   const secMembers = [
     ...prop?.depts?.s?.m || [],
     { id: "third-party", n: "Third Party Guard" },
@@ -171,7 +176,7 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
                 style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, boxSizing: "border-box", outline: "none" }} />
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
             <div>
               <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>{L.shiftStart||"Start"}</label>
               <input type="time" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })}
@@ -206,11 +211,13 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => onSave({ ...entry, ...form })} style={{
             flex: 1, padding: "10px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer"
+            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer",
+            minHeight: isMobile ? 44 : undefined,
           }}>{L.saveRoster||"Save"}</button>
           <button onClick={onClose} style={{
             padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-            background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer"
+            background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer",
+            minHeight: isMobile ? 44 : undefined,
           }}>{L.cancel||"Cancel"}</button>
         </div>
       </div>
@@ -220,6 +227,7 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
 
 export default function DutyRoster({ prop, user, lang }) {
   const L = LANGS[lang];
+  const isMobile = useIsMobile();
   const isAdmin = user.role === "sa" || user.role === "a";
   const isSA = user.role === "sa";
   const today = new Date().toISOString().split("T")[0];
@@ -410,7 +418,8 @@ export default function DutyRoster({ prop, user, lang }) {
                   {isAdmin && (
                     <button onClick={() => setEditingStaff(m)} style={{
                       padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-                      background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:9, fontWeight: 600, color: C.tl, flexShrink: 0
+                      background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:9, fontWeight: 600, color: C.tl, flexShrink: 0,
+                      minHeight: isMobile ? 44 : undefined, minWidth: isMobile ? 44 : undefined,
                     }}>✏️</button>
                   )}
                 </div>
@@ -430,7 +439,8 @@ export default function DutyRoster({ prop, user, lang }) {
             <span style={{ padding: "2px 8px", borderRadius: 4, background: "#FFF7ED", color: C.accent, fontWeight: 600 }}>🌅 {daySlots.length} Day</span>
             <span style={{ padding: "2px 8px", borderRadius: 4, background: "#EDE9FE", color: "#6B21A8", fontWeight: 600 }}>🌙 {nightSlots.length} Night</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ overflowX: "auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
             <div>
               <div style={{ fontSize:11, fontWeight: 700, color: C.accent, marginBottom: 6 }}>🌅 {L.dayShift||"Day Shift"}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -455,7 +465,8 @@ export default function DutyRoster({ prop, user, lang }) {
                         {isAdmin && (
                           <button onClick={() => setEditingSecSlot(entry)} style={{
                             padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:9, fontWeight: 600, color: C.tl
+                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:9, fontWeight: 600, color: C.tl,
+                            minHeight: isMobile ? 44 : undefined, minWidth: isMobile ? 44 : undefined,
                           }}>✏️</button>
                         )}
                       </div>
@@ -489,7 +500,8 @@ export default function DutyRoster({ prop, user, lang }) {
                         {isAdmin && (
                           <button onClick={() => setEditingSecSlot(entry)} style={{
                             padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
-                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:9, fontWeight: 600, color: C.tl
+                            background: C.bg, cursor: "pointer", fontFamily: F.b, fontSize:9, fontWeight: 600, color: C.tl,
+                            minHeight: isMobile ? 44 : undefined, minWidth: isMobile ? 44 : undefined,
                           }}>✏️</button>
                         )}
                       </div>
@@ -499,6 +511,7 @@ export default function DutyRoster({ prop, user, lang }) {
                 {nightSlots.length === 0 && <div style={{ fontSize:11, color: C.tl, fontStyle: "italic" }}>No night guards</div>}
               </div>
             </div>
+          </div>
           </div>
         </div>
       )}

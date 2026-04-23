@@ -3,6 +3,7 @@ import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
 import QuizModal, { QuizManager } from "./TrainingQuiz.jsx";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 // ─── DEFAULT TOPICS (seeded to DB on first load) ─────────────────────────────
 const DEFAULT_TOPICS = [
@@ -145,6 +146,7 @@ function VideoModal({video,isDone,onClose,onCompleted,userId,user,lang}){
 // ─── VIDEO FORM (Admin / SA only) ─────────────────────────────────────────────
 function VideoForm({init,onSave,onCancel,lang}){
   const H=lang==="hi";
+  const isMobile=useIsMobile();
   const[f,sF]=useState(init?{
     ...init,
     youtube_url:init.youtube_url||init.youtube_id||"",
@@ -165,7 +167,7 @@ function VideoForm({init,onSave,onCancel,lang}){
       <div style={{fontFamily:F.d,fontSize:13,fontWeight:700,color:C.maroon,marginBottom:10}}>
         {init?.id?"✏️ Edit Video":"➕ Add Training Video"}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginBottom:10}}>
         <div>
           <label style={Lb}>📖 Topic (English)</label>
           <input value={f.topic} onChange={e=>inp("topic",e.target.value)} placeholder="e.g. Floor Mopping Technique" style={S2}/>
@@ -213,6 +215,7 @@ function VideoForm({init,onSave,onCancel,lang}){
 export default function TrainingView({user,prop,lang}){
   const H=lang==="hi";
   const L=LANGS[lang];
+  const isMobile=useIsMobile();
   const isSA=user.role==="sa";
   const isAdmin=user.role==="sa"||user.role==="a";
   // Each user watches only their department's videos
@@ -376,7 +379,8 @@ export default function TrainingView({user,prop,lang}){
         {showForm&&isAdmin&&<VideoForm init={editVideo} onSave={saveVideo} onCancel={()=>{setSF(false);setEV(null);}} lang={lang}/>}
 
         {/* Dept filter tabs — SA only; employees/admins are locked to their own dept */}
-        {isSA&&<div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
+        {isSA&&<div style={{overflowX:"auto",whiteSpace:"nowrap",marginBottom:12}}>
+          <div style={{display:"inline-flex",gap:4}}>
           {Object.entries(DEPT_META).map(([k,d])=>{
             const st=deptStats[k]||{total:0,done:0,pct:0};
             const isActive=deptFilter===k;
@@ -388,6 +392,7 @@ export default function TrainingView({user,prop,lang}){
               </button>
             );
           })}
+          </div>
         </div>}
         {/* Non-SA: show which dept they're viewing */}
         {!isSA&&(()=>{const dm=DEPT_META[myDept];return dm?<div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,padding:"8px 12px",background:dm.bg,borderRadius:8,border:`1px solid ${dm.c}28`}}>
@@ -399,7 +404,7 @@ export default function TrainingView({user,prop,lang}){
         {/* Video grid */}
         {loading&&<div style={{textAlign:"center",padding:28,color:C.tl,fontSize:13,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>Loading training videos...</div>}
 
-        {!loading&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))",gap:10,marginBottom:16}}>
+        {!loading&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(175px,1fr))",gap:10,marginBottom:16}}>
           {filteredVids.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",padding:24,color:C.tl,fontSize:12,background:C.white,borderRadius:12,border:`1px solid ${C.border}`}}>
             {H?"इस विभाग में अभी कोई वीडियो नहीं है":"No videos in this department yet"}
             {isAdmin&&<div style={{fontSize:10,marginTop:4}}>Click "Add Video" to add the first one.</div>}
@@ -464,7 +469,7 @@ export default function TrainingView({user,prop,lang}){
           <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,marginBottom:10}}>
             👥 {H?"स्टाफ प्रगति":"Staff Training Progress"} — {prop.sn}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:8}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(210px,1fr))",gap:8}}>
             {staffSummary.map(m=>{
               const barC=m.pct===100?C.green:m.pct>=50?C.yellow:C.red;
               return(
@@ -495,7 +500,7 @@ export default function TrainingView({user,prop,lang}){
       {/* ═══ CHEMICAL GUIDE TAB ═══ */}
       {tab==="chem"&&<div>
         <p style={{fontSize:10,color:C.tl,margin:"0 0 10px"}}>Kleanfix Industries · kleanfix.com · +91 98189 98806</p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
           {CHEM_DATA.map((sec,si)=>(
             <div key={si} style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
               <div style={{background:"linear-gradient(135deg,#2D2D2D,#4a4a4a)",padding:"8px 12px",color:"#fff",fontSize:12,fontWeight:700}}>{sec.area}</div>

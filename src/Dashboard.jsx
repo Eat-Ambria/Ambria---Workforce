@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
+import { useIsMobile } from "./hooks.js";
 
 // ─── Fire Safety Widget ───────────────────────────────────────────────────────
 function FireSafetyWidget({ setView }) {
@@ -40,6 +41,7 @@ function FireSafetyWidget({ setView }) {
 
 // ─── Ring ────────────────────────────────────────────────────────────────────
 function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
+  const isMobile = useIsMobile();
   const r = 15, circ = 2 * Math.PI * r;
   const dash = (pct / 100) * circ;
   return (
@@ -55,13 +57,13 @@ function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
           position: "absolute", top: "50%", left: "50%",
           transform: "translate(-50%,-50%)", textAlign: "center"
         }}>
-          <div style={{ fontSize:16 }}>{icon}</div>
-          <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color, lineHeight: 1 }}>{pct}%</div>
+          <div style={{ fontSize: isMobile ? 13 : 16 }}>{icon}</div>
+          <div style={{ fontFamily: F.d, fontSize: isMobile ? 11 : 13, fontWeight: 700, color, lineHeight: 1 }}>{pct}%</div>
         </div>
       </div>
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize:10, fontWeight: 700, color: C.text }}>{label}</div>
-        <div style={{ fontSize:9, color: C.tl }}>{done}/{total}</div>
+        <div style={{ fontSize: isMobile ? 9 : 10, fontWeight: 700, color: C.text }}>{label}</div>
+        <div style={{ fontSize: isMobile ? 8 : 9, color: C.tl }}>{done}/{total}</div>
       </div>
     </div>
   );
@@ -69,6 +71,7 @@ function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
 
 // ─── Absent Widget ───────────────────────────────────────────────────────────
 function AbsentWidget({ att, leaves, prop, today, L }) {
+  const isMobile = useIsMobile();
   const allStaff = Object.values(prop?.depts||{}).flatMap(d => d.m);
   const checkedInIds = att.filter(a => a.date === today).map(a => a.uid);
   const onLeaveIds = leaves
@@ -83,7 +86,7 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
     <div style={{
       background: C.white, borderRadius: 12, border: `1px solid ${C.border}`,
       padding: "10px 14px", marginBottom: 12,
-      display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 12, alignItems: "center"
+      display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr auto auto auto", gap: 12, alignItems: "center"
     }}>
       <div>
         <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.maroon }}>
@@ -181,6 +184,7 @@ function CriticalPanel({ tasks, L }) {
 
 // ─── Staff Performance ────────────────────────────────────────────────────────
 function StaffPerf({ tasks, prop, L }) {
+  const isMobile = useIsMobile();
   const allM = Object.values(prop?.depts||{}).flatMap(d => d.m.map(m => ({ ...m, dc: d.c, dn: d.n })));
   const perf = allM.map(m => {
     const mt = tasks.filter(t => t.assignedTo === m.id);
@@ -224,6 +228,7 @@ function StaffPerf({ tasks, prop, L }) {
 
 // ─── Suggestions ─────────────────────────────────────────────────────────────
 function Suggestions({ tasks, L }) {
+  const isMobile = useIsMobile();
   const total = tasks.length, done = tasks.filter(t => t.status === "completed").length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const byDept = (d) => {
@@ -237,7 +242,7 @@ function Suggestions({ tasks, L }) {
       <div style={{ fontFamily: F.d, fontSize:13, fontWeight: 700, color: C.green, marginBottom: 8 }}>
         📈 {L.suggestions}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
         {pct === 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🏆</span><span style={{ fontSize:11 }}><strong>All tasks complete!</strong> Outstanding work today.</span></div>}
         {pct >= 70 && pct < 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>👍</span><span style={{ fontSize:11 }}><strong>{pct}% done</strong> — push last {total - done} to 100%</span></div>}
         {pct < 70 && total > 0 && <div style={{ padding: 8, background: C.yBg, borderRadius: 8, display: "flex", gap: 5 }}><span>⚡</span><span style={{ fontSize:11 }}><strong>Behind at {pct}%</strong> — mid-day check with leads needed</span></div>}
@@ -253,6 +258,7 @@ function Suggestions({ tasks, L }) {
 // ─── Dashboard (main export) ──────────────────────────────────────────────────
 export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
   const L = LANGS[lang];
+  const isMobile = useIsMobile();
   const [leaves, setLeaves] = useState([]);
   const today = new Date().toISOString().split("T")[0];
 
@@ -301,7 +307,7 @@ export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
       <div style={{
         background: C.white, borderRadius: 12, border: `1px solid ${C.border}`,
         padding: 14, marginBottom: 12,
-        display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8
+        display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: 8
       }}>
         {deptList.map(d => (
           <div key={d.key} style={{
@@ -310,14 +316,14 @@ export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
             background: d.pct === 100 ? C.gBg : d.pct >= 70 ? `${d.c}10` : C.bg,
             border: `1px solid ${d.pct === 100 ? C.green : C.border}`
           }}>
-            <Ring pct={d.pct} color={d.c} bg={d.bg} icon={d.i} label={d.n} done={d.done} total={d.total} />
+            <Ring pct={d.pct} color={d.c} bg={d.bg} icon={d.i} label={d.n} done={d.done} total={d.total} size={isMobile ? 68 : 78} />
             {d.pct === 100 && <span style={{ fontSize:9, color: C.green, fontWeight: 700, marginTop: 3 }}>✓ Complete</span>}
           </div>
         ))}
       </div>
 
       {/* ── Critical + Staff Perf ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <CriticalPanel tasks={tasks} L={L} />
         <StaffPerf tasks={tasks} prop={prop} L={L} />
       </div>

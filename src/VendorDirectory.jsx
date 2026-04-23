@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 // ─── CATEGORY CONFIG ──────────────────────────────────────────────────────────
 const CAT_GROUPS = [
@@ -393,6 +394,7 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 export default function VendorDirectory({ user, lang }) {
+  const isMobile = useIsMobile();
   const [vendors, setVendors] = useState([]);
   const [loading, setLd] = useState(false);
   const [search, setSearch] = useState("");
@@ -461,7 +463,7 @@ export default function VendorDirectory({ user, lang }) {
           📞 {L ? "वेंडर डायरेक्टरी" : "Vendor Directory"}
         </h1>
         <button onClick={() => { setEV(null); setSF(!showForm); }}
-          style={{ padding:"7px 14px", borderRadius:8, border:"none", background:C.maroon, color:C.white, fontFamily:F.b, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+          style={{ padding:"7px 14px", borderRadius:8, border:"none", background:C.maroon, color:C.white, fontFamily:F.b, fontSize:12, fontWeight:700, cursor:"pointer", width: isMobile ? "100%" : "auto" }}>
           ➕ {L ? "वेंडर जोड़ें" : "Add Vendor"}
         </button>
       </div>
@@ -488,7 +490,7 @@ export default function VendorDirectory({ user, lang }) {
 
       {/* Category filter chips */}
       {usedCats.length > 0 && (
-        <div style={{ display:"flex", gap:4, marginBottom:14, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:4, marginBottom:14, flexWrap: isMobile ? "nowrap" : "wrap", overflowX: isMobile ? "auto" : "visible", paddingBottom: isMobile ? 4 : 0 }}>
           <button onClick={() => setCF("all")}
             style={{ padding:"4px 12px", borderRadius:20, border:catFilter==="all"?`2px solid ${C.maroon}`:`1px solid ${C.border}`, background:catFilter==="all"?C.maroonSoft:C.white, fontFamily:F.b, fontSize:10, fontWeight:catFilter==="all"?700:400, color:catFilter==="all"?C.maroon:C.tl, cursor:"pointer" }}>
             All ({vendors.filter(v=>propFilter==="all"||v.property==="all"||v.property===propFilter).length})
@@ -533,7 +535,7 @@ export default function VendorDirectory({ user, lang }) {
               <h3 style={{ fontFamily:F.d, fontSize:13, fontWeight:700, color:cc.c, margin:0 }}>{cat}</h3>
               <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:cc.bg, color:cc.c, fontFamily:F.b, fontWeight:600 }}>{groups[cat].length}</span>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:10 }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(280px,1fr))", gap:10 }}>
               {groups[cat].map(v => (
                 <VendorCard key={v.id} vendor={v} onEdit={v => { setEV(v); setSF(true); window.scrollTo({top:0,behavior:"smooth"}); }} onDelete={del} lang={lang} />
               ))}

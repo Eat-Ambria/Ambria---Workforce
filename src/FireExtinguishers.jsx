@@ -3,6 +3,7 @@ import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
 import Modal from "./Modal.jsx";
 import { notifyMultiple } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 const PROP_NAMES = { pp:"Pushpanjali", ex:"Exotica", mk:"Manaktala", rs:"Restro" };
 const FE_TYPES = ["ABC Dry Powder","CO2","Foam","Water","Clean Agent","K-Class Kitchen"];
@@ -101,6 +102,7 @@ function SCard({icon,label,value,color,bg,pulse,bold}) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function FireExtinguishers({user, lang}) {
+  const isMobile = useIsMobile();
   const [items,   setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [propF,   setPropF]   = useState(user.prop==="all"?"all":user.prop);
@@ -263,7 +265,7 @@ export default function FireExtinguishers({user, lang}) {
 
       {/* Add / Edit Modal */}
       <Modal isOpen={showForm} onClose={()=>{setShowForm(false);setEditItem(null);setForm(blank);}} title={editItem?"✏️ Edit Extinguisher":"🧯 Add Fire Extinguisher"} size="md">
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "1fr 1fr",gap:10}}>
           <div style={{gridColumn:"1/-1"}}>
             <label style={lbl}>Property *</label>
             <select value={form.property} onChange={e=>sf("property",e.target.value)} style={inp}>
@@ -329,9 +331,9 @@ export default function FireExtinguishers({user, lang}) {
             <input ref={photoRef} type="file" accept="image/*" capture="environment" onChange={handlePhoto} style={{display:"none"}}/>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,marginTop:14}}>
-          <button onClick={save} style={{padding:"10px 20px",borderRadius:9,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>💾 Save</button>
-          <button onClick={()=>{setShowForm(false);setEditItem(null);setForm(blank);}} style={{padding:"10px 16px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:12,cursor:"pointer"}}>Cancel</button>
+        <div style={{display:"flex",flexDirection:isMobile ? "column" : "row",gap:8,marginTop:14}}>
+          <button onClick={save} style={{padding:"10px 20px",borderRadius:9,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:13,fontWeight:700,cursor:"pointer",width:isMobile ? "100%" : "auto"}}>💾 Save</button>
+          <button onClick={()=>{setShowForm(false);setEditItem(null);setForm(blank);}} style={{padding:"10px 16px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:12,cursor:"pointer",width:isMobile ? "100%" : "auto"}}>Cancel</button>
         </div>
       </Modal>
     </div>

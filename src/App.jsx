@@ -216,11 +216,12 @@ function TC({task:t,uTask,delTask,depts,areas,user:u,allM,L,lang}){
 
 // ═══ ADD TASK ═══
 function AddTF({prop,onAdd,onClose,L}){
+  const isMobile=useIsMobile();
   const[f,sF]=useState({title:"",titleHi:"",dept:Object.keys(prop?.depts||{})[0]||"h",area:prop?.areas?.[0]?.id,assignedTo:"",priority:"medium",cat:"daily",dur:"1h",desc:"",descHi:"",timeBlock:"9:00-10:00"});
   const ms=prop?.depts?.[f.dept]?.m||[];
   const sub=()=>{if(!f.title||!f.assignedTo)return;const m=ms.find(x=>x.id===f.assignedTo);onAdd({id:`${prop.id}_c_${Date.now()}`,prop:prop.id,...f,assigneeName:m?.n||"?",status:"pending",notes:"",completedAt:null,completedBy:"",photos:[],isTeam:false});onClose();};
   return(<div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+    <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "1fr 1fr",gap:8}}>
       <input placeholder={L.taskTitle+" (EN)"} value={f.title} onChange={e=>sF({...f,title:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
       <input placeholder={L.taskTitle+" (HI)"} value={f.titleHi} onChange={e=>sF({...f,titleHi:e.target.value})} style={{gridColumn:"1/-1",padding:10,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none"}}/>
       <SearchSelect value={f.dept} onChange={v=>sF({...f,dept:v,assignedTo:""})} options={Object.entries(prop?.depts||{}).map(([k,d])=>({v:k,l:`${d.i} ${d.n}`}))} style={{width:"100%"}}/>
@@ -293,6 +294,7 @@ const TP_GUARDS={
 };
 
 function AttView({user:u,att,setAtt,prop,L}){
+  const isMobile=useIsMobile();
   const isA=u.role==="sa"||u.role==="a";const tk=td.toISOString().split("T")[0];const mr=att.find(a=>a.uid===u.id&&a.date===tk);
   const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
   const attRef=useRef(null);const tpSlots=TP_GUARDS[prop.id]||[];
@@ -317,8 +319,8 @@ function AttView({user:u,att,setAtt,prop,L}){
   return(<div><h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:"0 0 12px"}}>🕐 {L.attendance} - {prop.sn}</h1>
     <input ref={attRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{display:"none"}}/>
     {(u.role==="e"||u.role==="a")&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:16}}><div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{L.today} - {tk}</div>
-      {!mr?<Btn2 primary onClick={doCheckIn}>📸📍 {L.checkIn} (Photo)</Btn2>
-      :!mr.co?<div style={{display:"flex",gap:8,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>✅ {mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>}<Btn2 onClick={doCheckIn} style={{background:C.yBg,color:C.yellow}}>📸🚪 {L.checkOut}</Btn2></div>
+      {!mr?<Btn2 primary onClick={doCheckIn} style={{minHeight:isMobile?54:44,width:isMobile?"100%":"auto"}}>📸📍 {L.checkIn} (Photo)</Btn2>
+      :!mr.co?<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:isMobile?"wrap":"nowrap"}}><Bdg color={C.green} bg={C.gBg}>✅ {mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>}<Btn2 onClick={doCheckIn} style={{background:C.yBg,color:C.yellow,minHeight:isMobile?54:44,width:isMobile?"100%":"auto"}}>📸🚪 {L.checkOut}</Btn2></div>
       :<div style={{display:"flex",gap:6,alignItems:"center"}}><Bdg color={C.green} bg={C.gBg}>In:{mr.ci}</Bdg>{mr.ciPhoto&&<img src={mr.ciPhoto} alt="" style={{width:28,height:28,borderRadius:4,objectFit:"cover"}}/>}<Bdg color={C.blue} bg={C.bBg}>Out:{mr.co}</Bdg>{mr.coPhoto&&<img src={mr.coPhoto} alt="" style={{width:28,height:28,borderRadius:4,objectFit:"cover"}}/>}</div>}</div>}
     {isA&&<div style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,marginBottom:12}}><h3 style={{fontFamily:F.d,fontSize:13,margin:"0 0 10px",color:C.maroon}}>{tk}</h3>{allM.map(m=>{const r=att.find(a=>a.uid===m.id&&a.date===tk);return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:r?C.gBg:C.bg,borderRadius:8,marginBottom:4}}>
       <div style={{width:24,height:24,borderRadius:"50%",background:m.dc||C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontSize:9,fontWeight:700}}>{m.n[0]}</div>
@@ -394,6 +396,7 @@ const ADMIN_TARGETS=[
 function findAT(u){return ADMIN_TARGETS.find(t=>t.id===u.id||(t.username&&t.username===u.username));}
 
 function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
+  const isMobile=useIsMobile();
   const isSA=u.role==="sa";
   // Use u.id directly — DB-fetched admin IDs and login user.id come from same row
   const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
@@ -464,7 +467,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     </div>}
 
     {/* TASK GRID */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
+    <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
       {filteredDirs.length===0&&<div style={{gridColumn:"1/-1",background:C.white,borderRadius:12,padding:30,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:22}}>📝</div><div style={{fontFamily:F.d,fontSize:13,fontWeight:700,marginTop:4}}>{L.noDirectives}</div></div>}
       {filteredDirs.map(dir=><ATCard key={dir.id} dir={dir} user={u} setDirs={setDirs} L={L} setNs={setNs}/>)}
     </div>
@@ -761,10 +764,28 @@ function PropBar({ap,setAP,user:u}){
   return(<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{av.map(p=>{const a=ap===p.id;return(<button key={p.id} onClick={()=>setAP(p.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:8,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b}}><span style={{fontSize:13}}>{p.icon}</span><span style={{fontSize:10,fontWeight:a?700:500,color:a?C.maroon:C.text}}>{p.sn}</span>{a&&<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>}</button>);})}</div>);
 }
 
+// ═══ MOBILE HEADER ═══
+function MobileHeader({prop,nC,setShowN,lang,setLang,L,onRefresh,refreshing}){
+  return(
+    <div className="mobile-header" style={{display:"none",position:"sticky",top:0,left:0,right:0,height:50,background:C.white,borderBottom:`1px solid ${C.border}`,zIndex:45,alignItems:"center",justifyContent:"space-between",padding:"0 12px",gap:8}}>
+      <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{prop?.sn||"Ambria"}</div>
+      <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        <button onClick={onRefresh} style={{width:36,height:36,borderRadius:"50%",border:"none",background:C.bg,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{display:"inline-block",animation:refreshing?"pullSpin 0.8s linear infinite":undefined}}>🔄</span></button>
+        <button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",fontSize:10,fontWeight:700,color:C.maroon,display:"flex",alignItems:"center",justifyContent:"center"}}>{lang==="en"?"हि":"EN"}</button>
+        <button onClick={()=>setShowN(true)} style={{width:36,height:36,borderRadius:"50%",border:"none",background:nC>0?"#FFF7ED":C.bg,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+          🔔{nC>0&&<span style={{position:"absolute",top:2,right:2,width:16,height:16,borderRadius:"50%",background:C.red,color:C.white,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{nC>9?"9+":nC}</span>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ═══ APP ═══
 export default function App(){
   const isMobile=useIsMobile();
   const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&findAT(u))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("");const[allDbUsers,setAllDbUsers]=useState([]);const[dirs,setDirs]=useState([]);const[atLoaded,setAtLoaded]=useState(false);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
+  const[refreshKey,setRK]=useState(0);const[refreshing,setRefreshing]=useState(false);
+  const ptrStartY=useRef(0);const ptrActive=useRef(false);
   const L=LANGS[lang];
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
@@ -813,9 +834,9 @@ export default function App(){
         // 5. Fire extinguisher expiry check — once per day for SA/Admin
         if(user.role==="sa"||user.role==="a"){checkFireExtinguisherExpiry(user.id);}
       }catch(e){console.error("Load error:",e);}
-      finally{setLoading(false);}
+      finally{setLoading(false);setRefreshing(false);}
     })();
-  },[user?.id]);
+  },[user?.id, refreshKey]);
 
   // ═══ POLL NOTIFICATIONS EVERY 30s ═══
   useEffect(()=>{
@@ -851,15 +872,21 @@ export default function App(){
 
   const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
+  const doRefresh=()=>{setRefreshing(true);setRK(k=>k+1);};
+  const onPTRStart=e=>{ptrStartY.current=e.touches[0].clientY;ptrActive.current=false;};
+  const onPTRMove=e=>{if(window.scrollY===0&&e.touches[0].clientY-ptrStartY.current>10)ptrActive.current=true;};
+  const onPTREnd=e=>{if(ptrActive.current&&e.changedTouches[0].clientY-ptrStartY.current>80){doRefresh();}ptrActive.current=false;};
 
   return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
     {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,lineHeight:1.2}}>Ambria Work Force</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
     <div className="desktop-sidebar"><Sidebar view={view} setView={sV} user={user} effectiveUser={eU} onLogout={onLogout} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allDbUsers={allDbUsers} dirs={dirs} aP={aP}/></div>
+    {isMobile&&<MobileHeader prop={prop} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L} onRefresh={doRefresh} refreshing={refreshing}/>}
     {isMobile&&<BottomNav nav={navForBottom} view={view} setView={sV} onLogout={onLogout} user={user} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L}/>}
     {sN&&<NPanel ns={ns} onClose={()=>{setSN(false);if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>setNs([]));else setNs([]);}}} onClr={()=>{if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>{setNs([]);setSN(false);});else{setNs([]);setSN(false);}}else setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
-    <div className="main-content" style={{marginLeft:isMobile?0:185,padding:isMobile?"0 12px 18px":"0 18px 18px",minHeight:"100vh"}}>
+    <div className="main-content" onTouchStart={isMobile?onPTRStart:undefined} onTouchMove={isMobile?onPTRMove:undefined} onTouchEnd={isMobile?onPTREnd:undefined} style={{marginLeft:isMobile?0:185,padding:isMobile?"0 12px 18px":"0 18px 18px",minHeight:"100vh",paddingTop:isMobile?10:0}}>
+      {refreshing&&<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,padding:"6px 0",fontSize:12,color:C.tl}}><span style={{display:"inline-block",animation:"pullSpin 0.8s linear infinite"}}>🔄</span> Refreshing...</div>}
       {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
-      {!pm&&!["members","roster","valet","vendors","team","chemicals","fire"].includes(view)&&<div style={{position:"sticky",top:0,zIndex:40,background:C.bg,padding:"10px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
+      {!pm&&!["members","roster","valet","vendors","team","chemicals","fire"].includes(view)&&<div style={{position:"sticky",top:isMobile?0:0,zIndex:40,background:C.bg,padding:"8px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}

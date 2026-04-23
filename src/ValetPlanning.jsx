@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, PROPS } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 // ─── STAFF CALCULATOR DATA ────────────────────────────────────────────────────
 const VALET_DATA = {
@@ -124,6 +125,7 @@ function calcValets(cars, eventType){
 
 // ─── BOOKING FORM ─────────────────────────────────────────────────────────────
 function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
+  const isMobile = useIsMobile();
   const defProp = user.prop==="all" ? "pp" : (user.prop||"pp");
   const isEdit = !!init?.id;
   const initData = isEdit ? {
@@ -180,7 +182,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
         {isEdit?"✏️ Edit Booking":"➕ New Valet Booking"}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginBottom:10}}>
         {/* Property + Date */}
         <div>
           <label style={Lb}>{lang==="hi"?"वेन्यू":"Property"}</label>
@@ -313,6 +315,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
 
 // ─── CALENDAR VIEW ────────────────────────────────────────────────────────────
 function CalendarView({user, lang}){
+  const isMobile = useIsMobile();
   const today = new Date();
   const [yr,setYr] = useState(today.getFullYear());
   const [mo,setMo] = useState(today.getMonth());
@@ -421,32 +424,32 @@ function CalendarView({user, lang}){
       {/* Calendar grid */}
       <div style={{background:C.white,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:C.maroonSoft,borderBottom:`1px solid ${C.border}`}}>
-          {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:10,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{d}</div>)}
+          {dys.map(d=><div key={d} style={{padding:"6px 0",textAlign:"center",fontSize:10,fontWeight:700,color:C.maroon,fontFamily:F.b}}>{isMobile?d.slice(0,1):d}</div>)}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
           {cells.map((day,idx)=>{
-            if(!day)return<div key={`e${idx}`} style={{minHeight:62,background:"#F9F9F9",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}/>;
+            if(!day)return<div key={`e${idx}`} style={{minHeight:isMobile?45:62,background:"#F9F9F9",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}/>;
             const ds=toDS(yr,mo,day);
             const dayBks=byDate[ds]||[];
             const isToday=ds===todayStr;
             const isSel=ds===selDate;
             return(
               <div key={day} onClick={()=>setSD(isSel?null:ds)}
-                style={{minHeight:62,padding:"4px 3px 3px 5px",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:isSel?C.maroonSoft:C.white,position:"relative",transition:"background 0.1s"}}>
-                <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:10,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>{day}</div>
+                style={{minHeight:isMobile?45:62,padding:isMobile?"2px":"4px 3px 3px 5px",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:isSel?C.maroonSoft:C.white,position:"relative",transition:"background 0.1s"}}>
+                <div style={{width:isMobile?16:20,height:isMobile?16:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isToday?C.maroon:"transparent",fontSize:isMobile?8:10,fontWeight:isToday||isSel?700:400,color:isToday?C.white:isSel?C.maroon:C.text,fontFamily:F.b,marginBottom:2}}>{day}</div>
                 <div style={{display:"flex",flexDirection:"column",gap:1}}>
-                  {dayBks.slice(0,2).map(b=>{
+                  {dayBks.slice(0,isMobile?1:2).map(b=>{
                     const cs=chipStyle(b);
                     return(
-                      <div key={b.id} style={{fontSize:9,fontFamily:F.b,fontWeight:600,padding:"1px 3px",borderRadius:3,background:cs.bg,color:cs.c,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
-                        {EVENT_TYPES[b.event_type]?.icon||PROPS[b.property]?.icon}{b.event_name?" "+b.event_name.slice(0,7):""}
+                      <div key={b.id} style={{fontSize:isMobile?7:9,fontFamily:F.b,fontWeight:600,padding:"1px 2px",borderRadius:3,background:cs.bg,color:cs.c,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>
+                        {EVENT_TYPES[b.event_type]?.icon||PROPS[b.property]?.icon}{!isMobile&&b.event_name?" "+b.event_name.slice(0,7):""}
                       </div>
                     );
                   })}
-                  {dayBks.length>2&&<div style={{fontSize:7,color:C.tl,fontFamily:F.b}}>+{dayBks.length-2}</div>}
+                  {dayBks.length>(isMobile?1:2)&&<div style={{fontSize:7,color:C.tl,fontFamily:F.b}}>+{dayBks.length-(isMobile?1:2)}</div>}
                 </div>
-                <button onClick={e=>{e.stopPropagation();setPD(ds);setEB(null);setSF(true);}}
-                  style={{position:"absolute",top:2,right:2,width:14,height:14,borderRadius:3,border:`1px solid ${C.border}`,background:C.white,color:C.tl,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,opacity:0.6}}>+</button>
+                {!isMobile&&<button onClick={e=>{e.stopPropagation();setPD(ds);setEB(null);setSF(true);}}
+                  style={{position:"absolute",top:2,right:2,width:14,height:14,borderRadius:3,border:`1px solid ${C.border}`,background:C.white,color:C.tl,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,opacity:0.6}}>+</button>}
               </div>
             );
           })}
@@ -559,6 +562,7 @@ function RoleCard({roleKey,count,lang}){
 }
 
 function StaffCalculator({user, lang}){
+  const isMobile = useIsMobile();
   const defVenue=VENUE_CFG[user.prop]?user.prop:"pp";
   const [venue,setVenue]=useState(defVenue);
   const [pax,setPax]=useState(300);
@@ -635,14 +639,14 @@ function StaffCalculator({user, lang}){
 
       {active.length>0&&<div style={{marginBottom:14}}>
         <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:8}}>{L?"स्टाफ विवरण":"Staff Breakdown"}</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
           {active.map(r=><RoleCard key={r} roleKey={r} count={alloc[r]} lang={lang}/>)}
         </div>
       </div>}
 
       <div style={{background:C.white,borderRadius:14,padding:14,border:`1px solid ${C.border}`,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
         <div style={{fontSize:10,fontWeight:700,color:C.tl,textTransform:"uppercase",letterSpacing:1,fontFamily:F.b,marginBottom:10}}>🚘 {L?"कार अनुमान":"Car Estimate"}</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:8}}>
           {[{n:4,cars:Math.ceil(clamped/4),label:L?"4/कार (परिवार)":"4 per car (family)",bg:"#EBF5F0",c:C.green},{n:3,cars:Math.ceil(clamped/3),label:L?"3/कार (औसत)":"3 per car (avg)",bg:C.bBg,c:C.blue},{n:2,cars:Math.ceil(clamped/2),label:L?"2/कार (VIP)":"2 per car (VIP)",bg:C.maroonSoft,c:C.maroon}].map(x=>(
             <div key={x.n} style={{textAlign:"center",padding:"12px 6px",background:x.bg,borderRadius:10}}>
               <div style={{fontSize:26,fontWeight:700,fontFamily:F.d,color:x.c,lineHeight:1}}>{x.cars}</div>
@@ -718,6 +722,7 @@ function StaffCalculator({user, lang}){
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 export default function ValetPlanning({user, lang}){
+  const isMobile = useIsMobile();
   const [tab,setTab]=useState("calendar");
   const tabs=[
     {id:"calendar",i:"📅",l:"Bookings",lH:"बुकिंग"},

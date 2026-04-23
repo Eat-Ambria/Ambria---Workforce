@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS } from "./constants.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 // leaves table: id, user_id, user_name, leave_date, leave_type, reason, status, approved_by
 
@@ -55,7 +56,7 @@ function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
             {st.icon} {lang === "hi" ? st.hiLabel : st.label}
           </span>
           {isAdmin && leave.status === "pending" && (
-            <div style={{ display: "flex", gap: 4 }}>
+            <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
               <button onClick={() => onApprove(leave.id)} style={{
                 padding: "5px 10px", borderRadius: 6, border: "none",
                 background: C.green, color: C.white, fontFamily: F.b, fontSize:10, fontWeight: 700, cursor: "pointer"
@@ -73,6 +74,7 @@ function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
 }
 
 export default function LeaveManager({ prop, user, lang }) {
+  const isMobile = useIsMobile();
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";
   const today = new Date().toISOString().split("T")[0];
@@ -213,15 +215,17 @@ export default function LeaveManager({ prop, user, lang }) {
               style={{ width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, minHeight: 50, resize: "vertical", outline: "none", boxSizing: "border-box" }} />
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
             <button onClick={submitLeave} disabled={submitting} style={{
               padding: "10px 20px", borderRadius: 8, border: "none",
               background: submitting ? "#9A2E42" : C.maroon, color: C.white,
-              fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer"
+              fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer",
+              width: isMobile ? "100%" : "auto"
             }}>{submitting ? "..." : L.send} →</button>
             <button onClick={() => setShowForm(false)} style={{
               padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-              background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer"
+              background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer",
+              width: isMobile ? "100%" : "auto"
             }}>{L.cancel}</button>
           </div>
         </div>

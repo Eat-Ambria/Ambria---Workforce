@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C, F, LANGS, PROPS } from "./constants.js";
 import { notifyMultiple, getSAIds } from "./notifications.js";
+import { useIsMobile } from "./hooks.js";
 
 function daysSince(dateStr) {
   if (!dateStr) return null;
@@ -87,7 +88,7 @@ function EditMemberModal({ member, onSave, onClose, L }) {
   );
 }
 
-function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L }) {
+function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L, isMobile }) {
   const isActive = member.is_active !== false;
   const days = daysSince(member.joining_date);
   const deptColor = member.deptColor || C.maroon;
@@ -95,7 +96,7 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L 
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
-      padding: "11px 13px",
+      padding: isMobile ? "13px 12px" : "11px 13px",
       background: isActive ? (member.isCustom ? C.bBg : C.white) : C.rBg + "55",
       borderRadius: 10,
       borderLeft: `3px solid ${isActive ? deptColor : C.red}`,
@@ -156,6 +157,7 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L 
 }
 
 export default function MembersView({ user, lang, customMembers, setCustomMembers, removedIds, setRemovedIds }) {
+  const isMobile = useIsMobile();
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";
 
@@ -289,7 +291,8 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
         {isAdmin && (
           <button onClick={() => setShowAdd(!showAdd)} style={{
             padding: "8px 14px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer"
+            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer",
+            width: isMobile ? "100%" : "auto"
           }}>➕ {L.addMember}</button>
         )}
       </div>
@@ -310,7 +313,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
       {showAdd && (
         <div style={{ background: C.white, borderRadius: 12, border: `2px solid ${C.maroon}`, padding: 16, marginBottom: 16 }}>
           <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>➕ {L.addMember}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
             <input placeholder={L.memberName} value={fName} onChange={e => setFName(e.target.value)}
               style={{ padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, outline: "none" }} />
             <input placeholder="Username" value={fUser} onChange={e => setFUser(e.target.value)}
@@ -331,9 +334,9 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
               {Object.entries(DEPT_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button onClick={addMember} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer" }}>{L.save}</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer" }}>{L.cancel}</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexDirection: isMobile ? "column" : "row" }}>
+            <button onClick={addMember} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer", width: isMobile ? "100%" : "auto" }}>{L.save}</button>
+            <button onClick={() => setShowAdd(false)} style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer", width: isMobile ? "100%" : "auto" }}>{L.cancel}</button>
           </div>
         </div>
       )}
@@ -367,12 +370,12 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
                   ({filtered.length} {tab === "active" ? "active" : "past"})
                 </span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 7 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(260px,1fr))", gap: 7 }}>
                 {filtered.map(m => (
                   <MemberCard key={m.id} member={m}
                     onDeactivate={handleDeactivate} onRestore={handleRestore}
                     onEdit={setEditingMember}
-                    isAdmin={isAdmin} lang={lang} L={L} />
+                    isAdmin={isAdmin} lang={lang} L={L} isMobile={isMobile} />
                 ))}
               </div>
             </div>
