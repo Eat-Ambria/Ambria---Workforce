@@ -18,7 +18,7 @@ function formatDate(dateStr) {
 
 const DEPT_NAMES = { h: "🌱 Horticulture", k: "🧹 Housekeeping", a: "📋 Admin", s: "🛡️ Security" };
 
-function EditMemberModal({ member, onSave, onClose, L }) {
+function EditMemberModal({ member, onSave, onClose, L, currentUser }) {
   const [form, setForm] = useState({
     name: member.n || "",
     joining_date: member.joining_date || "",
@@ -27,6 +27,16 @@ function EditMemberModal({ member, onSave, onClose, L }) {
     property: member.prop || "pp",
   });
   const [saving, setSaving] = useState(false);
+  const [curPass, setCurPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+
+  const isSA = currentUser?.role === "sa";
+
+  useEffect(() => {
+    if (!isSA) return;
+    supabase.from("users").select("password").eq("id", member.id).single()
+      .then(({ data }) => { if (data) setCurPass(data.password || ""); });
+  }, [member.id, isSA]);
 
   const save = async () => {
     setSaving(true);
@@ -76,6 +86,20 @@ function EditMemberModal({ member, onSave, onClose, L }) {
               {Object.entries(PROPS).map(([k, p]) => <option key={k} value={k}>{p.icon} {p.sn}</option>)}
             </select>
           </div>
+          {isSA && (
+            <div>
+              <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>🔑 Current Password</label>
+              <div style={{ position: "relative" }}>
+                <input readOnly type={showPass ? "text" : "password"} value={curPass}
+                  style={{ width: "100%", padding: "9px 36px 9px 9px", borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, boxSizing: "border-box", background: C.bg, color: C.tl }} />
+                <button onClick={() => setShowPass(s => !s)}
+                  style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize:14 }}>
+                  {showPass ? "🙈" : "👁"}
+                </button>
+              </div>
+              <div style={{ fontSize:9, color: C.tl, marginTop: 3 }}>Read-only — use 🔑 Password button to change</div>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button onClick={save} disabled={saving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer" }}>
@@ -88,7 +112,199 @@ function EditMemberModal({ member, onSave, onClose, L }) {
   );
 }
 
-function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L, isMobile }) {
+function PasswordModal({ member, currentUser, onClose }) {
+  const [curPass, setCurPass] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [showCur, setShowCur] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (currentUser.role !== "sa") { setLoading(false); return; }
+    supabase.from("users").select("password").eq("id", member.id).single()
+      .then(({ data }) => {
+        if (data) setCurPass(data.password || "");
+        setLoading(false);
+      });
+  }, [member.id]);
+
+  if (currentUser.role !== "sa") return null;
+
+  const generate = () => {
+    const p = "Ambria@" + Math.floor(1000 + Math.random() * 9000);
+    setNewPass(p);
+    setConfirmPass(p);
+    setError("");
+  };
+
+  const save = async () => {
+    if (newPass.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (newPass !== confirmPass) { setError("Passwords do not match"); return; }
+    setSaving(true);
+    const { error: e } = await supabase.from("users").update({ password: newPass }).eq("id", member.id);
+    if (e) { setError("Failed to save. Try again."); setSaving(false); return; }
+    getSAIds().then(ids => notifyMultiple("password_changed", `🔑 Password changed for ${member.n}`, currentUser.id, currentUser.name, ids, member.prop));
+    setToast("Password updated successfully!");
+    setTimeout(onClose, 1500);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 360 }}>
+        <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 14 }}>🔑 Change Password — {member.n}</div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 20, color: C.tl, fontSize:12 }}>Loading...</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Current Password</label>
+              <div style={{ position: "relative" }}>
+                <input readOnly type={showCur ? "text" : "password"} value={curPass}
+                  style={{ width: "100%", padding: "9px 36px 9px 9px", borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, boxSizing: "border-box", background: C.bg, color: C.tl }} />
+                <button onClick={() => setShowCur(s => !s)}
+                  style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize:14 }}>
+                  {showCur ? "🙈" : "👁"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>New Password</label>
+              <div style={{ position: "relative" }}>
+                <input type={showNew ? "text" : "password"} value={newPass}
+                  onChange={e => { setNewPass(e.target.value); setError(""); }}
+                  placeholder="Min 6 characters"
+                  style={{ width: "100%", padding: "9px 36px 9px 9px", borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, boxSizing: "border-box", outline: "none" }} />
+                <button onClick={() => setShowNew(s => !s)}
+                  style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize:14 }}>
+                  {showNew ? "🙈" : "👁"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight: 600, color: C.tl, display: "block", marginBottom: 4 }}>Confirm Password</label>
+              <div style={{ position: "relative" }}>
+                <input type={showConfirm ? "text" : "password"} value={confirmPass}
+                  onChange={e => { setConfirmPass(e.target.value); setError(""); }}
+                  style={{ width: "100%", padding: "9px 36px 9px 9px", borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: F.b, fontSize:12, boxSizing: "border-box", outline: "none" }} />
+                <button onClick={() => setShowConfirm(s => !s)}
+                  style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize:14 }}>
+                  {showConfirm ? "🙈" : "👁"}
+                </button>
+              </div>
+            </div>
+            <button onClick={generate}
+              style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.maroon}`, background: C.maroonSoft, color: C.maroon, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer" }}>
+              ⚡ Generate (Ambria@XXXX)
+            </button>
+            {error && (
+              <div style={{ fontSize:11, color: C.red, fontWeight: 600, background: C.rBg, padding: "6px 10px", borderRadius: 6 }}>{error}</div>
+            )}
+            {toast && (
+              <div style={{ fontSize:11, color: C.green, fontWeight: 700, background: C.gBg, padding: "6px 10px", borderRadius: 6 }}>{toast}</div>
+            )}
+          </div>
+        )}
+        {!toast && (
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button onClick={save} disabled={saving || loading}
+              style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: saving || loading ? "not-allowed" : "pointer", opacity: saving || loading ? 0.7 : 1 }}>
+              {saving ? "Saving..." : "💾 Save Password"}
+            </button>
+            <button onClick={onClose}
+              style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer" }}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BulkResetModal({ currentUser, onClose }) {
+  const [progress, setProgress] = useState(null);
+  const [error, setError] = useState("");
+
+  if (currentUser.role !== "sa") return null;
+
+  const run = async () => {
+    setProgress({ done: 0, total: 0 });
+    const { data, error: e } = await supabase.from("users").select("id, username, role").eq("role", "e");
+    if (e || !data) { setError("Failed to fetch users. Try again."); setProgress(null); return; }
+    setProgress({ done: 0, total: data.length });
+    let done = 0;
+    for (const u of data) {
+      const newPass = (u.username || u.id) + "@123";
+      await supabase.from("users").update({ password: newPass }).eq("id", u.id);
+      done++;
+      setProgress({ done, total: data.length });
+    }
+    setProgress("done");
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: C.white, borderRadius: 16, padding: 20, width: "100%", maxWidth: 380 }}>
+        <div style={{ fontFamily: F.d, fontSize:15, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>🔑 Reset All Staff Passwords</div>
+
+        {progress === null && (
+          <>
+            <p style={{ fontSize:12, color: C.tl, margin: "0 0 12px", lineHeight: 1.6 }}>
+              Resets all <strong>Employee</strong> passwords to <code style={{ background: C.bg, padding: "2px 6px", borderRadius: 4, fontSize:11 }}>username@123</code>. Admin and SA accounts are not affected.
+            </p>
+            <div style={{ background: "#FEF3C7", border: "1px solid #F59E0B", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize:11, color: "#92400E", lineHeight: 1.5 }}>
+              ⚠️ This cannot be undone. Employees will need the new default password to log in.
+            </div>
+            {error && <div style={{ fontSize:11, color: C.red, marginBottom: 10 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={run}
+                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer" }}>
+                🔑 Reset All
+              </button>
+              <button onClick={onClose}
+                style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontFamily: F.b, fontSize:13, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+
+        {progress !== null && progress !== "done" && (
+          <div style={{ textAlign: "center", padding: "10px 0" }}>
+            <div style={{ fontSize:28, marginBottom: 10 }}>🔄</div>
+            <div style={{ fontSize:14, fontWeight: 700, color: C.maroon }}>Resetting passwords...</div>
+            <div style={{ fontSize:13, color: C.tl, marginTop: 6, fontWeight: 600 }}>
+              {progress.done} / {progress.total} done
+            </div>
+            <div style={{ marginTop: 12, background: C.border, borderRadius: 4, height: 6, overflow: "hidden" }}>
+              <div style={{ height: "100%", background: C.maroon, width: `${progress.total ? (progress.done / progress.total * 100) : 0}%`, transition: "width 0.3s" }} />
+            </div>
+          </div>
+        )}
+
+        {progress === "done" && (
+          <div style={{ textAlign: "center", padding: "10px 0" }}>
+            <div style={{ fontSize:36, marginBottom: 10 }}>✅</div>
+            <div style={{ fontSize:14, fontWeight: 700, color: C.green }}>All passwords reset successfully!</div>
+            <div style={{ fontSize:11, color: C.tl, marginTop: 6 }}>Staff can now log in with username@123</div>
+            <button onClick={onClose}
+              style={{ marginTop: 16, padding: "10px 28px", borderRadius: 8, border: "none", background: C.maroon, color: C.white, fontFamily: F.b, fontSize:13, fontWeight: 700, cursor: "pointer" }}>
+              Done
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MemberCard({ member, onDeactivate, onRestore, onEdit, onPassword, isAdmin, saUser, lang, L, isMobile }) {
   const isActive = member.is_active !== false;
   const days = daysSince(member.joining_date);
   const deptColor = member.deptColor || C.maroon;
@@ -139,6 +355,12 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, isAdmin, lang, L,
             padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`,
             background: C.bg, color: C.tl, fontFamily: F.b, fontSize:9, fontWeight: 600, cursor: "pointer"
           }}>✏️ Edit</button>
+          {saUser?.role === "sa" && (
+            <button onClick={() => onPassword(member)} style={{
+              padding: "3px 8px", borderRadius: 6, border: "1px solid #E0C0C8",
+              background: "#FDF2F4", color: C.maroon, fontFamily: F.b, fontSize:9, fontWeight: 600, cursor: "pointer"
+            }}>🔑 Pwd</button>
+          )}
           {isActive ? (
             <button onClick={() => onDeactivate(member)} style={{
               padding: "3px 8px", borderRadius: 6, border: "none",
@@ -160,6 +382,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   const isMobile = useIsMobile();
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";
+  const isSA = user.role === "sa";
 
   const [showAdd, setShowAdd] = useState(false);
   const [fName, setFName] = useState("");
@@ -172,6 +395,8 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   const [tab, setTab] = useState("active");
   const [filterProp, setFilterProp] = useState("all");
   const [editingMember, setEditingMember] = useState(null);
+  const [passwordMember, setPasswordMember] = useState(null);
+  const [showBulkReset, setShowBulkReset] = useState(false);
 
   useEffect(() => {
     supabase.from("users").select("id,joining_date,is_active,left_date,phone,name")
@@ -202,13 +427,13 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
     } else {
       setCustomMembers(prev => [...prev, newM]);
     }
-    getSAIds().then(ids => notifyMultiple("member_added","👤 New member added: "+fName.trim()+" ("+fDept+" — "+fProp+")",user.id,user.name,ids,fProp));
+    getSAIds().then(ids => notifyMultiple("member_added", "👤 New member added: " + fName.trim() + " (" + fDept + " — " + fProp + ")", user.id, user.name, ids, fProp));
     setFName(""); setFUser(""); setFPass(""); setFJoining(""); setShowAdd(false);
   };
 
   const handleDeactivate = async (member) => {
     const today = new Date().toISOString().split("T")[0];
-    getSAIds().then(ids => notifyMultiple("member_removed","👤 Member deactivated: "+(member.n||member.name||""),user.id,user.name,ids,member.prop||member.property||null));
+    getSAIds().then(ids => notifyMultiple("member_removed", "👤 Member deactivated: " + (member.n || member.name || ""), user.id, user.name, ids, member.prop || member.property || null));
     if (member.isCustom) {
       setCustomMembers(prev => prev.map(m => m.id === member.id ? { ...m, is_active: false, left_date: today } : m));
     } else {
@@ -241,7 +466,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   const allByProp = {};
   Object.entries(PROPS).forEach(([pk, p]) => {
     allByProp[pk] = { prop: p, members: [] };
-    Object.entries(p?.depts||{}).forEach(([dk, d]) => {
+    Object.entries(p?.depts || {}).forEach(([dk, d]) => {
       d.m.forEach(m => {
         const dbInfo = dbUsers[m.id] || {};
         const isRemoved = removedIds.includes(m.id) || dbInfo.is_active === false;
@@ -279,7 +504,7 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
   return (
     <div style={{ fontFamily: F.b }}>
       {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div>
           <h1 style={{ fontFamily: F.d, fontSize:22, fontWeight: 700, color: C.maroon, margin: 0 }}>
             👤 {L.members}
@@ -288,13 +513,20 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
             {activeCount} active · {pastCount} past
           </p>
         </div>
-        {isAdmin && (
-          <button onClick={() => setShowAdd(!showAdd)} style={{
-            padding: "8px 14px", borderRadius: 8, border: "none",
-            background: C.maroon, color: C.white, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer",
-            width: isMobile ? "100%" : "auto"
-          }}>➕ {L.addMember}</button>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {isSA && (
+            <button onClick={() => setShowBulkReset(true)} style={{
+              padding: "8px 14px", borderRadius: 8, border: "1px solid #E0C0C8",
+              background: "#FDF2F4", color: C.maroon, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer"
+            }}>🔑 Reset All Passwords</button>
+          )}
+          {isAdmin && (
+            <button onClick={() => setShowAdd(!showAdd)} style={{
+              padding: "8px 14px", borderRadius: 8, border: "none",
+              background: C.maroon, color: C.white, fontFamily: F.b, fontSize:12, fontWeight: 700, cursor: "pointer"
+            }}>➕ {L.addMember}</button>
+          )}
+        </div>
       </div>
 
       {/* ── Property Filter ── */}
@@ -374,8 +606,8 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
                 {filtered.map(m => (
                   <MemberCard key={m.id} member={m}
                     onDeactivate={handleDeactivate} onRestore={handleRestore}
-                    onEdit={setEditingMember}
-                    isAdmin={isAdmin} lang={lang} L={L} isMobile={isMobile} />
+                    onEdit={setEditingMember} onPassword={setPasswordMember}
+                    isAdmin={isAdmin} saUser={user} lang={lang} L={L} isMobile={isMobile} />
                 ))}
               </div>
             </div>
@@ -389,6 +621,24 @@ export default function MembersView({ user, lang, customMembers, setCustomMember
           onSave={handleEditSave}
           onClose={() => setEditingMember(null)}
           L={L}
+          currentUser={user}
+        />
+      )}
+
+      {/* ── Password Modal ── */}
+      {passwordMember && (
+        <PasswordModal
+          member={passwordMember}
+          currentUser={user}
+          onClose={() => setPasswordMember(null)}
+        />
+      )}
+
+      {/* ── Bulk Reset Modal ── */}
+      {showBulkReset && (
+        <BulkResetModal
+          currentUser={user}
+          onClose={() => setShowBulkReset(false)}
         />
       )}
     </div>
