@@ -106,6 +106,8 @@ export const L_EN = {
   watchVideo:"Watch Video",
   valetPlan:"Valet Planning",
   vendorDir:"Vendors",
+  dailyTasks:"Daily Tasks",
+  fireSafety:"Fire Safety",
 };
 
 export const L_HI = {
@@ -182,6 +184,8 @@ export const L_HI = {
   watchVideo:"वीडियो देखें",
   valetPlan:"वैलेट प्लानिंग",
   vendorDir:"वेंडर",
+  dailyTasks:"दैनिक कार्य",
+  fireSafety:"अग्नि सुरक्षा",
 };
 
 export const LANGS = { en: L_EN, hi: L_HI };
@@ -220,6 +224,7 @@ export const USERS = [
   {id:"rs_arjun",username:"arjun",password:"arjun@123",name:"Arjun",role:"e",prop:"rs",dept:"k"},
   {id:"rs_vinay",username:"vinay",password:"vinay@123",name:"Vinay",role:"e",prop:"rs",dept:"k"},
   {id:"rs_ramu",username:"ramu",password:"ramu@123",name:"Ramu",role:"e",prop:"rs",dept:"h"},
+  {id:"ex_simran",username:"simran",password:"simran@123",name:"Simran",role:"a",prop:"ex"},
   {id:"sandeep",username:"sandeep",password:"sandeep@123",name:"Sandeep",role:"a",prop:"all",dept:"s"},
   {id:"rs_santosh",username:"santosh",password:"santosh@123",name:"Santosh",role:"e",prop:"rs",dept:"s"},
   {id:"ex_bhupender",username:"bhupender",password:"bhupender@123",name:"Bhupender",role:"e",prop:"ex",dept:"s"},
@@ -242,7 +247,7 @@ export const PROPS = {
     depts:{
       h:{n:"Horticulture",i:"🌱",c:C.green,bg:C.gBg,hd:"Mahesh",m:[{id:"ex_sonu2",n:"Sonu 2"},{id:"ex_dhruv",n:"Dhruv"},{id:"ex_kamlesh",n:"Kamlesh"}]},
       k:{n:"Housekeeping",i:"🧹",c:C.blue,bg:C.bBg,hd:"Mahesh",m:[{id:"ex_sunita",n:"Sunita"},{id:"ex_brijesh",n:"Brijesh"},{id:"ex_ragini",n:"Ragini"},{id:"ex_rani",n:"Rani"}]},
-      a:{n:"Admin",i:"📋",c:C.maroon,bg:C.maroonSoft,hd:"Mahesh",m:[{id:"ex_mahesh",n:"Mahesh"}]},
+      a:{n:"Admin",i:"📋",c:C.maroon,bg:C.maroonSoft,hd:"Mahesh",m:[{id:"ex_mahesh",n:"Mahesh"},{id:"ex_simran",n:"Simran"}]},
       s:{n:"Security",i:"🛡️",c:C.purple,bg:C.pBg,hd:"Sandeep",m:[{id:"ex_bhupender",n:"Bhupender"}]}},
     sh:"Mahesh"},
   mk:{id:"mk",name:"Ambria Manaktala",sn:"Manaktala",icon:"✨",loc:"Kapashera",tag:"3 Acres · Two Venues",

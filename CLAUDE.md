@@ -22,6 +22,7 @@ Ambria (Get Your Venue Events Pvt Ltd) workforce management app for 4 luxury eve
 
 **Exotica (ex):** 4 Acres, Aura (8.5K+27K sqft), Valencia (12K+8K sqft), 300-350 parking
 - Supervisor: Mahesh
+- HR: Simran (monitors Mahesh's team, reports to Vicky) — login: simran/simran@123
 - Horticulture: Sonu2, Dhruv, Kamlesh
 - Housekeeping: Sunita, Brijesh, Ragini, Rani
 - Security: Bhupender (Ambria) day + 1 third-party kitchen day, 2 third-party night
@@ -79,6 +80,7 @@ Ambria (Get Your Venue Events Pvt Ltd) workforce management app for 4 luxury eve
 ## Login Credentials
 - SA: abhishek / ambria@2026
 - Admins: vicky/vicky@123, sonu/sonu@123, mahesh/mahesh@123, rahees/rahees@123, sandeep/sandeep@123
+- Simran (HR Exotica): simran / simran@123 | ID: ex_simran | Role: Admin | Property: Exotica
 - Staff pattern: firstname / firstname@123
 
 ## Key Rules

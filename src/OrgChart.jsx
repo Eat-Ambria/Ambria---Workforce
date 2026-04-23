@@ -127,6 +127,7 @@ const ORG_DATA = {
           { name:"Rani",    role:"Housekeeping", color:"#2563EB" },
         ]
       },
+      { name:"Simran", role:"HR — Exotica", color:"#D4537E" },
       {
         name:"Rahees", role:"Supervisor — Manaktala", color:"#059669",
         children:[
@@ -259,6 +260,7 @@ export default function OrgChart({ lang }) {
           { c: "#16A34A", l: "🌱 Horticulture" },
           { c: "#2563EB", l: "🧹 Housekeeping" },
           { c: "#6B21A8", l: "🛡️ Security" },
+          { c: "#D4537E", l: "👩‍💼 HR" },
         ].map(leg => (
           <span key={leg.l} style={{
             fontSize:9, padding: "3px 8px", borderRadius: 6, fontWeight: 700,
