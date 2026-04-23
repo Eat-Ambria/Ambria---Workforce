@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { C, F, LANGS } from "./constants.js";
+import { C as C_BASE, F, LANGS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import OrgChart from "./OrgChart.jsx";
 import MembersView from "./MembersView.jsx";
 
 export default function TeamPage({ user, lang, customMembers, setCustomMembers, removedIds, setRemovedIds }) {
+  const C = useT();
   const H = lang === "hi";
   const [tab, setTab] = useState("org");
 

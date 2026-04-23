@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, PROPS } from "./constants.js";
+import { C as C_BASE, F, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
@@ -394,6 +395,7 @@ function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 export default function VendorDirectory({ user, lang }) {
+  const C = useT();
   const isMobile = useIsMobile();
   const [vendors, setVendors] = useState([]);
   const [loading, setLd] = useState(false);

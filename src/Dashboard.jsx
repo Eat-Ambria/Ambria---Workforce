@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { useIsMobile } from "./hooks.js";
 
 // ─── Fire Safety Widget ───────────────────────────────────────────────────────
 function FireSafetyWidget({ setView }) {
+  const C = useT();
   const [stat, setStat] = useState(null);
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
@@ -257,6 +259,7 @@ function Suggestions({ tasks, L }) {
 
 // ─── Dashboard (main export) ──────────────────────────────────────────────────
 export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
+  const C = useT();
   const L = LANGS[lang];
   const isMobile = useIsMobile();
   const [leaves, setLeaves] = useState([]);

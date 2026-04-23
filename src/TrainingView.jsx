@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import QuizModal, { QuizManager } from "./TrainingQuiz.jsx";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
@@ -213,6 +214,7 @@ function VideoForm({init,onSave,onCancel,lang}){
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 export default function TrainingView({user,prop,lang}){
+  const C=useT();
   const H=lang==="hi";
   const L=LANGS[lang];
   const isMobile=useIsMobile();

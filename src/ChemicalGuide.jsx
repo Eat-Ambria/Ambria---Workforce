@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { useIsMobile } from "./hooks.js";
 
 // Property specs for calculation
@@ -273,6 +274,7 @@ const CHEM_DATA = [
 ];
 
 export default function ChemicalGuide({ lang }) {
+  const C = useT();
   const L = LANGS[lang];
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("calc");

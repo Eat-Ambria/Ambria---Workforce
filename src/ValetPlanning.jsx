@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, PROPS } from "./constants.js";
+import { C as C_BASE, F, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
@@ -183,6 +184,7 @@ function computeFinalAlloc(prop, ri, overrideEnabled, overrides){
 
 // ─── STAFF ALLOCATION TABLE ───────────────────────────────────────────────────
 function StaffAllocationTable({ prop, rangeIdx, guestCount, overrideEnabled, overrides, overrideReason, onToggleOverride, onOverrideChange, onReasonChange, lang }){
+  const C = useT();
   const a = VALET_ALLOCATIONS[prop];
   if(!a) return null;
   const range = a.ranges[rangeIdx];
@@ -277,6 +279,7 @@ function StaffAllocationTable({ prop, rangeIdx, guestCount, overrideEnabled, ove
 
 // ─── FULL ALLOCATION MATRIX ───────────────────────────────────────────────────
 function FullAllocationMatrix({ prop, activeRangeIdx, lang }){
+  const C = useT();
   const a = VALET_ALLOCATIONS[prop];
   if(!a) return null;
   const L = lang==="hi";
@@ -351,6 +354,7 @@ function FullAllocationMatrix({ prop, activeRangeIdx, lang }){
 
 // ─── BOOKING FORM ─────────────────────────────────────────────────────────────
 function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
+  const C = useT();
   const isMobile = useIsMobile();
   const defProp = user.prop==="all" ? "pp" : (user.prop||"pp");
   const isEdit = !!init?.id;
@@ -562,6 +566,7 @@ function BookingForm({init, prefillDate, onSave, onCancel, user, lang}){
 
 // ─── CALENDAR VIEW ────────────────────────────────────────────────────────────
 function CalendarView({user, lang}){
+  const C = useT();
   const isMobile = useIsMobile();
   const today = new Date();
   const [yr,setYr] = useState(today.getFullYear());
@@ -783,6 +788,7 @@ function CalendarView({user, lang}){
 
 // ─── STAFF CALCULATOR ─────────────────────────────────────────────────────────
 function StaffCalculator({user, lang}){
+  const C = useT();
   const isMobile = useIsMobile();
   const defProp = VALET_ALLOCATIONS[user.prop] ? user.prop : "pp";
   const [prop, setProp] = useState(defProp);
@@ -977,6 +983,7 @@ function StaffCalculator({user, lang}){
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 export default function ValetPlanning({user, lang}){
+  const C = useT();
   const isMobile = useIsMobile();
   const [tab,setTab]=useState("calendar");
   const tabs=[

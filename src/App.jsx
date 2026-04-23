@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import Modal from "./Modal.jsx";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS, THEMES } from "./constants.js";
+import { ThemeContext, useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import Dashboard from "./Dashboard.jsx";
 import DutyRoster from "./DutyRoster.jsx";
@@ -116,10 +117,10 @@ const compressImage=(dataUrl,maxKB=80)=>new Promise(resolve=>{const img=new Imag
 const parsePhotos=(raw)=>{if(!raw)return[];if(typeof raw==="string"){if(raw.startsWith("[")){try{return JSON.parse(raw);}catch{return[raw];}}return[raw];}if(raw&&raw.data)return[raw.data];return[];};
 
 // ═══ UI ═══
-function Bdg({children,color=C.tl,bg=C.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
-function SL2({s,L}){const m={pending:{l:L.pending,c:C.yellow,b:C.yBg},in_progress:{l:L.inProgress,c:C.blue,b:C.bBg},completed:{l:L.done,c:C.green,b:C.gBg},issue:{l:L.issue,c:C.red,b:C.rBg}};const v=m[s]||m.pending;return <Bdg color={v.c} bg={v.b}>{v.l}</Bdg>;}
+function Bdg({children,color=C_BASE.tl,bg=C_BASE.border+"88"}){return <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:600,background:bg,color,whiteSpace:"nowrap",fontFamily:F.b}}>{children}</span>;}
+function SL2({s,L}){const C=useT();const m={pending:{l:L.pending,c:C.yellow,b:C.yBg},in_progress:{l:L.inProgress,c:C.blue,b:C.bBg},completed:{l:L.done,c:C.green,b:C.gBg},issue:{l:L.issue,c:C.red,b:C.rBg}};const v=m[s]||m.pending;return <Bdg color={v.c} bg={v.b}>{v.l}</Bdg>;}
 function SearchSelect({value,onChange,options,style:cs,placeholder}){
-  const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
+  const C=useT();const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
   useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
   const fil=options.filter(o=>String(o.l).toLowerCase().includes(q.toLowerCase()));
   const cur=options.find(o=>String(o.v)===String(value));
@@ -137,11 +138,11 @@ function SearchSelect({value,onChange,options,style:cs,placeholder}){
   </div>);
 }
 function Sel2({value,onChange,options,style:cs}){return <SearchSelect value={value} onChange={onChange} options={options} style={cs}/>;}
-function Btn2({children,onClick,primary,small,style:cs}){return <button onClick={onClick} style={{padding:small?"6px 12px":"10px 18px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:small?11:13,fontWeight:600,background:primary?C.maroon:C.bg,color:primary?C.white:C.text,...cs}}>{children}</button>;}
+function Btn2({children,onClick,primary,small,style:cs}){const C=useT();return <button onClick={onClick} style={{padding:small?"6px 12px":"10px 18px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:small?11:13,fontWeight:600,background:primary?C.maroon:C.bg,color:primary?C.white:C.text,...cs}}>{children}</button>;}
 
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang}){
-  const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
+  const C=useT();const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
   const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("id,name,username,role,property,department").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
@@ -157,7 +158,7 @@ function LoginScreen({onLogin,lang,setLang}){
 
 // ═══ PHOTO ═══
 function PhotoUp({photos,onUp,onRetake,disabled,L}){
-  const ref=useRef(null);
+  const C=useT();const ref=useRef(null);
   const hndl=(e)=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){alert("Please select an image file");return;}if(f.size>10*1024*1024){alert("Image too large. Max 10MB");return;}const r=new FileReader();r.onload=(ev)=>{onUp({data:ev.target.result,time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),date:new Date().toLocaleDateString("en-IN")});};r.readAsDataURL(f);e.target.value="";};
   const has=photos?.length>0;
   return(<div>
@@ -170,7 +171,7 @@ function PhotoUp({photos,onUp,onRetake,disabled,L}){
 
 // ═══ TASK CARD ═══
 function TC({task:t,uTask,delTask,depts,areas,user:u,allM,L,lang}){
-  const[sC,setSC]=useState(false);const[cT,setCT]=useState("");const[sS,setSS]=useState(false);const[sE,setSE]=useState(false);const[eA,setEA]=useState(t.assignedTo);
+  const C=useT();const[sC,setSC]=useState(false);const[cT,setCT]=useState("");const[sS,setSS]=useState(false);const[sE,setSE]=useState(false);const[eA,setEA]=useState(t.assignedTo);
   const dn=t.status==="completed",iss=t.status==="issue";
   const isA=u.role==="sa"||u.role==="a";const canA=isA||t.assignedTo===u.id;
   const ti=lang==="hi"&&t.titleHi?t.titleHi:t.title;const de=lang==="hi"&&t.descHi?t.descHi:t.desc;
@@ -216,7 +217,7 @@ function TC({task:t,uTask,delTask,depts,areas,user:u,allM,L,lang}){
 
 // ═══ ADD TASK ═══
 function AddTF({prop,onAdd,onClose,L}){
-  const isMobile=useIsMobile();
+  const C=useT();const isMobile=useIsMobile();
   const[f,sF]=useState({title:"",titleHi:"",dept:Object.keys(prop?.depts||{})[0]||"h",area:prop?.areas?.[0]?.id,assignedTo:"",priority:"medium",cat:"daily",dur:"1h",desc:"",descHi:"",timeBlock:"9:00-10:00"});
   const ms=prop?.depts?.[f.dept]?.m||[];
   const sub=()=>{if(!f.title||!f.assignedTo)return;const m=ms.find(x=>x.id===f.assignedTo);onAdd({id:`${prop.id}_c_${Date.now()}`,prop:prop.id,...f,assigneeName:m?.n||"?",status:"pending",notes:"",completedAt:null,completedBy:"",photos:[],isTeam:false});onClose();};
@@ -237,8 +238,8 @@ function AddTF({prop,onAdd,onClose,L}){
 }
 
 // ═══ SIDEBAR ═══
-function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allDbUsers,dirs,aP}){
-  const eU=effectiveUser||u;
+function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allDbUsers,dirs,aP,toggleTheme,theme}){
+  const C=useT();const eU=effectiveUser||u;
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
@@ -272,12 +273,13 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
     </div>
     <div style={{padding:"8px 6px",borderTop:`1px solid ${C.border}`}}>
       <button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{width:"100%",padding:"5px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:10,cursor:"pointer",fontWeight:600,color:C.maroon,marginBottom:5}}>🌐 {lang==="en"?L.hi:L.en}</button>
+      <button onClick={toggleTheme} style={{width:"100%",padding:"5px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:10,cursor:"pointer",fontWeight:600,color:C.maroon,marginBottom:5}}>{theme==="light"?"🌙 Dark":"☀️ Light"}</button>
       <div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",background:C.bg,borderRadius:8,marginBottom:5}}><div style={{width:24,height:24,borderRadius:"50%",background:C.maroon,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:10}}>{u.name[0]}</div><div><div style={{fontSize:10,fontWeight:600}}>{u.name}</div><div style={{fontSize:9,color:C.tl}}>{rL[u.role]}</div></div></div>
       <button onClick={onLogout} style={{width:"100%",padding:"6px",borderRadius:8,border:`1px solid ${C.red}`,background:C.rBg,color:C.red,fontFamily:F.b,fontSize:10,fontWeight:600,cursor:"pointer"}}>🚪 {L.logout}</button>
     </div></div>);
 }
 
-function NPanel({ns,onClose,onClr,L,onClickNotif}){return(<div style={{position:"fixed",top:0,right:0,width:320,height:"100vh",background:C.white,boxShadow:"-4px 0 20px rgba(0,0,0,0.1)",zIndex:100,display:"flex",flexDirection:"column"}}><div style={{padding:"12px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between"}}><span style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>🔔 {L.notif}</span><div style={{display:"flex",gap:4}}><Btn2 small onClick={onClr}>{L.clearAll}</Btn2><button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:12}}>✕</button></div></div>
+function NPanel({ns,onClose,onClr,L,onClickNotif}){const C=useT();return(<div style={{position:"fixed",top:0,right:0,width:320,height:"100vh",background:C.white,boxShadow:"-4px 0 20px rgba(0,0,0,0.1)",zIndex:100,display:"flex",flexDirection:"column"}}><div style={{padding:"12px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between"}}><span style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon}}>🔔 {L.notif}</span><div style={{display:"flex",gap:4}}><Btn2 small onClick={onClr}>{L.clearAll}</Btn2><button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:12}}>✕</button></div></div>
   <div style={{flex:1,overflowY:"auto",padding:8}}>{ns.length===0?<div style={{textAlign:"center",padding:24,color:C.tl,fontSize:11}}>{L.noNotif}</div>:ns.map((n,i)=>{
     const isApproval=n.type==="approval";const bgC=isApproval?"#FFF7ED":n.type==="issue"?C.rBg:C.gBg;const txC=isApproval?C.accent:n.type==="issue"?C.red:C.green;
     return(<div key={i} onClick={()=>{if(isApproval&&onClickNotif){onClickNotif(n);onClose();}}} style={{padding:10,borderRadius:8,background:bgC,marginBottom:5,cursor:isApproval?"pointer":"default",border:isApproval?`2px solid ${C.accent}`:"none"}}>
@@ -294,7 +296,7 @@ const TP_GUARDS={
 };
 
 function AttView({user:u,att,setAtt,prop,L}){
-  const isMobile=useIsMobile();
+  const C=useT();const isMobile=useIsMobile();
   const isA=u.role==="sa"||u.role==="a";const tk=td.toISOString().split("T")[0];const mr=att.find(a=>a.uid===u.id&&a.date===tk);
   const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dn:dept.n,dc:dept.c})));
   const attRef=useRef(null);const tpSlots=TP_GUARDS[prop.id]||[];
@@ -343,7 +345,7 @@ function AttView({user:u,att,setAtt,prop,L}){
 }
 
 function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
-  const[cv,setCV]=useState("daily");const[fD,sFD]=useState("all");const[fS,sFS]=useState("all");const[fC,sFC]=useState("all");const[sa,setSA]=useState(false);
+  const C=useT();const[cv,setCV]=useState("daily");const[fD,sFD]=useState("all");const[fS,sFS]=useState("all");const[fC,sFC]=useState("all");const[sa,setSA]=useState(false);
   const isA=u.role==="sa"||u.role==="a";
   const allM=Object.entries(prop?.depts||{}).flatMap(([d,dept])=>dept.m.map(m=>({...m,dept:d,dn:dept.n,di:dept.i})));
   const uT=useCallback((id,up)=>{setTasks(prev=>prev.map(t=>t.id===id?{...t,...up}:t));},[setTasks]);
@@ -360,7 +362,7 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:6}}>
-      <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>{vt==="mytasks"?L.myTasks:"Daily Tasks"} - {prop.sn}</h1>
+      <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>{vt==="mytasks"?L.myTasks:L.dailyTasks||"Daily Tasks"} - {prop.sn}</h1>
       <div style={{display:"flex",gap:5}}>
         {<div style={{display:"flex",gap:2,background:C.maroonSoft,borderRadius:8,padding:2}}>{cO.map(v=><button key={v} onClick={()=>setCV(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,background:cv===v?C.maroon:"transparent",color:cv===v?C.white:C.maroon}}>{cL[v]}</button>)}</div>}
         {isA&&<Btn2 primary small onClick={()=>setSA(!sa)}>➕ {L.addTask}</Btn2>}
@@ -396,7 +398,7 @@ const ADMIN_TARGETS=[
 function findAT(u){return ADMIN_TARGETS.find(t=>t.id===u.id||(t.username&&t.username===u.username));}
 
 function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
-  const isMobile=useIsMobile();
+  const C=useT();const isMobile=useIsMobile();
   const isSA=u.role==="sa";
   // Use u.id directly — DB-fetched admin IDs and login user.id come from same row
   const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
@@ -475,7 +477,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
 }
 
 function ATCard({dir,user:u,setDirs,L,setNs}){
-  const[showComplete,setShowComplete]=useState(false);
+  const C=useT();const[showComplete,setShowComplete]=useState(false);
   const[cNote,setCNote]=useState("");
   const[cPhotos,setCPhotos]=useState([]);
   const[showReply,setShowReply]=useState(false);
@@ -727,8 +729,8 @@ function useIsMobile(){
   return m;
 }
 
-function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L}){
-  const[showMore,setShowMore]=useState(false);
+function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L,toggleTheme,theme}){
+  const C=useT();const[showMore,setShowMore]=useState(false);
   const main=nav.slice(0,5);const more=nav.slice(5);
   return(<>
     {showMore&&<div onClick={()=>setShowMore(false)} style={{position:"fixed",inset:0,zIndex:97,background:"rgba(0,0,0,0.3)"}}/>}
@@ -741,6 +743,7 @@ function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L}
       </div>
       <div style={{display:"flex",gap:4,marginTop:4,padding:"4px 0",borderTop:`1px solid ${C.border}`}}>
         <button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:13,cursor:"pointer",color:C.maroon,fontWeight:600}}>🌐 {lang==="en"?L.hi:L.en}</button>
+        <button onClick={toggleTheme} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:13,cursor:"pointer",color:C.maroon,fontWeight:600}}>{theme==="light"?"🌙":"☀️"}</button>
         <button onClick={()=>setShowN(true)} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${nC>0?C.accent:C.border}`,background:nC>0?"#FFF7ED":C.bg,cursor:"pointer",fontFamily:F.b,fontSize:13,fontWeight:600,color:nC>0?C.accent:C.tl}}>🔔{nC>0&&<span style={{background:C.red,color:C.white,borderRadius:10,padding:"0 5px",fontSize:10,marginLeft:4}}>{nC}</span>}</button>
         <button onClick={onLogout} style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${C.red}`,background:C.rBg,color:C.red,fontFamily:F.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>🚪</button>
       </div>
@@ -760,18 +763,20 @@ function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L}
 }
 
 function PropBar({ap,setAP,user:u}){
-  const uprop=u.prop||u.property||"pp";const av=uprop==="all"?Object.values(PROPS):[PROPS[uprop]].filter(Boolean);
+  const C=useT();const uprop=u.prop||u.property||"pp";const av=uprop==="all"?Object.values(PROPS):[PROPS[uprop]].filter(Boolean);
   return(<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{av.map(p=>{const a=ap===p.id;return(<button key={p.id} onClick={()=>setAP(p.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:8,border:a?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:a?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b}}><span style={{fontSize:13}}>{p.icon}</span><span style={{fontSize:10,fontWeight:a?700:500,color:a?C.maroon:C.text}}>{p.sn}</span>{a&&<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>}</button>);})}</div>);
 }
 
 // ═══ MOBILE HEADER ═══
-function MobileHeader({prop,nC,setShowN,lang,setLang,L,onRefresh,refreshing}){
+function MobileHeader({prop,nC,setShowN,lang,setLang,L,onRefresh,refreshing,toggleTheme,theme}){
+  const C=useT();
   return(
     <div className="mobile-header" style={{display:"none",position:"sticky",top:0,left:0,right:0,height:50,background:C.white,borderBottom:`1px solid ${C.border}`,zIndex:45,alignItems:"center",justifyContent:"space-between",padding:"0 12px",gap:8}}>
       <div style={{fontFamily:F.d,fontSize:15,fontWeight:700,color:C.maroon,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{prop?.sn||"Ambria"}</div>
       <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
         <button onClick={onRefresh} style={{width:36,height:36,borderRadius:"50%",border:"none",background:C.bg,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{display:"inline-block",animation:refreshing?"pullSpin 0.8s linear infinite":undefined}}>🔄</span></button>
         <button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",fontSize:10,fontWeight:700,color:C.maroon,display:"flex",alignItems:"center",justifyContent:"center"}}>{lang==="en"?"हि":"EN"}</button>
+        <button onClick={toggleTheme} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{theme==="light"?"🌙":"☀️"}</button>
         <button onClick={()=>setShowN(true)} style={{width:36,height:36,borderRadius:"50%",border:"none",background:nC>0?"#FFF7ED":C.bg,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
           🔔{nC>0&&<span style={{position:"absolute",top:2,right:2,width:16,height:16,borderRadius:"50%",background:C.red,color:C.white,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{nC>9?"9+":nC}</span>}
         </button>
@@ -783,10 +788,14 @@ function MobileHeader({prop,nC,setShowN,lang,setLang,L,onRefresh,refreshing}){
 // ═══ APP ═══
 export default function App(){
   const isMobile=useIsMobile();
+  const[theme,setTheme]=useState(()=>localStorage.getItem("ambria-theme")||"light");
+  const toggleTheme=()=>setTheme(t=>{const n=t==="light"?"dark":"light";localStorage.setItem("ambria-theme",n);return n;});
+  const TH=THEMES[theme];const C=TH;
   const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&findAT(u))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("");const[allDbUsers,setAllDbUsers]=useState([]);const[dirs,setDirs]=useState([]);const[atLoaded,setAtLoaded]=useState(false);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const[refreshKey,setRK]=useState(0);const[refreshing,setRefreshing]=useState(false);
   const ptrStartY=useRef(0);const ptrActive=useRef(false);
   const L=LANGS[lang];
+  useEffect(()=>{document.body.style.background=C.bg;document.body.style.color=C.text;document.body.style.transition="background 0.3s,color 0.3s";},[theme]);
   const allS=useMemo(()=>Object.entries(PROPS).flatMap(([pk,p])=>Object.entries(p.depts).flatMap(([dk,d])=>d.m.map(m=>({...m,dept:dk,dn:d.n,di:d.i,pid:pk,pn:p.sn})))),[]);
 
   // ═══ LOAD ALL DATA FROM SUPABASE AFTER LOGIN ═══
@@ -870,18 +879,18 @@ export default function App(){
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
-  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:"Training"}];
+  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
   const doRefresh=()=>{setRefreshing(true);setRK(k=>k+1);};
   const onPTRStart=e=>{ptrStartY.current=e.touches[0].clientY;ptrActive.current=false;};
   const onPTRMove=e=>{if(window.scrollY===0&&e.touches[0].clientY-ptrStartY.current>10)ptrActive.current=true;};
   const onPTREnd=e=>{if(ptrActive.current&&e.changedTouches[0].clientY-ptrStartY.current>80){doRefresh();}ptrActive.current=false;};
 
-  return(<div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text}}>
-    {loading&&<div style={{position:"fixed",inset:0,background:"rgba(255,255,255,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,lineHeight:1.2}}>Ambria Work Force</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
-    <div className="desktop-sidebar"><Sidebar view={view} setView={sV} user={user} effectiveUser={eU} onLogout={onLogout} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allDbUsers={allDbUsers} dirs={dirs} aP={aP}/></div>
-    {isMobile&&<MobileHeader prop={prop} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L} onRefresh={doRefresh} refreshing={refreshing}/>}
-    {isMobile&&<BottomNav nav={navForBottom} view={view} setView={sV} onLogout={onLogout} user={user} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L}/>}
+  return(<ThemeContext.Provider value={TH}><div style={{fontFamily:F.b,background:C.bg,minHeight:"100vh",color:C.text,transition:"background 0.3s,color 0.3s"}}>
+    {loading&&<div style={{position:"fixed",inset:0,background:C.white+"EE",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><div style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,lineHeight:1.2}}>Ambria Work Force</div><div style={{fontSize:13,color:C.tl}}>Loading data...</div></div>}
+    <div className="desktop-sidebar"><Sidebar view={view} setView={sV} user={user} effectiveUser={eU} onLogout={onLogout} lang={lang} setLang={setLang} nC={ns.length} setShowN={setSN} L={L} pm={pm} setPM={setPM} pAs={pAs} setPAs={setPAs} allDbUsers={allDbUsers} dirs={dirs} aP={aP} toggleTheme={toggleTheme} theme={theme}/></div>
+    {isMobile&&<MobileHeader prop={prop} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L} onRefresh={doRefresh} refreshing={refreshing} toggleTheme={toggleTheme} theme={theme}/>}
+    {isMobile&&<BottomNav nav={navForBottom} view={view} setView={sV} onLogout={onLogout} user={user} nC={ns.length} setShowN={setSN} lang={lang} setLang={setLang} L={L} toggleTheme={toggleTheme} theme={theme}/>}
     {sN&&<NPanel ns={ns} onClose={()=>{setSN(false);if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>setNs([]));else setNs([]);}}} onClr={()=>{if(ns.length>0){const ids=ns.map(n=>n.id).filter(Boolean);if(ids.length>0)supabase.from("notifications").update({is_read:true}).in("id",ids).then(()=>{setNs([]);setSN(false);});else{setNs([]);setSN(false);}}else setSN(false);}} L={L} onClickNotif={(n)=>{sV("directives");}}/>}
     <div className="main-content" onTouchStart={isMobile?onPTRStart:undefined} onTouchMove={isMobile?onPTRMove:undefined} onTouchEnd={isMobile?onPTREnd:undefined} style={{marginLeft:isMobile?0:185,padding:isMobile?"0 12px 18px":"0 18px 18px",minHeight:"100vh",paddingTop:isMobile?10:0}}>
       {refreshing&&<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,padding:"6px 0",fontSize:12,color:C.tl}}><span style={{display:"inline-block",animation:"pullSpin 0.8s linear infinite"}}>🔄</span> Refreshing...</div>}
@@ -906,5 +915,5 @@ export default function App(){
         {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
         {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}
       </>)}
-    </div></div>);
+    </div></div></ThemeContext.Provider>);
 }

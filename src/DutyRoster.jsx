@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
 function SearchSelect({value,onChange,options,style:cs,placeholder}){
-  const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
+  const C=useT();const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
   useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
   const fil=options.filter(o=>String(o.l).toLowerCase().includes(q.toLowerCase()));
   const cur=options.find(o=>String(o.v)===String(value));
@@ -226,6 +227,7 @@ function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
 }
 
 export default function DutyRoster({ prop, user, lang }) {
+  const C = useT();
   const L = LANGS[lang];
   const isMobile = useIsMobile();
   const isAdmin = user.role === "sa" || user.role === "a";

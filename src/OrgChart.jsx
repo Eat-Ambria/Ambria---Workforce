@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { C, F } from "./constants.js";
+import { C as C_BASE, F } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 
 // ── CSS injected once — Power BI decomposition-tree style ────────────────────
 const CSS = `
@@ -213,6 +214,7 @@ function Branch({ node, expanded, toggle }) {
 
 // ── Main export ────────────────────────────────────────────────────────────────
 export default function OrgChart({ lang }) {
+  const C = useT();
   const H = lang === "hi";
   // Start with chain Harsh→Abhishek→Vicky expanded; all else collapsed
   const [expanded, setExpanded] = useState({ "Harsh Vardhan": true, "Abhishek": true });

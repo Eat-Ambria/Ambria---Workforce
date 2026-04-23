@@ -11,6 +11,34 @@ export const C = {
   yellow:"#C68A1D", yBg:"#FDF6E8",
   red:"#C0392B", rBg:"#FBEAE8",
   purple:"#6B21A8", pBg:"#6B21A815",
+  // extra keys used by theme-aware components
+  navBg:"#FFFFFF", inputBg:"#FFFFFF", shadow:"0 1px 3px rgba(0,0,0,0.1)",
+};
+
+// Dark / light themes — same key names as C so components can swap C for TH transparently.
+export const THEMES = {
+  light: {
+    maroon:"#7B1E2F", maroonLight:"#9A2E42", maroonSoft:"#F9F0F2",
+    accent:"#C4956A", white:"#FFFFFF", bg:"#FAFAFA", text:"#2D2D2D",
+    tl:"#7A7A7A", border:"#EDEDED",
+    green:"#2E8B57", gBg:"#EBF5F0",
+    blue:"#3B6FC0", bBg:"#EBF1FA",
+    yellow:"#C68A1D", yBg:"#FDF6E8",
+    red:"#C0392B", rBg:"#FBEAE8",
+    purple:"#6B21A8", pBg:"#6B21A815",
+    navBg:"#FFFFFF", inputBg:"#FFFFFF", shadow:"0 1px 3px rgba(0,0,0,0.1)",
+  },
+  dark: {
+    maroon:"#C4475E", maroonLight:"#D45C72", maroonSoft:"#2D1A1F",
+    accent:"#F59E0B", white:"#1E1E1E", bg:"#111111", text:"#E5E5E5",
+    tl:"#9CA3AF", border:"#333333",
+    green:"#4ADE80", gBg:"#0D2818",
+    blue:"#60A5FA", bBg:"#0C1E3A",
+    yellow:"#FBBF24", yBg:"#2D2305",
+    red:"#F87171", rBg:"#2D0F0F",
+    purple:"#A78BFA", pBg:"rgba(167,139,250,0.12)",
+    navBg:"#1A1A1A", inputBg:"#2A2A2A", shadow:"0 1px 3px rgba(0,0,0,0.4)",
+  },
 };
 
 export const F = { b:"'Outfit',sans-serif", d:"'Cormorant Garamond',serif" };

@@ -1,24 +1,26 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS } from "./constants.js";
+import { C as C_BASE, F, LANGS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
 // leaves table: id, user_id, user_name, leave_date, leave_type, reason, status, approved_by
 
 const LEAVE_TYPES = [
-  { id: "casual", enLabel: "Casual", hiLabel: "आकस्मिक", color: C.blue, icon: "🏖️" },
-  { id: "sick", enLabel: "Sick", hiLabel: "बीमारी", color: C.red, icon: "🤒" },
-  { id: "other", enLabel: "Other", hiLabel: "अन्य", color: C.tl, icon: "📝" },
+  { id: "casual", enLabel: "Casual", hiLabel: "आकस्मिक", color: C_BASE.blue, icon: "🏖️" },
+  { id: "sick", enLabel: "Sick", hiLabel: "बीमारी", color: C_BASE.red, icon: "🤒" },
+  { id: "other", enLabel: "Other", hiLabel: "अन्य", color: C_BASE.tl, icon: "📝" },
 ];
 
 const STATUS_MAP = {
-  pending: { label: "Pending", hiLabel: "लंबित", color: C.yellow, bg: C.yBg, icon: "⏳" },
-  approved: { label: "Approved", hiLabel: "मंज़ूर", color: C.green, bg: C.gBg, icon: "✅" },
-  rejected: { label: "Rejected", hiLabel: "नामंज़ूर", color: C.red, bg: C.rBg, icon: "❌" },
+  pending: { label: "Pending", hiLabel: "लंबित", color: C_BASE.yellow, bg: C_BASE.yBg, icon: "⏳" },
+  approved: { label: "Approved", hiLabel: "मंज़ूर", color: C_BASE.green, bg: C_BASE.gBg, icon: "✅" },
+  rejected: { label: "Rejected", hiLabel: "नामंज़ूर", color: C_BASE.red, bg: C_BASE.rBg, icon: "❌" },
 };
 
 function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
+  const C = useT();
   const st = STATUS_MAP[leave.status] || STATUS_MAP.pending;
   const lt = LEAVE_TYPES.find(t => t.id === leave.leave_type) || LEAVE_TYPES[2];
   const isAdmin = user.role === "sa" || user.role === "a";
@@ -74,6 +76,7 @@ function LeaveCard({ leave, user, onApprove, onReject, lang, L }) {
 }
 
 export default function LeaveManager({ prop, user, lang }) {
+  const C = useT();
   const isMobile = useIsMobile();
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";

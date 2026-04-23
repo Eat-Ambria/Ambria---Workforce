@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, LANGS, PROPS } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
@@ -19,6 +20,7 @@ function formatDate(dateStr) {
 const DEPT_NAMES = { h: "🌱 Horticulture", k: "🧹 Housekeeping", a: "📋 Admin", s: "🛡️ Security" };
 
 function EditMemberModal({ member, onSave, onClose, L, currentUser }) {
+  const C = useT();
   const [form, setForm] = useState({
     name: member.n || "",
     joining_date: member.joining_date || "",
@@ -113,6 +115,7 @@ function EditMemberModal({ member, onSave, onClose, L, currentUser }) {
 }
 
 function PasswordModal({ member, currentUser, onClose }) {
+  const C = useT();
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
@@ -228,6 +231,7 @@ function PasswordModal({ member, currentUser, onClose }) {
 }
 
 function BulkResetModal({ currentUser, onClose }) {
+  const C = useT();
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState("");
 
@@ -305,6 +309,7 @@ function BulkResetModal({ currentUser, onClose }) {
 }
 
 function MemberCard({ member, onDeactivate, onRestore, onEdit, onPassword, isAdmin, saUser, lang, L, isMobile }) {
+  const C = useT();
   const isActive = member.is_active !== false;
   const days = daysSince(member.joining_date);
   const deptColor = member.deptColor || C.maroon;
@@ -379,6 +384,7 @@ function MemberCard({ member, onDeactivate, onRestore, onEdit, onPassword, isAdm
 }
 
 export default function MembersView({ user, lang, customMembers, setCustomMembers, removedIds, setRemovedIds }) {
+  const C = useT();
   const isMobile = useIsMobile();
   const L = LANGS[lang];
   const isAdmin = user.role === "sa" || user.role === "a";

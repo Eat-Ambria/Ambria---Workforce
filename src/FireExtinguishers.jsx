@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { C, F, PROPS } from "./constants.js";
+import { C as C_BASE, F, PROPS } from "./constants.js";
+import { useT } from "./ThemeContext.js";
 import Modal from "./Modal.jsx";
 import { notifyMultiple } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
@@ -102,6 +103,7 @@ function SCard({icon,label,value,color,bg,pulse,bold}) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function FireExtinguishers({user, lang}) {
+  const C = useT();
   const isMobile = useIsMobile();
   const [items,   setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
