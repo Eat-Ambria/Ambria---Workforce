@@ -152,6 +152,7 @@ const PROP_OPTS = [
 
 // ─── CATEGORY SEARCH SELECT ──────────────────────────────────────────────────
 function CatSelect({ value, onChange }) {
+  const C = useT();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -238,6 +239,7 @@ function Stars({ rating, onChange }) {
 
 // ─── VENDOR FORM ──────────────────────────────────────────────────────────────
 function VendorForm({ init, onSave, onCancel, user, lang }) {
+  const C = useT();
   const [f, sF] = useState(init || {
     name:"", company:"", phone:"", alt_phone:"", email:"",
     category: CATEGORIES[0], property:"all", notes:"", rating:3,
@@ -313,6 +315,7 @@ function VendorForm({ init, onSave, onCancel, user, lang }) {
 
 // ─── VENDOR CARD ──────────────────────────────────────────────────────────────
 function VendorCard({ vendor: v, onEdit, onDelete, lang }) {
+  const C = useT();
   const [delConfirm, setDC] = useState(false);
   const cc = CAT_COLORS[v.category] || CAT_COLORS.Other;
   const waPhone = v.phone.replace(/\D/g, "");

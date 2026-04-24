@@ -34,10 +34,10 @@ const DEFAULT_TOPICS = [
 ];
 
 const DEPT_META = {
-  k:{l:"Housekeeping",lH:"हाउसकीपिंग",icon:"🧹",c:C.blue,  bg:C.bBg       },
-  h:{l:"Horticulture", lH:"हॉर्टिकल्चर",icon:"🌱",c:C.green, bg:C.gBg       },
-  a:{l:"Admin",         lH:"एडमिन",     icon:"📋",c:C.maroon,bg:C.maroonSoft},
-  s:{l:"Security",      lH:"सुरक्षा",    icon:"🛡️",c:C.purple,bg:C.pBg       },
+  k:{l:"Housekeeping",lH:"हाउसकीपिंग",icon:"🧹",c:C_BASE.blue,  bg:C_BASE.bBg       },
+  h:{l:"Horticulture", lH:"हॉर्टिकल्चर",icon:"🌱",c:C_BASE.green, bg:C_BASE.gBg       },
+  a:{l:"Admin",         lH:"एडमिन",     icon:"📋",c:C_BASE.maroon,bg:C_BASE.maroonSoft},
+  s:{l:"Security",      lH:"सुरक्षा",    icon:"🛡️",c:C_BASE.purple,bg:C_BASE.pBg       },
 };
 
 const CHEM_DATA = [
@@ -75,7 +75,7 @@ function ensureYTScript(){
 
 // ─── VIDEO MODAL ──────────────────────────────────────────────────────────────
 function VideoModal({video,isDone,onClose,onCompleted,userId,user,lang}){
-  const H=lang==="hi";
+  const C=useT();const H=lang==="hi";
   const pid=useRef(`ytp-${video.id}-${Date.now()}`).current;
   const ytRef=useRef(null);
   const[done,setDone]=useState(isDone);
@@ -146,7 +146,7 @@ function VideoModal({video,isDone,onClose,onCompleted,userId,user,lang}){
 
 // ─── VIDEO FORM (Admin / SA only) ─────────────────────────────────────────────
 function VideoForm({init,onSave,onCancel,lang}){
-  const H=lang==="hi";
+  const C=useT();const H=lang==="hi";
   const isMobile=useIsMobile();
   const[f,sF]=useState(init?{
     ...init,
