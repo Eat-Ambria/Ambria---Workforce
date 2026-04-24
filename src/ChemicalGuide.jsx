@@ -28,7 +28,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `${totalFloor.toLocaleString()} sqft × 0.002L × 2 washes × 30 days`,
       note: "Dilution: 20ml/1L water",
-      color: C.blue,
+      color: C_BASE.blue,
     },
     {
       code: "K1",
@@ -38,7 +38,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `${washrooms} washrooms × 0.5L/day × 30 days`,
       note: "Dilution: 20–50ml/1L water",
-      color: C.red,
+      color: C_BASE.red,
     },
     {
       code: "K6",
@@ -48,7 +48,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `${washrooms} toilets × 0.3L/day × 30 days`,
       note: "Ready-to-use — pour directly",
-      color: C.red,
+      color: C_BASE.red,
     },
     {
       code: "K5",
@@ -58,7 +58,7 @@ function calcQty(spec) {
       unit: "cans",
       formula: `${washrooms + 2} areas × 30 days ÷ 5 days/can`,
       note: "Spray every 2–3 hours in peak hours",
-      color: C.accent,
+      color: C_BASE.accent,
     },
     {
       code: "K3",
@@ -68,7 +68,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `${Math.round(glass || banquet * 0.2).toLocaleString()} sqft × 0.003L × 4 times/month`,
       note: "Dilution: 20–50ml/1L water",
-      color: C.tl,
+      color: C_BASE.tl,
     },
     {
       code: "K4",
@@ -78,7 +78,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `${Math.round(banquet / 5000)} L per ${banquet.toLocaleString()} sqft monthly`,
       note: "Ready-to-use on wooden surfaces",
-      color: C.accent,
+      color: C_BASE.accent,
     },
     {
       code: "K7",
@@ -88,7 +88,7 @@ function calcQty(spec) {
       unit: "L",
       formula: "~2L per property per month (standard)",
       note: "Ready-to-use on SS surfaces",
-      color: C.tl,
+      color: C_BASE.tl,
     },
     {
       code: "K101",
@@ -98,7 +98,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `30% carpet area × 80ml/sqft × 4/month ÷ 1000`,
       note: "Dilution: 50–100ml/1L water",
-      color: C.green,
+      color: C_BASE.green,
     },
     {
       code: "NPK 19:19:19",
@@ -108,7 +108,7 @@ function calcQty(spec) {
       unit: "kg",
       formula: `${lawn.toLocaleString()} sqft lawn ÷ 1000 × 2kg/month`,
       note: "Monthly balanced feed — dilute 2g/L",
-      color: C.green,
+      color: C_BASE.green,
     },
     {
       code: "Neem Oil",
@@ -118,7 +118,7 @@ function calcQty(spec) {
       unit: "L",
       formula: `${(lawn / 10000).toFixed(1)} × 0.5L per 10K sqft`,
       note: "Mix 5ml/1L water — spray monthly",
-      color: C.green,
+      color: C_BASE.green,
     },
   ];
 }

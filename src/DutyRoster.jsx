@@ -73,7 +73,7 @@ function ShiftBadge({ shiftType }) {
 }
 
 function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
-  const isMobile = useIsMobile();
+  const C = useT();const isMobile = useIsMobile();
   const [form, setForm] = useState({
     shift_type: existing?.shift_type || "day",
     shift_start: existing?.shift_start || "09:00",
@@ -141,7 +141,7 @@ function EditShiftModal({ member, date, existing, onSave, onClose, L }) {
 }
 
 function EditSecurityModal({ entry, onSave, onClose, prop, L }) {
-  const isMobile = useIsMobile();
+  const C = useT();const isMobile = useIsMobile();
   const secMembers = [
     ...prop?.depts?.s?.m || [],
     { id: "third-party", n: "Third Party Guard" },

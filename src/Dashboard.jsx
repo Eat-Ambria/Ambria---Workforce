@@ -43,7 +43,7 @@ function FireSafetyWidget({ setView }) {
 
 // ─── Ring ────────────────────────────────────────────────────────────────────
 function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
-  const isMobile = useIsMobile();
+  const C = useT();const isMobile = useIsMobile();
   const r = 15, circ = 2 * Math.PI * r;
   const dash = (pct / 100) * circ;
   return (
@@ -73,7 +73,7 @@ function Ring({ pct, color, bg, icon, label, done, total, size = 78 }) {
 
 // ─── Absent Widget ───────────────────────────────────────────────────────────
 function AbsentWidget({ att, leaves, prop, today, L }) {
-  const isMobile = useIsMobile();
+  const C = useT();const isMobile = useIsMobile();
   const allStaff = Object.values(prop?.depts||{}).flatMap(d => d.m);
   const checkedInIds = att.filter(a => a.date === today).map(a => a.uid);
   const onLeaveIds = leaves
@@ -136,7 +136,7 @@ function AbsentWidget({ att, leaves, prop, today, L }) {
 
 // ─── Critical Actions ─────────────────────────────────────────────────────────
 function CriticalPanel({ tasks, L }) {
-  const issues = tasks.filter(t => t.status === "issue");
+  const C = useT();const issues = tasks.filter(t => t.status === "issue");
   const total = tasks.length, done = tasks.filter(t => t.status === "completed").length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const overdue = tasks.filter(t => t.status === "pending" && t.timeBlock && (() => {
@@ -186,7 +186,7 @@ function CriticalPanel({ tasks, L }) {
 
 // ─── Staff Performance ────────────────────────────────────────────────────────
 function StaffPerf({ tasks, prop, L }) {
-  const isMobile = useIsMobile();
+  const C = useT();const isMobile = useIsMobile();
   const allM = Object.values(prop?.depts||{}).flatMap(d => d.m.map(m => ({ ...m, dc: d.c, dn: d.n })));
   const perf = allM.map(m => {
     const mt = tasks.filter(t => t.assignedTo === m.id);
@@ -230,7 +230,7 @@ function StaffPerf({ tasks, prop, L }) {
 
 // ─── Suggestions ─────────────────────────────────────────────────────────────
 function Suggestions({ tasks, L }) {
-  const isMobile = useIsMobile();
+  const C = useT();const isMobile = useIsMobile();
   const total = tasks.length, done = tasks.filter(t => t.status === "completed").length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const byDept = (d) => {
