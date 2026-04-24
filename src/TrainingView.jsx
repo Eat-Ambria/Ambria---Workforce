@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
 import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 import QuizModal, { QuizManager } from "./TrainingQuiz.jsx";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";

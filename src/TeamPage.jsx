@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { C as C_BASE, F, LANGS } from "./constants.js";
+const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 import OrgChart from "./OrgChart.jsx";
 import MembersView from "./MembersView.jsx";

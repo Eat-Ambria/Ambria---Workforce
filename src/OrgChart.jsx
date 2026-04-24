@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { C as C_BASE, F } from "./constants.js";
+const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 
 // ── CSS injected once — Power BI decomposition-tree style ────────────────────

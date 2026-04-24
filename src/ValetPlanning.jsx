@@ -1,15 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C as C_BASE, F, PROPS } from "./constants.js";
+const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";
 
-console.log(
-  "Run in Supabase if staff_allocation column missing:",
-  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS staff_allocation JSONB;",
-  "ALTER TABLE valet_bookings ADD COLUMN IF NOT EXISTS override_reason TEXT;"
-);
 
 // ─── ALLOCATION MATRICES ──────────────────────────────────────────────────────
 const VALET_ALLOCATIONS = {

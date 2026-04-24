@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { C as C_BASE, F, LANGS, PROPS } from "./constants.js";
+const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAIds } from "./notifications.js";
 import { useIsMobile } from "./hooks.js";

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 import { C as C_BASE, F, PROPS } from "./constants.js";
+const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 import Modal from "./Modal.jsx";
 import { notifyMultiple } from "./notifications.js";

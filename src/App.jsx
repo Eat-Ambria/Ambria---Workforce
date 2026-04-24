@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import Modal from "./Modal.jsx";
 import { C as C_BASE, F, LANGS, PROPS, THEMES } from "./constants.js";
+const C = C_BASE;
 import { ThemeContext, useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
 import Dashboard from "./Dashboard.jsx";
