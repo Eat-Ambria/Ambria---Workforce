@@ -297,3 +297,34 @@ export const PROPS = {
       s:{n:"Security",i:"🛡️",c:C.purple,bg:C.pBg,hd:"Sandeep",m:[{id:"rs_santosh",n:"Santosh"}]}},
     sh:"Vicky Arya"},
 };
+
+export const ALL_DEPARTMENTS = [
+  { id:"h",       name:"Horticulture", nameHi:"बागवानी",        icon:"🌱", color:"#16A34A" },
+  { id:"k",       name:"Housekeeping", nameHi:"हाउसकीपिंग",     icon:"🧹", color:"#2563EB" },
+  { id:"a",       name:"Admin",        nameHi:"प्रशासन",          icon:"📋", color:"#7B1E2F" },
+  { id:"s",       name:"Security",     nameHi:"सुरक्षा",           icon:"🛡️", color:"#6B21A8" },
+  { id:"sales",   name:"Sales",        nameHi:"बिक्री",            icon:"💰", color:"#D97706" },
+  { id:"tech",    name:"Technology",   nameHi:"तकनीकी",           icon:"💻", color:"#0891B2" },
+  { id:"ops",     name:"Operations",   nameHi:"संचालन",            icon:"⚙️", color:"#4F46E5" },
+  { id:"hr",      name:"HR",           nameHi:"मानव संसाधन",      icon:"👤", color:"#D4537E" },
+  { id:"finance", name:"Finance",      nameHi:"वित्त",             icon:"📊", color:"#059669" },
+  { id:"marketing",name:"Marketing",  nameHi:"मार्केटिंग",        icon:"📢", color:"#DC2626" },
+  { id:"other",   name:"Other",        nameHi:"अन्य",              icon:"📁", color:"#6B7280" },
+];
+
+export const OFFICE_DEPTS = ["sales","tech","ops","hr","finance","marketing","other"];
+
+export const ACCESS_SECTIONS = [
+  { id:"dashboard",   label:"Dashboard",        labelHi:"डैशबोर्ड" },
+  { id:"tasks",       label:"Daily Tasks",       labelHi:"दैनिक कार्य" },
+  { id:"directives",  label:"Assigned Tasks",    labelHi:"सौंपे गए कार्य" },
+  { id:"team",        label:"Team / Org Chart",  labelHi:"टीम" },
+  { id:"att",         label:"Attendance",        labelHi:"हाज़िरी" },
+  { id:"training",    label:"Training",          labelHi:"प्रशिक्षण" },
+  { id:"roster",      label:"Duty Roster",       labelHi:"ड्यूटी रोस्टर" },
+  { id:"leaves",      label:"Leaves",            labelHi:"छुट्टी" },
+  { id:"valet",       label:"Valet Planning",    labelHi:"वैले प्लानिंग" },
+  { id:"vendors",     label:"Vendor Directory",  labelHi:"वेंडर डायरेक्टरी" },
+  { id:"fire",        label:"Fire Safety",       labelHi:"अग्नि सुरक्षा" },
+  { id:"chemicals",   label:"Chemicals",         labelHi:"केमिकल" },
+];

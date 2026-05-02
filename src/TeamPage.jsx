@@ -5,7 +5,7 @@ import { useT } from "./ThemeContext.js";
 import OrgChart from "./OrgChart.jsx";
 import MembersView from "./MembersView.jsx";
 
-export default function TeamPage({ user, lang, customMembers, setCustomMembers, removedIds, setRemovedIds }) {
+export default function TeamPage({ user, lang, customMembers, setCustomMembers, removedIds, setRemovedIds, allDbUsers }) {
   const C = useT();
   const H = lang === "hi";
   const [tab, setTab] = useState("org");
@@ -54,7 +54,7 @@ export default function TeamPage({ user, lang, customMembers, setCustomMembers, 
 
       {/* Content */}
       {tab === "org" && (
-        <OrgChart lang={lang} />
+        <OrgChart lang={lang} officeStaff={(allDbUsers||[]).filter(u=>["sales","tech","ops","hr","finance","marketing","other"].includes(u.department))} />
       )}
       {tab === "members" && (
         <MembersView

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import Modal from "./Modal.jsx";
-import { C as C_BASE, F, LANGS, PROPS, THEMES } from "./constants.js";
+import { C as C_BASE, F, LANGS, PROPS, THEMES, OFFICE_DEPTS, ACCESS_SECTIONS } from "./constants.js";
 const C = C_BASE;
 import { ThemeContext, useT } from "./ThemeContext.js";
 import { notifyMultiple, getSAAndAdminIds } from "./notifications.js";
@@ -144,7 +144,7 @@ function Btn2({children,onClick,primary,small,style:cs}){const C=useT();return <
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang}){
   const C=useT();const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
-  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("id,name,username,role,property,department").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
+  const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("id,name,username,role,property,department,access,designation").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
     <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:20,padding:36,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><button onClick={()=>setLang(lang==="en"?"hi":"en")} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg,fontFamily:F.b,fontSize:11,cursor:"pointer",fontWeight:600,color:C.maroon}}>{lang==="en"?"हिंदी":"English"}</button></div>
@@ -241,10 +241,12 @@ function AddTF({prop,onAdd,onClose,L}){
 // ═══ SIDEBAR ═══
 function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allDbUsers,dirs,aP,toggleTheme,theme}){
   const C=useT();const eU=effectiveUser||u;
-  const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU);const isA=isEffAdmin;
+  const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU)||!!(eU.access&&eU.access.length>0);const isA=isEffAdmin;
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
-  const nav=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training}];
+  const allAdminNav=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
+  const empNav=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
+  const nav=isA?(eU.role==="sa"?allAdminNav:(!eU.access||!eU.access.length)?allAdminNav:allAdminNav.filter(n=>eU.access.includes(n.id))):empNav;
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
     <div style={{padding:"14px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -830,10 +832,10 @@ export default function App(){
         setAtLoaded(true);
         // 3. Custom members from users table (those not in PROPS template)
         const allTemplateIds=new Set(allS.map(m=>m.id));
-        const{data:allUsers}=await supabase.from("users").select("id,name,username,role,property,department,joining_date,is_active");
+        const{data:allUsers}=await supabase.from("users").select("id,name,username,role,property,department,joining_date,is_active,access,designation");
         if(allUsers){
-          const extra=allUsers.filter(u=>!allTemplateIds.has(u.id)&&u.role==="e");
-          setCM(extra.map(u=>({id:u.id,n:u.name,u:u.username,prop:u.property,dept:u.department,role:"e",joining_date:u.joining_date,is_active:u.is_active!==false})));
+          const extra=allUsers.filter(u=>!allTemplateIds.has(u.id)&&u.role!=="sa");
+          setCM(extra.map(u=>({id:u.id,n:u.name,u:u.username,prop:u.property||"all",dept:u.department,role:u.role||"e",joining_date:u.joining_date,is_active:u.is_active!==false,access:u.access||[],designation:u.designation||null})));
           const inactive=allUsers.filter(u=>u.is_active===false).map(u=>u.id);
           setRI(inactive);
           setAllDbUsers(allUsers.filter(u=>u.is_active!==false&&u.role!=="sa"));
@@ -875,12 +877,16 @@ export default function App(){
     if(!previewDbUser){const s=allS.find(x=>x.id===pAs);if(s)previewDbUser={id:s.id,name:s.n,role:"e",property:s.pid,department:s.dept,username:s.u||""};}
   }
   const eU=previewDbUser?{id:previewDbUser.id,name:previewDbUser.name,role:previewDbUser.role||"e",prop:previewDbUser.property||"pp",department:previewDbUser.department,username:previewDbUser.username}:user;
-  const isA=eU.role==="sa"||eU.role==="a"||!!findAT(eU);
+  const hasCustomAccess=!!(eU.access&&eU.access.length>0);
+  const isA=eU.role==="sa"||eU.role==="a"||!!findAT(eU)||hasCustomAccess;
   const eP=previewDbUser?(eU.prop==="all"?"pp":eU.prop):aP;
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
-  const navForBottom=isA?[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}]:[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
+  const pendDirsBadge=dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
+  const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
+  const EMP_NAV=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
+  const navForBottom=isA?(eU.role==="sa"?ALL_ADMIN_NAV:(!eU.access||!eU.access.length)?ALL_ADMIN_NAV:ALL_ADMIN_NAV.filter(n=>eU.access.includes(n.id))):EMP_NAV;
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
   const doRefresh=()=>{setRefreshing(true);setRK(k=>k+1);};
   const onPTRStart=e=>{ptrStartY.current=e.touches[0].clientY;ptrActive.current=false;};
@@ -899,9 +905,9 @@ export default function App(){
       {!pm&&!["members","roster","valet","vendors","team","chemicals","fire"].includes(view)&&<div style={{position:"sticky",top:isMobile?0:0,zIndex:40,background:C.bg,padding:"8px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV}/>}
-        {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="tasks" L={L} lang={lang}/>}
+        {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt={hasCustomAccess&&eU.role==="e"?"mytasks":"tasks"} L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
-        {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI}/>}
+        {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI} allDbUsers={allDbUsers}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
         {view==="roster"&&<DutyRoster prop={prop} user={eU} lang={lang}/>}
         {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}

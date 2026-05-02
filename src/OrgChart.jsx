@@ -97,7 +97,7 @@ const CSS = `
 `;
 
 // ── Org hierarchy data ────────────────────────────────────────────────────────
-const ORG_DATA = {
+const BASE_ORG_DATA = {
   name:"Harsh Vardhan", role:"Founder & Director", color:"#7B1E2F",
   children:[{
     name:"Abhishek", role:"Efficiency Manager", color:"#7B1E2F",
@@ -163,14 +163,37 @@ const ORG_DATA = {
   }]
 };
 
+function buildOrgData(officeStaff) {
+  const DEPT_COLOR = {
+    sales:"#D97706", tech:"#0891B2", ops:"#4F46E5",
+    hr:"#D4537E", finance:"#059669", marketing:"#DC2626", other:"#6B7280",
+  };
+  const DEPT_LABEL = {
+    sales:"Sales", tech:"Technology", ops:"Operations",
+    hr:"HR", finance:"Finance", marketing:"Marketing", other:"Other",
+  };
+  const officeNodes = officeStaff.map(u => ({
+    name: u.name,
+    role: (u.designation||DEPT_LABEL[u.department]||u.department) + (u.property&&u.property!=="all"?" — "+u.property:""),
+    color: DEPT_COLOR[u.department]||"#6B7280",
+  }));
+
+  const abhishekChildren = [...officeNodes, BASE_ORG_DATA.children[0].children[0]];
+  return {
+    ...BASE_ORG_DATA,
+    children: [{
+      ...BASE_ORG_DATA.children[0],
+      children: abhishekChildren,
+    }],
+  };
+}
+
 // ── Collect all keys for expand-all ──────────────────────────────────────────
 function collectKeys(node, acc = []) {
   acc.push(node.name);
   node.children?.forEach(c => collectKeys(c, acc));
   return acc;
 }
-const ALL_KEYS = collectKeys(ORG_DATA);
-
 // ── Recursive branch component ────────────────────────────────────────────────
 function Branch({ node, expanded, toggle }) {
   const hasKids  = !!(node.children?.length);
@@ -214,9 +237,11 @@ function Branch({ node, expanded, toggle }) {
 }
 
 // ── Main export ────────────────────────────────────────────────────────────────
-export default function OrgChart({ lang }) {
+export default function OrgChart({ lang, officeStaff = [] }) {
   const C = useT();
   const H = lang === "hi";
+  const ORG_DATA = buildOrgData(officeStaff);
+  const ALL_KEYS = collectKeys(ORG_DATA);
   // Start with chain Harsh→Abhishek→Vicky expanded; all else collapsed
   const [expanded, setExpanded] = useState({ "Harsh Vardhan": true, "Abhishek": true });
 

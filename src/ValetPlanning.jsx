@@ -21,13 +21,13 @@ const VALET_ALLOCATIONS = {
     ],
     roles: {
       "Key Man": [1,  1,  1,  1,  1,  1 ],
-      "Driver":  [2,  4,  6,  7,  10, 13],
-      "Guard":   [0,  1,  1,  1,  2,  2 ],
+      "Driver":  [2,  4,  5,  7,  10, 13],
+      "Guard":   [0,  0,  1,  1,  2,  2 ],
       "Rider":   [0,  0,  0,  0,  1,  1 ],
       "Gun Man": [0,  0,  0,  0,  0,  0 ],
       "Bouncer": [0,  0,  0,  0,  0,  0 ],
     },
-    totals: [3, 6, 8, 9, 14, 17],
+    totals: [3, 5, 7, 9, 14, 17],
   },
   ex: {
     name: "Exotica",
