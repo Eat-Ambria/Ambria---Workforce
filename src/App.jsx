@@ -243,7 +243,12 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   const C=useT();const eU=effectiveUser||u;
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU)||!!(eU.access&&eU.access.length>0);const isA=isEffAdmin;
   // Pending count for assigned tasks — when previewing, show previewed user's count
-  const pendDirs=isSA&&!pm?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length:dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
+  const _pendIsOffice=OFFICE_DEPTS.includes(eU.department);
+  const pendDirs=isSA&&!pm
+    ?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length
+    :_pendIsOffice
+      ?dirs.filter(d=>(d.to===eU.id&&(d.status==="sent"||d.status==="rejected"))||(d.from===eU.id&&(d.status==="approval_requested"||d.status==="approval_req"))).length
+      :dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
   const allAdminNav=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
   const empNav=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const nav=isA?(eU.role==="sa"?allAdminNav:(!eU.access||!eU.access.length)?allAdminNav:allAdminNav.filter(n=>eU.access.includes(n.id))):empNav;
@@ -389,22 +394,29 @@ function TLV({tasks,setTasks,prop,user:u,vt,L,lang}){
 
 
 
-// ═══ ASSIGNED TASKS — SA creates tasks for Admins ═══
+// ═══ ASSIGNED TASKS — SA + Office staff create tasks for Admins ═══
 const ADMIN_TARGETS=[
   {id:"vicky",username:"vicky",name:"Vicky Arya",prop:"All",color:"#8B5CF6"},
   {id:"pp_sonu",username:"sonu",name:"Sonu Mali",prop:"Pushpanjali",color:"#0891B2"},
   {id:"ex_mahesh",username:"mahesh",name:"Mahesh",prop:"Exotica",color:"#D97706"},
   {id:"mk_rahees",username:"rahees",name:"Rahees",prop:"Manaktala",color:"#059669"},
   {id:"sandeep",username:"sandeep",name:"Sandeep",prop:"Security-All",color:"#6B21A8"},
+  {id:"ex_simran",username:"simran",name:"Simran",prop:"Exotica HR",color:"#D4537E"},
 ];
+const PROPERTY_ADMIN_IDS=ADMIN_TARGETS.map(t=>t.id);
 // Find admin target by id OR username (handles DB id mismatches)
 function findAT(u){return ADMIN_TARGETS.find(t=>t.id===u.id||(t.username&&t.username===u.username));}
 
 function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const C=useT();const isMobile=useIsMobile();
   const isSA=u.role==="sa";
-  // Use u.id directly — DB-fetched admin IDs and login user.id come from same row
-  const myDirs=isSA?dirs:dirs.filter(d=>d.to===u.id);
+  const isOfficeMember=OFFICE_DEPTS.includes(u.department);
+  const canCreate=isSA||isOfficeMember;
+  const[officeTab,setOfficeTab]=useState("sent");
+  // Determine which dirs to show
+  const sentDirs=dirs.filter(d=>d.from===u.id||(!!u.username&&d.from===u.username));
+  const receivedDirs=dirs.filter(d=>d.to===u.id||(!!u.username&&d.to===u.username));
+  const myDirs=isSA?dirs:isOfficeMember?(officeTab==="sent"?sentDirs:receivedDirs):receivedDirs;
   const[showNew,setShowNew]=useState(false);
   const[newTo,setNewTo]=useState("");
   const[admins,setAdmins]=useState([]);
@@ -415,18 +427,20 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const[nDue,setNDue]=useState("");
   const[filterTo,setFilterTo]=useState("all");
 
-  // Fetch real admin IDs from Supabase so to_user = user.id (guaranteed match)
+  // Fetch assign-to list: SA fetches real DB IDs; office staff uses ADMIN_TARGETS directly
   useEffect(()=>{
-    if(!isSA)return;
-    supabase.from("users").select("id,name,property,username").eq("role","a")
-      .then(({data,error})=>{
-        if(data&&data.length>0){setAdmins(data);setNewTo(data[0].id);}
-        else{
-          const fb=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));
-          setAdmins(fb);setNewTo(fb[0].id);
-        }
-      });
-  },[isSA]);
+    if(!canCreate)return;
+    if(isSA){
+      supabase.from("users").select("id,name,property,username").eq("role","a")
+        .then(({data})=>{
+          if(data&&data.length>0){setAdmins(data);setNewTo(data[0].id);}
+          else{const fb=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));setAdmins(fb);setNewTo(fb[0].id);}
+        });
+    }else{
+      const targets=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));
+      setAdmins(targets);setNewTo(targets[0].id);
+    }
+  },[canCreate,isSA]);
 
   const sendTask=async()=>{if(!newText.trim()||!newTo)return;
     const tgt=admins.find(a=>a.id===newTo)||{name:newTo};
@@ -446,11 +460,21 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
       <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>📝 {L.directives}</h1>
-      {isSA&&<Btn2 primary small onClick={()=>setShowNew(!showNew)}>➕ {L.newDirective}</Btn2>}
+      {canCreate&&<Btn2 primary small onClick={()=>setShowNew(!showNew)}>➕ {L.newDirective}</Btn2>}
     </div>
 
+    {/* OFFICE STAFF: Sent / Received tabs */}
+    {isOfficeMember&&<div style={{display:"flex",background:C.maroonSoft,borderRadius:10,padding:3,gap:2,width:"fit-content",marginBottom:14}}>
+      {[{id:"sent",i:"📤",l:"Sent",cnt:sentDirs.length},{id:"received",i:"📥",l:"Received",cnt:receivedDirs.length}].map(t=>{
+        const active=officeTab===t.id;
+        return(<button key={t.id} onClick={()=>setOfficeTab(t.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:active?700:400,background:active?C.maroon:"transparent",color:active?C.white:C.maroon}}>
+          {t.i} {t.l}{t.cnt>0&&<span style={{background:active?"rgba(255,255,255,0.3)":C.maroon,color:C.white,borderRadius:10,padding:"0 5px",fontSize:9,fontWeight:700}}>{t.cnt}</span>}
+        </button>);
+      })}
+    </div>}
+
     {/* NEW TASK FORM */}
-    <Modal isOpen={showNew&&isSA} onClose={()=>setShowNew(false)} title={`➕ ${L.newDirective}`} size="lg">
+    <Modal isOpen={showNew&&canCreate} onClose={()=>setShowNew(false)} title={`➕ ${L.newDirective}`} size="lg">
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
         <SearchSelect value={newTo} onChange={setNewTo} options={admins.map(a=>({v:a.id,l:a.name+(a.property?` — ${a.property}`:"")}))} style={{width:"100%"}}/>
         <SearchSelect value={newProp} onChange={setNewProp} options={[{v:"all",l:"All Properties"},...Object.entries(PROPS).map(([k,p])=>({v:k,l:`${p.icon} ${p.sn}`}))]} style={{width:"100%"}}/>
@@ -493,7 +517,10 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const[viewerIdx,setViewerIdx]=useState(0);
   const cRef=useRef(null);const cGallRef=useRef(null);
   const rRef=useRef(null);const rGallRef=useRef(null);
-  const isSA=u.role==="sa";const isTarget=dir.to===u.id||(!!u.username&&dir.to===u.username);
+  const isSA=u.role==="sa";
+  const isTarget=dir.to===u.id||(!!u.username&&dir.to===u.username);
+  const isCreator=!isSA&&(dir.from===u.id||(!!u.username&&dir.from===u.username));
+  const canApproveReject=isSA||isCreator;
   const tgt=ADMIN_TARGETS.find(t=>t.id===dir.to||t.username===dir.to);
   const mC=tgt?.color||C.blue;
 
@@ -615,6 +642,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
       <div style={{width:30,height:30,borderRadius:"50%",background:mC,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:11,flexShrink:0}}>{dir.toName[0]}</div>
       <div style={{flex:1}}>
         <div style={{fontSize:12,fontWeight:700,color:mC}}>→ {dir.toName}</div>
+        {!isSA&&isTarget&&dir.fromName&&<div style={{fontSize:9,color:C.tl,marginTop:1}}>From: {dir.fromName}</div>}
         <div style={{display:"flex",gap:6,alignItems:"center",marginTop:1}}>
           <span style={{fontSize:9,color:C.tl}}>{dir.createdDate} · {dir.createdTime}</span>
           {dueFmt&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:isOverdue?C.rBg:C.yBg,color:isOverdue?C.red:C.yellow}}>{isOverdue?"⚠️ "+L.overdue:"📅 "+(L.dueOn||"Due")} {dueFmt}</span>}
@@ -631,7 +659,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
 
       {/* SA REMARKS — shown prominently when rejected */}
       {status==="rejected"&&isTarget&&dir.remarksSA&&<div style={{background:C.rBg,border:`1px solid ${C.red}`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
-        <div style={{fontSize:10,fontWeight:700,color:C.red,marginBottom:3}}>❌ {L.saRemarks||"SA Feedback — Rework Required"}</div>
+        <div style={{fontSize:10,fontWeight:700,color:C.red,marginBottom:3}}>❌ {L.saRemarks||"Feedback — Rework Required"}</div>
         <div style={{fontSize:12,color:C.red}}>{dir.remarksSA}</div>
       </div>}
 
@@ -640,9 +668,12 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         <div style={{fontSize:11,fontWeight:700,color:C.green}}>✅ {L.approvedMsg||"Approved! Complete the work on ground, then mark complete with photo proof."}</div>
       </div>}
 
-      {/* AWAITING APPROVAL — waiting message */}
+      {/* AWAITING APPROVAL — waiting message for target; action hint for creator */}
       {status==="approval_requested"&&isTarget&&<div style={{background:"#FFF7ED",border:`1px solid ${C.accent}`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.accent}}>🔔 {L.waitingApproval||"Approval request sent. Waiting for SA review."}</div>
+        <div style={{fontSize:11,fontWeight:600,color:C.accent}}>🔔 {L.waitingApproval||"Approval request sent. Waiting for review."}</div>
+      </div>}
+      {status==="approval_requested"&&isCreator&&<div style={{background:"#FFF7ED",border:`1px solid ${C.accent}`,borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.accent}}>🔔 {dir.toName} sent for approval — approve or reject below.</div>
       </div>}
 
       {/* COMPLETION PROOF */}
@@ -676,17 +707,17 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         {isTarget&&(status==="sent"||status==="rejected"||status==="approved")&&<Btn2 primary small onClick={()=>setShowComplete(!showComplete)} style={{background:C.green}}>📸 {L.markComplete||"Mark Complete"}</Btn2>}
         {/* Admin: Reply only on sent or rejected */}
         {isTarget&&(status==="sent"||status==="rejected")&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply||"Reply"}</Btn2>}
-        {/* SA: Reply on any non-completed task */}
-        {isSA&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply||"Reply"}</Btn2>}
-        {/* SA: Approve / Reject only when approval_requested */}
-        {isSA&&status==="approval_requested"&&!showRemarks&&<>
+        {/* SA/creator: Reply on any non-completed task */}
+        {(isSA||isCreator)&&<Btn2 small onClick={()=>setShowReply(!showReply)}>💬 {L.reply||"Reply"}</Btn2>}
+        {/* SA/creator: Approve / Reject only when approval_requested */}
+        {canApproveReject&&status==="approval_requested"&&!showRemarks&&<>
           <Btn2 primary small onClick={handleOk} style={{background:C.green}}>✅ {L.okApproval||"Approve"}</Btn2>
           <Btn2 small onClick={()=>setShowRemarks(true)} style={{background:C.rBg,color:C.red}}>❌ {L.notOk||"Reject"}</Btn2>
         </>}
       </div>}
 
       {/* SA: Reject — remarks modal */}
-      <Modal isOpen={isSA&&showRemarks} onClose={()=>setShowRemarks(false)} title="❌ Reject — Write Remarks" size="sm">
+      <Modal isOpen={canApproveReject&&showRemarks} onClose={()=>setShowRemarks(false)} title="❌ Reject — Write Remarks" size="sm">
         <textarea placeholder={L.writeRemarks||"Write remarks for admin..."} value={remarks} onChange={e=>setRemarks(e.target.value)} style={{width:"100%",padding:8,borderRadius:8,border:`1px solid ${C.red}`,fontFamily:F.b,fontSize:12,minHeight:70,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
         <div style={{display:"flex",gap:6}}><Btn2 small onClick={handleNotOk} style={{background:C.rBg,color:C.red}}>❌ {L.send||"Send"}</Btn2><Btn2 small onClick={()=>setShowRemarks(false)}>{L.cancel||"Cancel"}</Btn2></div>
       </Modal>
@@ -818,9 +849,16 @@ export default function App(){
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
         if(user.role!=="sa"){
           const _uid=user.id||"";const _uname=user.username||"";
-          // Match tasks assigned to this user by id OR username (handles either being stored in to_user)
-          if(_uname&&_uname!==_uid){atQ=atQ.or(`to_user.eq.${_uid},to_user.eq.${_uname}`);}
-          else{atQ=atQ.eq("to_user",_uid);}
+          const _isOffice=OFFICE_DEPTS.includes(user.department);
+          if(_isOffice){
+            // Office staff see tasks they sent (from_user) OR tasks assigned to them (to_user)
+            if(_uname&&_uname!==_uid){atQ=atQ.or(`from_user.eq.${_uid},to_user.eq.${_uid},from_user.eq.${_uname},to_user.eq.${_uname}`);}
+            else{atQ=atQ.or(`from_user.eq.${_uid},to_user.eq.${_uid}`);}
+          }else{
+            // Property admins and employees: only tasks assigned to them
+            if(_uname&&_uname!==_uid){atQ=atQ.or(`to_user.eq.${_uid},to_user.eq.${_uname}`);}
+            else{atQ=atQ.eq("to_user",_uid);}
+          }
         }
         const[{data:atData},{data:repData},{data:attData}]=await Promise.all([atQ,supabase.from("assigned_task_replies").select("*").order("created_at"),supabase.from("attendance").select("*").eq("date",today)]);
         if(attData&&attData.length>0){setAtt(attData.map(r=>({uid:r.user_id,name:r.user_name,date:r.date,ci:r.check_in,co:r.check_out,ciPhoto:null,coPhoto:null})));}
@@ -883,7 +921,12 @@ export default function App(){
   const prop=PROPS[eP]||PROPS[Object.keys(PROPS)[0]];const tasks=tS[eP]||[];
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
-  const pendDirsBadge=dirs.filter(d=>eU.role==="sa"&&!pm?d.status==="approval_requested"||d.status==="approval_req":d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
+  const _badgeIsOffice=OFFICE_DEPTS.includes(eU.department);
+  const pendDirsBadge=dirs.filter(d=>
+    eU.role==="sa"&&!pm?(d.status==="approval_requested"||d.status==="approval_req")
+    :_badgeIsOffice?((d.to===eU.id&&(d.status==="sent"||d.status==="rejected"))||(d.from===eU.id&&(d.status==="approval_requested"||d.status==="approval_req")))
+    :d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved"))
+  .length;
   const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
   const EMP_NAV=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const navForBottom=isA?(eU.role==="sa"?ALL_ADMIN_NAV:(!eU.access||!eU.access.length)?ALL_ADMIN_NAV:ALL_ADMIN_NAV.filter(n=>eU.access.includes(n.id))):EMP_NAV;
