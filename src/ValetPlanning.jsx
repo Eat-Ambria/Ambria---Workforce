@@ -977,6 +977,281 @@ function StaffCalculator({user, lang}){
   );
 }
 
+// ─── LIVE PARKING VIEW (Admin/SA read-only) ───────────────────────────────────
+const PROP_NAMES_VP = { pp:"Pushpanjali", ex:"Exotica", mk:"Manaktala", rs:"Restro" };
+
+function LiveParkingView({user, lang}){
+  const C=useT();const isMobile=useIsMobile();
+  const isSA=user.role==="sa";
+  const props=isSA?["pp","ex","mk","rs"]:[user.prop||"pp"];
+  const today=new Date().toISOString().split("T")[0];
+  const [cars,setCars]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [q,setQ]=useState("");
+  const [filterProp,setFilterProp]=useState("all");
+  const [filterStatus,setFilterStatus]=useState("parked");
+  const [detailCar,setDetailCar]=useState(null);
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    let query=supabase.from("valet_cars").select("*").eq("event_date",today).order("received_at",{ascending:false});
+    if(!isSA) query=query.eq("property",user.prop||"pp");
+    const{data}=await query;
+    setCars(data||[]);
+    setLoading(false);
+  },[today,isSA,user.prop]);
+
+  useEffect(()=>{load();},[load]);
+  useEffect(()=>{const iv=setInterval(load,30000);return()=>clearInterval(iv);},[load]);
+
+  const todayCars=cars.filter(c=>c.event_date===today);
+  const parkedAll=todayCars.filter(c=>c.status==="parked");
+
+  let filtered=todayCars;
+  if(filterProp!=="all") filtered=filtered.filter(c=>c.property===filterProp);
+  if(filterStatus!=="all") filtered=filtered.filter(c=>c.status===filterStatus);
+  if(q.trim()) filtered=filtered.filter(c=>(c.car_number||"").toLowerCase().includes(q.toLowerCase())||(c.guest_name||"").toLowerCase().includes(q.toLowerCase()));
+
+  const exportCSV=()=>{
+    const rows=[["Car Number","Guest","Phone","Color","Model","Area","Spot","Key Tag","Received By","Received At","Status","Delivered By","Delivered At","Notes","Property"]];
+    filtered.forEach(c=>rows.push([c.car_number||"",c.guest_name||"",c.guest_phone||"",c.car_color||"",c.car_model||"",c.parking_area||"",c.parking_spot||"",c.key_tag||"",c.received_by||"",c.received_at?new Date(c.received_at).toLocaleString("en-IN"):"",c.status||"",c.delivered_by||"",c.delivered_at?new Date(c.delivered_at).toLocaleString("en-IN"):"",c.notes||"",PROP_NAMES_VP[c.property]||c.property]));
+    const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
+    const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download=`valet_log_${today}.csv`;a.click();
+  };
+
+  const propCounts={};props.forEach(p=>{propCounts[p]=parkedAll.filter(c=>c.property===p).length;});
+
+  return(
+    <div>
+      {/* Summary by property */}
+      {isSA&&(
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:10,marginBottom:16}}>
+          {props.map(p=>(
+            <div key={p} style={{background:C.white,borderRadius:12,padding:14,border:`1px solid ${C.border}`,textAlign:"center",boxShadow:C.shadow}}>
+              <div style={{fontSize:22,fontWeight:700,fontFamily:F.d,color:C.maroon}}>{propCounts[p]}</div>
+              <div style={{fontSize:10,fontWeight:700,color:C.tl}}>{PROP_NAMES_VP[p]}</div>
+              <div style={{fontSize:9,color:C.green,fontWeight:600,marginTop:2}}>🟢 Cars parked</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Controls */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search car number or guest..."
+          style={{flex:1,minWidth:160,padding:"9px 14px",borderRadius:10,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",background:C.bg,color:C.text}}/>
+        {isSA&&(
+          <select value={filterProp} onChange={e=>setFilterProp(e.target.value)}
+            style={{padding:"9px 12px",borderRadius:10,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,background:C.bg,color:C.text,outline:"none"}}>
+            <option value="all">All Properties</option>
+            {props.map(p=><option key={p} value={p}>{PROP_NAMES_VP[p]}</option>)}
+          </select>
+        )}
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+          style={{padding:"9px 12px",borderRadius:10,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,background:C.bg,color:C.text,outline:"none"}}>
+          <option value="all">All Status</option>
+          <option value="parked">🟢 Parked</option>
+          <option value="delivered">🔵 Delivered</option>
+        </select>
+        <button onClick={exportCSV}
+          style={{padding:"9px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.gBg,color:C.green,fontFamily:F.b,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          ⬇️ CSV
+        </button>
+        <button onClick={load} disabled={loading}
+          style={{padding:"9px 14px",borderRadius:10,border:"none",background:C.maroonSoft,color:C.maroon,fontFamily:F.b,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          {loading?"...":"🔄"}
+        </button>
+      </div>
+
+      <div style={{fontSize:12,color:C.tl,marginBottom:10}}>
+        {filtered.length} car{filtered.length!==1?"s":""} · Today {today}
+      </div>
+
+      {/* Detail modal */}
+      {detailCar&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:C.white,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
+              <div style={{fontSize:20,fontWeight:700,color:C.maroon,fontFamily:F.d}}>{detailCar.car_number}</div>
+              <button onClick={()=>setDetailCar(null)} style={{border:"none",background:C.bg,borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:14,color:C.tl}}>✕</button>
+            </div>
+            <div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,marginBottom:12,fontFamily:F.b,fontSize:12,fontWeight:700,background:detailCar.status==="parked"?C.gBg:C.bBg,color:detailCar.status==="parked"?C.green:C.blue}}>{detailCar.status==="parked"?"🟢 Parked":"🔵 Delivered"}</div>
+            {[["Property",PROP_NAMES_VP[detailCar.property]||detailCar.property],["Color/Model",[detailCar.car_color,detailCar.car_model].filter(Boolean).join(" · ")],["Guest",detailCar.guest_name],["Phone",detailCar.guest_phone],["Parking Area",detailCar.parking_area],["Spot",detailCar.parking_spot],["Key Tag",detailCar.key_tag&&"#"+detailCar.key_tag],["Received By",detailCar.received_by],["Received At",detailCar.received_at&&new Date(detailCar.received_at).toLocaleString("en-IN")],["Notes",detailCar.notes],["Delivered By",detailCar.delivered_by],["Delivered At",detailCar.delivered_at&&new Date(detailCar.delivered_at).toLocaleString("en-IN")]].filter(([,v])=>v).map(([k,v])=>(
+              <div key={k} style={{display:"flex",marginBottom:8,gap:8}}>
+                <div style={{width:110,fontSize:11,color:C.tl,flexShrink:0}}>{k}</div>
+                <div style={{fontSize:13,color:C.text,fontWeight:600,flex:1}}>{v}</div>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
+              {[["number_plate_photo","Plate"],["car_photo","Car"],["delivery_photo","Delivery"]].map(([key,lbl])=>detailCar[key]?(
+                <div key={key}><div style={{fontSize:10,color:C.tl,marginBottom:4}}>{lbl}</div><img src={detailCar[key]} alt={lbl} style={{width:120,height:88,borderRadius:8,objectFit:"cover"}}/></div>
+              ):null)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {filtered.length===0&&<div style={{textAlign:"center",padding:40,color:C.tl,fontSize:14}}>No cars found</div>}
+      {filtered.map(car=>{
+        const isP=car.status==="parked";
+        return(
+          <div key={car.id} onClick={()=>setDetailCar(car)}
+            style={{background:C.white,borderRadius:12,padding:14,marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`4px solid ${isP?C.green:C.blue}`,cursor:"pointer",boxShadow:C.shadow}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:C.text,letterSpacing:1}}>{car.car_number}</div>
+                {car.guest_name&&<div style={{fontSize:12,color:C.tl}}>{car.guest_name}{car.guest_phone&&` · ${car.guest_phone}`}</div>}
+                {isSA&&<div style={{fontSize:11,color:C.tl}}>{PROP_NAMES_VP[car.property]||car.property}</div>}
+                {car.parking_area&&<div style={{fontSize:12,color:C.tl,marginTop:2}}>📍 {car.parking_area}{car.parking_spot?` · ${car.parking_spot}`:""}</div>}
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:11,fontWeight:700,color:isP?C.green:C.blue}}>{isP?"🟢 Parked":"🔵 Out"}</div>
+                <div style={{fontSize:10,color:C.tl}}>{new Date(car.received_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</div>
+                {car.key_tag&&<div style={{fontSize:10,color:C.yellow}}>🏷️ #{car.key_tag}</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── VALET STAFF MANAGEMENT (Admin/SA only) ───────────────────────────────────
+function ValetStaffManager({user, lang}){
+  const C=useT();const isMobile=useIsMobile();
+  const isSA=user.role==="sa";
+  const defaultProp=isSA?"pp":user.prop||"pp";
+  const [staff,setStaff]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [showForm,setShowForm]=useState(false);
+  const [editing,setEditing]=useState(null);
+  const [filterProp,setFilterProp]=useState(defaultProp);
+  const blank={name:"",phone:"",property:defaultProp,pin:"1234"};
+  const [form,setForm]=useState(blank);
+  const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    let q=supabase.from("valet_staff").select("*").order("property").order("name");
+    if(!isSA) q=q.eq("property",user.prop||"pp");
+    const{data}=await q;
+    setStaff(data||[]);
+    setLoading(false);
+  },[isSA,user.prop]);
+
+  useEffect(()=>{load();},[load]);
+
+  const save=async()=>{
+    if(!form.name.trim()){alert("Name is required");return;}
+    if(form.pin.length!==4){alert("PIN must be 4 digits");return;}
+    if(editing){
+      const{error}=await supabase.from("valet_staff").update({name:form.name.trim(),phone:form.phone.trim(),pin:form.pin,property:form.property}).eq("id",editing.id);
+      if(error){alert(error.message);return;}
+    }else{
+      const{error}=await supabase.from("valet_staff").insert({name:form.name.trim(),phone:form.phone.trim(),property:form.property,pin:form.pin,is_active:true,created_by:user.name||user.username});
+      if(error){alert(error.message);return;}
+    }
+    setShowForm(false);setEditing(null);setForm(blank);load();
+  };
+
+  const deactivate=async(s)=>{
+    if(!confirm(`Deactivate ${s.name}?`))return;
+    await supabase.from("valet_staff").update({is_active:false}).eq("id",s.id);
+    load();
+  };
+
+  const reactivate=async(s)=>{
+    await supabase.from("valet_staff").update({is_active:true}).eq("id",s.id);
+    load();
+  };
+
+  const startEdit=(s)=>{setEditing(s);setForm({name:s.name,phone:s.phone||"",property:s.property,pin:s.pin||"1234"});setShowForm(true);};
+
+  const visibleProps=isSA?["pp","ex","mk","rs"]:[user.prop||"pp"];
+  const shown=staff.filter(s=>filterProp==="all"?true:s.property===filterProp);
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.maroon}}>👷 Valet Staff</div>
+        <button onClick={()=>{setEditing(null);setForm(blank);setShowForm(true);}}
+          style={{padding:"8px 16px",borderRadius:9,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          + Add Staff
+        </button>
+      </div>
+
+      {isSA&&(
+        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+          <button onClick={()=>setFilterProp("all")} style={{padding:"6px 12px",borderRadius:8,border:"none",background:filterProp==="all"?C.maroon:C.bg,color:filterProp==="all"?C.white:C.tl,fontFamily:F.b,fontSize:11,fontWeight:600,cursor:"pointer"}}>All</button>
+          {visibleProps.map(p=>(
+            <button key={p} onClick={()=>setFilterProp(p)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:filterProp===p?C.maroon:C.bg,color:filterProp===p?C.white:C.tl,fontFamily:F.b,fontSize:11,fontWeight:600,cursor:"pointer"}}>{PROP_NAMES_VP[p]}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit form */}
+      {showForm&&(
+        <div style={{background:C.maroonSoft,borderRadius:14,padding:16,marginBottom:14,border:`1px solid ${C.maroon}44`}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.maroon,marginBottom:12}}>{editing?"Edit Staff":"Add New Valet Staff"}</div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <div style={{fontSize:11,color:C.tl,marginBottom:4}}>Name *</div>
+              <input value={form.name} onChange={e=>sf("name",e.target.value)} placeholder="Staff Name"
+                style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",boxSizing:"border-box",background:C.white}}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:C.tl,marginBottom:4}}>Phone</div>
+              <input value={form.phone} onChange={e=>sf("phone",e.target.value)} placeholder="Mobile number" type="tel"
+                style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",boxSizing:"border-box",background:C.white}}/>
+            </div>
+            {isSA&&(
+              <div>
+                <div style={{fontSize:11,color:C.tl,marginBottom:4}}>Property *</div>
+                <select value={form.property} onChange={e=>sf("property",e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",background:C.white}}>
+                  {["pp","ex","mk","rs"].map(p=><option key={p} value={p}>{PROP_NAMES_VP[p]}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <div style={{fontSize:11,color:C.tl,marginBottom:4}}>PIN (4 digits) *</div>
+              <input value={form.pin} onChange={e=>sf("pin",e.target.value.replace(/\D/g,"").slice(0,4))} placeholder="1234"
+                type="password" inputMode="numeric" maxLength={4}
+                style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,outline:"none",boxSizing:"border-box",background:C.white,letterSpacing:4}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={save} style={{padding:"9px 18px",borderRadius:9,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Save</button>
+            <button onClick={()=>{setShowForm(false);setEditing(null);setForm(blank);}} style={{padding:"9px 14px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,color:C.tl,fontFamily:F.b,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {loading&&<div style={{textAlign:"center",padding:20,color:C.tl,fontSize:13}}>Loading...</div>}
+      {!loading&&shown.length===0&&<div style={{textAlign:"center",padding:30,color:C.tl,fontSize:13}}>No valet staff found</div>}
+
+      {shown.map(s=>(
+        <div key={s.id} style={{background:C.white,borderRadius:12,padding:14,marginBottom:8,border:`1px solid ${C.border}`,boxShadow:C.shadow,opacity:s.is_active?1:0.55}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text}}>{s.name}{!s.is_active&&<span style={{fontSize:10,color:C.tl,fontWeight:400,marginLeft:6}}>(Inactive)</span>}</div>
+              <div style={{fontSize:11,color:C.tl}}>{PROP_NAMES_VP[s.property]||s.property}{s.phone&&` · 📞 ${s.phone}`}</div>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>startEdit(s)} style={{padding:"5px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.tl,fontFamily:F.b,fontSize:11,cursor:"pointer"}}>✏️</button>
+              {s.is_active
+                ?<button onClick={()=>deactivate(s)} style={{padding:"5px 10px",borderRadius:7,border:`1px solid ${C.rBg}`,background:C.rBg,color:C.red,fontFamily:F.b,fontSize:11,cursor:"pointer"}}>Deactivate</button>
+                :<button onClick={()=>reactivate(s)} style={{padding:"5px 10px",borderRadius:7,border:`1px solid ${C.gBg}`,background:C.gBg,color:C.green,fontFamily:F.b,fontSize:11,cursor:"pointer"}}>Reactivate</button>
+              }
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 export default function ValetPlanning({user, lang}){
   const C = useT();
@@ -985,6 +1260,8 @@ export default function ValetPlanning({user, lang}){
   const tabs=[
     {id:"calendar",i:"📅",l:"Bookings",lH:"बुकिंग"},
     {id:"calc",i:"🧮",l:"Staff Calculator",lH:"स्टाफ कैलकुलेटर"},
+    {id:"live",i:"🟢",l:"Live Parking",lH:"लाइव पार्किंग"},
+    {id:"staff",i:"👷",l:"Valet Staff",lH:"वैलेट स्टाफ"},
   ];
 
   return(
@@ -1003,6 +1280,8 @@ export default function ValetPlanning({user, lang}){
 
       {tab==="calendar"&&<CalendarView user={user} lang={lang}/>}
       {tab==="calc"&&<StaffCalculator user={user} lang={lang}/>}
+      {tab==="live"&&<LiveParkingView user={user} lang={lang}/>}
+      {tab==="staff"&&<ValetStaffManager user={user} lang={lang}/>}
     </div>
   );
 }

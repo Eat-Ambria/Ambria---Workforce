@@ -13,6 +13,7 @@ import PhotoViewer from "./PhotoViewer.jsx";
 import TrainingView from "./TrainingView.jsx";
 import TeamPage from "./TeamPage.jsx";
 import ValetPlanning from "./ValetPlanning.jsx";
+import ValetPortal from "./ValetPortal.jsx";
 import VendorDirectory from "./VendorDirectory.jsx";
 import FireExtinguishers, { checkFireExtinguisherExpiry } from "./FireExtinguishers.jsx";
 
@@ -142,7 +143,7 @@ function Sel2({value,onChange,options,style:cs}){return <SearchSelect value={val
 function Btn2({children,onClick,primary,small,style:cs}){const C=useT();return <button onClick={onClick} style={{padding:small?"6px 12px":"10px 18px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:small?11:13,fontWeight:600,background:primary?C.maroon:C.bg,color:primary?C.white:C.text,...cs}}>{children}</button>;}
 
 // ═══ LOGIN ═══
-function LoginScreen({onLogin,lang,setLang}){
+function LoginScreen({onLogin,lang,setLang,onValetMode}){
   const C=useT();const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
   const go=async()=>{setLoading(true);sE("");try{const{data,error}=await supabase.from("users").select("id,name,username,role,property,department,access,designation").eq("username",u.trim()).eq("password",p).single();if(error||!data){sE(L.invalidLogin);}else{onLogin(data,rem);}}catch(e){sE(L.invalidLogin);}finally{setLoading(false);}};
   return(<div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.maroon},${C.maroonLight},#2D1520)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F.b,padding:20}}>
@@ -154,6 +155,7 @@ function LoginScreen({onLogin,lang,setLang}){
       <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,cursor:"pointer",fontSize:12,color:C.tl}}><div onClick={()=>setRem(!rem)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${rem?C.maroon:C.border}`,background:rem?C.maroon:C.white,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{rem&&<span style={{color:C.white,fontSize:11,fontWeight:700}}>✓</span>}</div>{lang==="hi"?"पासवर्ड याद रखें":"Remember me"}</label>
       {err&&<div style={{background:C.rBg,color:C.red,padding:"10px",borderRadius:8,fontSize:12,marginBottom:14}}>{err}</div>}
       <button onClick={go} disabled={loading} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:loading?"#9A2E42":C.maroon,color:C.white,fontFamily:F.b,fontSize:15,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.8:1}}>{loading?"...":L.login}</button>
+      <div style={{marginTop:14,textAlign:"center"}}><button onClick={onValetMode} style={{padding:"11px 20px",borderRadius:10,border:`1px solid ${C.border}`,background:C.bg,color:C.tl,fontFamily:F.b,fontSize:13,fontWeight:600,cursor:"pointer",width:"100%"}}>🚗 Valet Mode</button></div>
     </div></div>);
 }
 
@@ -825,6 +827,7 @@ export default function App(){
   const[theme,setTheme]=useState(()=>localStorage.getItem("ambria-theme")||"light");
   const toggleTheme=()=>setTheme(t=>{const n=t==="light"?"dark":"light";localStorage.setItem("ambria-theme",n);return n;});
   const TH=THEMES[theme];const C=TH;
+  const[valetMode,setValetMode]=useState(false);
   const[lang,setLang]=useState("en");const[user,setUser]=useState(()=>{try{const s=localStorage.getItem("ambria_user");if(!s)return null;const u=JSON.parse(s);if(u&&u.role!=="sa"&&findAT(u))u.role="a";return u;}catch{return null;}});const[aP,sAP]=useState("pp");const[view,sV]=useState("dashboard");const[tS,sTS]=useState(ALL_T);const[ns,setNs]=useState([]);const[sN,setSN]=useState(false);const[att,setAtt]=useState([]);const[pm,setPM]=useState(false);const[pAs,setPAs]=useState("");const[allDbUsers,setAllDbUsers]=useState([]);const[dirs,setDirs]=useState([]);const[atLoaded,setAtLoaded]=useState(false);const[customMembers,setCM]=useState([]);const[removedIds,setRI]=useState([]);const[loading,setLoading]=useState(false);
   const[refreshKey,setRK]=useState(0);const[refreshing,setRefreshing]=useState(false);
   const ptrStartY=useRef(0);const ptrActive=useRef(false);
@@ -899,6 +902,7 @@ export default function App(){
     return()=>clearInterval(iv);
   },[user?.id]);
 
+  if(valetMode)return <ValetPortal onExitValet={()=>setValetMode(false)}/>;
   if(!user)return <LoginScreen onLogin={(u2,rememberMe)=>{
     const u3={...u2, prop: u2.property||u2.prop||"pp", dept: u2.department||u2.dept||null, name: u2.name||u2.n||"User"};
     const _at3=findAT(u3);if(u3.role!=="sa"&&_at3)u3.role="a";
@@ -906,7 +910,7 @@ export default function App(){
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
     sV(u3.role==="e"?"mytasks":"dashboard");
-  }} lang={lang} setLang={setLang}/>;
+  }} lang={lang} setLang={setLang} onValetMode={()=>setValetMode(true)}/>;
 
   // Preview mode: resolve preview user from DB first, fallback to allS template
   let previewDbUser=null;
