@@ -16,8 +16,6 @@ import ValetPlanning from "./ValetPlanning.jsx";
 import ValetPortal from "./ValetPortal.jsx";
 import VendorDirectory from "./VendorDirectory.jsx";
 import FireExtinguishers, { checkFireExtinguisherExpiry } from "./FireExtinguishers.jsx";
-import OrgChart from "./OrgChart.jsx";
-import MembersView from "./MembersView.jsx";
 
 
 const lnk=document.createElement("link");lnk.href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap";lnk.rel="stylesheet";document.head.appendChild(lnk);
@@ -242,66 +240,6 @@ function AddTF({prop,onAdd,onClose,L}){
   </div>);
 }
 
-// ═══ SHARED SUB-TAB BAR ═══
-function SubTabBar({tabs,active,setActive}){
-  const C=useT();
-  return(<div style={{display:"flex",background:C.maroonSoft,borderRadius:10,padding:3,gap:2,marginBottom:16,overflowX:"auto",WebkitOverflowScrolling:"touch",flexShrink:0}}>
-    {tabs.map(t=>{const on=active===t.id;return(<button key={t.id} onClick={()=>setActive(t.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:on?700:400,whiteSpace:"nowrap",flexShrink:0,background:on?C.maroon:"transparent",color:on?"#FFF":C.maroon}}><span>{t.i}</span>{t.l}</button>);})}
-  </div>);
-}
-
-// ═══ TASKS SECTION (SOP Tasks + Duty Roster) ═══
-function TasksSection({tasks,setTasks,prop,user,L,lang,hasCustomAccess,isAdmin}){
-  const isEmp=!isAdmin&&user.role==="e";
-  const tabs=[
-    {id:"sop",i:"📋",l:L.sopTasks||"SOP Tasks"},
-    ...(!isEmp?[{id:"roster",i:"📅",l:L.roster||"Duty Roster"}]:[])
-  ];
-  const[tab,setTab]=useState("sop");
-  return(<div>
-    {tabs.length>1&&<SubTabBar tabs={tabs} active={tab} setActive={setTab}/>}
-    {tab==="sop"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={user} vt={isEmp?"mytasks":"tasks"} L={L} lang={lang}/>}
-    {tab==="roster"&&<DutyRoster prop={prop} user={user} lang={lang}/>}
-  </div>);
-}
-
-// ═══ PEOPLE SECTION (Org + Attendance + Leave + Members) ═══
-function PeopleSection({user,lang,att,setAtt,prop,L,customMembers,setCustomMembers,removedIds,setRemovedIds,allDbUsers,isAdmin}){
-  const allTabs=[
-    {id:"org",i:"🏢",l:L.organisation||"Organisation"},
-    {id:"att",i:"🕐",l:L.attendance||"Attendance"},
-    {id:"leave",i:"📅",l:L.leaves||"Leave"},
-    {id:"members",i:"👤",l:L.members||"Members"},
-  ];
-  const tabs=isAdmin?allTabs:allTabs.filter(t=>["att","leave"].includes(t.id));
-  const[tab,setTab]=useState(tabs[0].id);
-  const officeStaff=(allDbUsers||[]).filter(u=>["sales","tech","ops","hr","finance","marketing","other"].includes(u.department));
-  return(<div>
-    <SubTabBar tabs={tabs} active={tab} setActive={setTab}/>
-    {tab==="org"&&<OrgChart lang={lang} officeStaff={officeStaff}/>}
-    {tab==="att"&&<AttView user={user} att={att} setAtt={setAtt} prop={prop} L={L}/>}
-    {tab==="leave"&&<LeaveManager prop={prop} user={user} lang={lang}/>}
-    {tab==="members"&&<MembersView user={user} lang={lang} customMembers={customMembers} setCustomMembers={setCustomMembers} removedIds={removedIds} setRemovedIds={setRemovedIds}/>}
-  </div>);
-}
-
-// ═══ KNOWLEDGE SECTION (Training + Chemicals + Fire Safety) ═══
-function KnowledgeSection({user,prop,lang,L,isAdmin}){
-  const allTabs=[
-    {id:"training",i:"🎬",l:L.training||"Training"},
-    {id:"chemicals",i:"🧪",l:L.chemicals||"Chemicals"},
-    {id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"},
-  ];
-  const tabs=isAdmin?allTabs:allTabs.filter(t=>t.id!=="fire");
-  const[tab,setTab]=useState("training");
-  return(<div>
-    <SubTabBar tabs={tabs} active={tab} setActive={setTab}/>
-    {tab==="training"&&<TrainingView user={user} prop={prop} lang={lang}/>}
-    {tab==="chemicals"&&<ChemicalGuide lang={lang}/>}
-    {tab==="fire"&&<FireExtinguishers user={user} lang={lang}/>}
-  </div>);
-}
-
 // ═══ SIDEBAR ═══
 function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,setShowN,L,pm,setPM,pAs,setPAs,allDbUsers,dirs,aP,toggleTheme,theme}){
   const C=useT();const eU=effectiveUser||u;
@@ -317,8 +255,8 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
       :dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
   const pendDirs=_pendDirsBase+_sidebarOverdue;
   const _sidebarBadgeRed=_sidebarOverdue>0;
-  const allAdminNav=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.tasks||"Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs,badgeRed:_sidebarBadgeRed},{id:"people",i:"👥",l:L.people||"People"},{id:"knowledge",i:"🎓",l:L.knowledge||"Knowledge"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}];
-  const empNav=[{id:"tasks",i:"✅",l:L.myTasks||"My Tasks"},{id:"people",i:"👥",l:L.people||"People"},{id:"knowledge",i:"🎓",l:L.knowledge||"Knowledge"}];
+  const allAdminNav=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs,badgeRed:_sidebarBadgeRed},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
+  const empNav=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const nav=isA?(eU.role==="sa"?allAdminNav:(!eU.access||!eU.access.length)?allAdminNav:allAdminNav.filter(n=>eU.access.includes(n.id))):empNav;
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
   return(<div style={{width:185,background:C.white,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"fixed",left:0,top:0,zIndex:50}}>
@@ -340,7 +278,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
           const pu=allDbUsers.find(u=>u.id===v);
           setPAs(v);
           const puIsAdmin=pu&&(pu.role==="a"||ADMIN_TARGETS.some(t=>t.id===v));
-          setView(puIsAdmin?"dashboard":"tasks");
+          setView(puIsAdmin?"dashboard":"mytasks");
         }} options={[
           ...(allDbUsers.filter(u=>u.role==="a"||ADMIN_TARGETS.some(t=>t.id===u.id)).map(u=>({v:u.id,l:`👑 ${u.name} — ${PROPS[u.property]?.sn||u.property||"All"}`}))),
           ...(allDbUsers.filter(u=>u.role==="e"&&!ADMIN_TARGETS.some(t=>t.id===u.id)).map(u=>({v:u.id,l:`${u.name} — ${PROPS[u.property]?.sn||u.property||"?"}`})))
@@ -837,7 +775,7 @@ function useIsMobile(){
 
 function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L,toggleTheme,theme}){
   const C=useT();const[showMore,setShowMore]=useState(false);
-  const main=nav.slice(0,4);const more=nav.slice(4);
+  const main=nav.slice(0,5);const more=nav.slice(5);
   return(<>
     {showMore&&<div onClick={()=>setShowMore(false)} style={{position:"fixed",inset:0,zIndex:97,background:"rgba(0,0,0,0.3)"}}/>}
     {showMore&&<div style={{position:"fixed",bottom:60,left:0,right:0,background:C.white,borderTop:`1px solid ${C.border}`,zIndex:98,padding:"8px 8px 4px",boxShadow:"0 -4px 16px rgba(0,0,0,0.12)"}}>
@@ -992,7 +930,7 @@ export default function App(){
     if(rememberMe)localStorage.setItem("ambria_user",JSON.stringify(u3));
     setUser(u3);
     if(u3.prop&&u3.prop!=="all")sAP(u3.prop);
-    sV(u3.role==="e"?"tasks":"dashboard");
+    sV(u3.role==="e"?"mytasks":"dashboard");
   }} lang={lang} setLang={setLang} onValetMode={()=>setValetMode(true)}/>;
 
   // Preview mode: resolve preview user from DB first, fallback to allS template
@@ -1017,8 +955,8 @@ export default function App(){
     :d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved"))
   .length + _overdueDirs.length;
   const _dirsBadgeRed=_overdueDirs.length>0;
-  const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.tasks||"Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge,badgeRed:_dirsBadgeRed},{id:"people",i:"👥",l:L.people||"People"},{id:"knowledge",i:"🎓",l:L.knowledge||"Knowledge"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"}];
-  const EMP_NAV=[{id:"tasks",i:"✅",l:L.myTasks||"My Tasks"},{id:"people",i:"👥",l:L.people||"People"},{id:"knowledge",i:"🎓",l:L.knowledge||"Knowledge"}];
+  const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge,badgeRed:_dirsBadgeRed},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
+  const EMP_NAV=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const navForBottom=isA?(eU.role==="sa"?ALL_ADMIN_NAV:(!eU.access||!eU.access.length)?ALL_ADMIN_NAV:ALL_ADMIN_NAV.filter(n=>eU.access.includes(n.id))):EMP_NAV;
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
   const doRefresh=()=>{setRefreshing(true);setRK(k=>k+1);};
@@ -1035,19 +973,25 @@ export default function App(){
     <div className="main-content" onTouchStart={isMobile?onPTRStart:undefined} onTouchMove={isMobile?onPTRMove:undefined} onTouchEnd={isMobile?onPTREnd:undefined} style={{marginLeft:isMobile?0:185,padding:isMobile?"0 12px 18px":"0 18px 18px",minHeight:"100vh",paddingTop:isMobile?10:0}}>
       {refreshing&&<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,padding:"6px 0",fontSize:12,color:C.tl}}><span style={{display:"inline-block",animation:"pullSpin 0.8s linear infinite"}}>🔄</span> Refreshing...</div>}
       {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
-      {!pm&&["dashboard","tasks","directives"].includes(view)&&<div style={{position:"sticky",top:isMobile?0:0,zIndex:40,background:C.bg,padding:"8px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
+      {!pm&&!["members","roster","valet","vendors","team","chemicals","fire"].includes(view)&&<div style={{position:"sticky",top:isMobile?0:0,zIndex:40,background:C.bg,padding:"8px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV} dirs={dirs}/>}
-        {view==="tasks"&&<TasksSection tasks={tasks} setTasks={setTasks} prop={prop} user={eU} L={L} lang={lang} hasCustomAccess={hasCustomAccess} isAdmin={true}/>}
+        {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt={hasCustomAccess&&eU.role==="e"?"mytasks":"tasks"} L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
-        {view==="people"&&<PeopleSection user={eU} lang={lang} att={att} setAtt={setAtt} prop={prop} L={L} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI} allDbUsers={allDbUsers} isAdmin={true}/>}
-        {view==="knowledge"&&<KnowledgeSection user={eU} prop={prop} lang={lang} L={L} isAdmin={true}/>}
+        {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI} allDbUsers={allDbUsers}/>}
+        {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
+        {view==="roster"&&<DutyRoster prop={prop} user={eU} lang={lang}/>}
+        {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
+        {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}
+        {view==="chemicals"&&<ChemicalGuide lang={lang}/>}
         {view==="valet"&&<ValetPlanning user={eU} lang={lang}/>}
         {view==="vendors"&&<VendorDirectory user={eU} lang={lang}/>}
+        {view==="fire"&&<FireExtinguishers user={eU} lang={lang}/>}
       </>):(<>
-        {view==="tasks"&&<TasksSection tasks={tasks} setTasks={setTasks} prop={prop} user={eU} L={L} lang={lang} hasCustomAccess={false} isAdmin={false}/>}
-        {view==="people"&&<PeopleSection user={eU} lang={lang} att={att} setAtt={setAtt} prop={prop} L={L} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI} allDbUsers={allDbUsers} isAdmin={false}/>}
-        {view==="knowledge"&&<KnowledgeSection user={eU} prop={prop} lang={lang} L={L} isAdmin={false}/>}
+        {view==="mytasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="mytasks" L={L} lang={lang}/>}
+        {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
+        {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
+        {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}
       </>)}
     </div></div></ThemeContext.Provider>);
 }
