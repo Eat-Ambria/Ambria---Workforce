@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { C as C_BASE, F, PROPS } from "./constants.js";
+import { C as C_BASE, F, PROPS, LANGS } from "./constants.js";
 const C = C_BASE;
 import { useT } from "./ThemeContext.js";
 import Modal from "./Modal.jsx";
@@ -105,6 +105,7 @@ function SCard({icon,label,value,color,bg,pulse,bold}) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function FireExtinguishers({user, lang}) {
   const C = useT();
+  const L = LANGS[lang];
   const isMobile = useIsMobile();
   const [items,   setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +176,7 @@ export default function FireExtinguishers({user, lang}) {
   const inp = {padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",background:C.white,width:"100%",boxSizing:"border-box"};
   const lbl = {fontSize:11,fontWeight:600,color:C.text,marginBottom:3,display:"block"};
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40,color:C.tl,fontSize:13}}>🧯 Loading fire extinguisher data...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40,color:C.tl,fontSize:13}}>🧯 {L.loading||"Loading..."}</div>;
 
   return (
     <div style={{fontFamily:F.b}}>
@@ -184,19 +185,19 @@ export default function FireExtinguishers({user, lang}) {
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
         <div>
-          <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>🧯 Fire Safety</h1>
-          <p style={{fontSize:10,color:C.tl,margin:"2px 0 0"}}>Fire extinguisher tracking & expiry management</p>
+          <h1 style={{fontFamily:F.d,fontSize:22,fontWeight:700,color:C.maroon,margin:0}}>🧯 {L.fireSafety||"Fire Safety"}</h1>
+          <p style={{fontSize:10,color:C.tl,margin:"2px 0 0"}}>{lang==="hi"?"अग्निशामक ट्रैकिंग और समाप्ति प्रबंधन":"Fire extinguisher tracking & expiry management"}</p>
         </div>
-        <button onClick={openAdd} style={{padding:"9px 16px",borderRadius:9,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add</button>
+        <button onClick={openAdd} style={{padding:"9px 16px",borderRadius:9,border:"none",background:C.maroon,color:C.white,fontFamily:F.b,fontSize:12,fontWeight:700,cursor:"pointer"}}>+ {L.addExtinguisher||"Add"}</button>
       </div>
 
       {/* Summary Cards */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8,marginBottom:14}}>
-        <SCard icon="🧯" label="Total"     value={active.length} color={C.blue}  bg={C.bBg}/>
-        {expired.length>0 && <SCard icon="❌" label="Expired"   value={expired.length} color={C.white} bg={C.red}    pulse bold/>}
-        {exp15.length>0   && <SCard icon="🚨" label="< 15 days" value={exp15.length}   color={C.white} bg="#C0392B"  pulse bold/>}
-        {exp30.length>0   && <SCard icon="⚠️" label="< 30 days" value={exp30.length}   color={"#7A4200"} bg={C.yBg}/>}
-        <SCard icon="✅" label="All OK"    value={okCount}       color={C.green} bg={C.gBg}/>
+        <SCard icon="🧯" label={L.total||"Total"}     value={active.length} color={C.blue}  bg={C.bBg}/>
+        {expired.length>0 && <SCard icon="❌" label={L.expired||"Expired"}   value={expired.length} color={C.white} bg={C.red}    pulse bold/>}
+        {exp15.length>0   && <SCard icon="🚨" label={lang==="hi"?"< 15 दिन":"< 15 days"} value={exp15.length}   color={C.white} bg="#C0392B"  pulse bold/>}
+        {exp30.length>0   && <SCard icon="⚠️" label={lang==="hi"?"< 30 दिन":"< 30 days"} value={exp30.length}   color={"#7A4200"} bg={C.yBg}/>}
+        <SCard icon="✅" label={L.allOk||"All OK"}    value={okCount}       color={C.green} bg={C.gBg}/>
       </div>
 
       {/* Property Filter — only for SA/all-prop users */}
@@ -212,7 +213,7 @@ export default function FireExtinguishers({user, lang}) {
 
       {/* Cards */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {filtered.length===0 && <div style={{padding:24,textAlign:"center",color:C.tl,fontSize:12}}>No records found for this property.</div>}
+        {filtered.length===0 && <div style={{padding:24,textAlign:"center",color:C.tl,fontSize:12}}>{L.noRecords||"No records found"}</div>}
         {filtered.map(item=>{
           const ei=expiryInfo(item), ii=inspInfo(item);
           return(
@@ -243,7 +244,7 @@ export default function FireExtinguishers({user, lang}) {
                 {item.serial_number && <span>🔖 S/N: {item.serial_number}</span>}
                 {item.install_date  && <span>📅 Installed: {fmt(item.install_date)}</span>}
                 <span style={{color:ii.overdue?C.red:C.tl}}>
-                  🔍 Last inspected: {item.last_inspection?fmt(item.last_inspection):"Never"}{ii.overdue?" ⚠️ OVERDUE":""}
+                  🔍 {L.lastInspected||"Last inspected"}: {item.last_inspection?fmt(item.last_inspection):(L.neverInspected||"Never")}{ii.overdue?" ⚠️ "+(L.overdue||"OVERDUE"):""}
                 </span>
                 {item.next_inspection && <span>📆 Next: {fmt(item.next_inspection)}</span>}
                 {item.vendor_name  && <span>🏢 {item.vendor_name}</span>}
@@ -258,7 +259,7 @@ export default function FireExtinguishers({user, lang}) {
               {/* Mark Inspected CTA */}
               {ii.overdue && (
                 <button onClick={()=>markInspected(item)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.green}`,background:C.gBg,color:C.green,fontFamily:F.b,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  🔍 Mark Inspected Today
+                  🔍 {L.markInspectedToday||"Mark Inspected"}
                 </button>
               )}
             </div>
@@ -267,7 +268,7 @@ export default function FireExtinguishers({user, lang}) {
       </div>
 
       {/* Add / Edit Modal */}
-      <Modal isOpen={showForm} onClose={()=>{setShowForm(false);setEditItem(null);setForm(blank);}} title={editItem?"✏️ Edit Extinguisher":"🧯 Add Fire Extinguisher"} size="md">
+      <Modal isOpen={showForm} onClose={()=>{setShowForm(false);setEditItem(null);setForm(blank);}} title={editItem?`✏️ ${L.editExtinguisher||"Edit Extinguisher"}`:`🧯 ${L.addExtinguisher||"Add Extinguisher"}`} size="md">
         <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "1fr 1fr",gap:10}}>
           <div style={{gridColumn:"1/-1"}}>
             <label style={lbl}>Property *</label>

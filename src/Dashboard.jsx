@@ -32,7 +32,7 @@ function FireSafetyWidget({ setView }) {
         <span style={{ fontSize: 18 }}>🧯</span>
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: bad > 0 ? C.red : C.green }}>
-            {bad > 0 ? `🚨 ${bad} extinguisher${bad > 1 ? "s" : ""} need attention` : "All fire extinguishers OK ✅"}
+            {bad > 0 ? `🚨 ${bad} extinguisher${bad > 1 ? "s" : ""} need attention` : (L.allOk||"All fire extinguishers OK") + " ✅"}
           </div>
           {stat.expired > 0 && <div style={{ fontSize: 10, color: C.red, marginTop: 1 }}>{stat.expired} already expired — action required</div>}
         </div>
@@ -163,7 +163,7 @@ function CriticalPanel({ tasks, L }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {issues.length > 0 && (
             <div style={{ padding: 8, background: C.rBg, borderRadius: 8, border: `1px solid #f0c8c4` }}>
-              <div style={{ fontSize:11, fontWeight: 700, color: C.red }}>⚠️ {issues.length} issue{issues.length > 1 ? "s" : ""} reported</div>
+              <div style={{ fontSize:11, fontWeight: 700, color: C.red }}>⚠️ {issues.length} {L.issues||"issues"}</div>
               <div style={{ fontSize:9, color: C.tl, marginTop: 2 }}>
                 {issues.slice(0, 2).map(t => t.title).join(" · ")}
               </div>
@@ -171,12 +171,12 @@ function CriticalPanel({ tasks, L }) {
           )}
           {pct < 40 && total > 0 && (
             <div style={{ padding: 8, background: C.yBg, borderRadius: 8, border: `1px solid #f0dcc8` }}>
-              <div style={{ fontSize:11, fontWeight: 700, color: C.yellow }}>📉 Only {pct}% done — behind schedule</div>
+              <div style={{ fontSize:11, fontWeight: 700, color: C.yellow }}>📉 {pct}% {L.done||"done"}</div>
             </div>
           )}
           {overdue.length > 0 && (
             <div style={{ padding: 8, background: C.yBg, borderRadius: 8, border: `1px solid #f0dcc8` }}>
-              <div style={{ fontSize:11, fontWeight: 700, color: C.yellow }}>⏰ {overdue.length} tasks past time window</div>
+              <div style={{ fontSize:11, fontWeight: 700, color: C.yellow }}>⏰ {overdue.length} {L.overdue||"overdue"}</div>
             </div>
           )}
         </div>
@@ -202,7 +202,7 @@ function StaffPerf({ tasks, prop, L }) {
         🏆 {L.staffPerformance}
       </div>
       {perf.length === 0 ? (
-        <div style={{ fontSize:11, color: C.tl, textAlign: "center", padding: 12 }}>No task data yet</div>
+        <div style={{ fontSize:11, color: C.tl, textAlign: "center", padding: 12 }}>{L.noTasks||"No tasks"}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           {perf.slice(0, 6).map((m, i) => (
@@ -246,13 +246,13 @@ function Suggestions({ tasks, L }) {
         📈 {L.suggestions}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
-        {pct === 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🏆</span><span style={{ fontSize:11 }}><strong>All tasks complete!</strong> Outstanding work today.</span></div>}
-        {pct >= 70 && pct < 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>👍</span><span style={{ fontSize:11 }}><strong>{pct}% done</strong> — push last {total - done} to 100%</span></div>}
-        {pct < 70 && total > 0 && <div style={{ padding: 8, background: C.yBg, borderRadius: 8, display: "flex", gap: 5 }}><span>⚡</span><span style={{ fontSize:11 }}><strong>Behind at {pct}%</strong> — mid-day check with leads needed</span></div>}
-        <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🌱</span><span style={{ fontSize:11 }}><strong>Horticulture:</strong> {h.done}/{h.total} — Evening watering critical at 5PM</span></div>
-        <div style={{ padding: 8, background: C.bBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🧹</span><span style={{ fontSize:11 }}><strong>Housekeeping:</strong> {k.done}/{k.total} — WC recheck at 3:30 PM</span></div>
-        <div style={{ padding: 8, background: C.maroonSoft, borderRadius: 8, display: "flex", gap: 5 }}><span>📋</span><span style={{ fontSize:11 }}><strong>Admin:</strong> {a.done}/{a.total} — Daily report to Vicky by 6 PM</span></div>
-        <div style={{ padding: 8, background: C.pBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🛡️</span><span style={{ fontSize:11 }}><strong>Security:</strong> {s.done}/{s.total} — CCTV & fire exits check</span></div>
+        {pct === 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🏆</span><span style={{ fontSize:11 }}>{L.completedWork||"All tasks complete!"} ✅</span></div>}
+        {pct >= 70 && pct < 100 && <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>👍</span><span style={{ fontSize:11 }}><strong>{pct}% {L.done||"done"}</strong> — {total - done} {L.pending||"pending"}</span></div>}
+        {pct < 70 && total > 0 && <div style={{ padding: 8, background: C.yBg, borderRadius: 8, display: "flex", gap: 5 }}><span>⚡</span><span style={{ fontSize:11 }}><strong>{pct}% {L.done||"done"}</strong> — {L.pending||"behind schedule"}</span></div>}
+        <div style={{ padding: 8, background: C.gBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🌱</span><span style={{ fontSize:11 }}><strong>{lang==="hi"?"बागवानी":"Horticulture"}:</strong> {h.done}/{h.total}</span></div>
+        <div style={{ padding: 8, background: C.bBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🧹</span><span style={{ fontSize:11 }}><strong>{lang==="hi"?"हाउसकीपिंग":"Housekeeping"}:</strong> {k.done}/{k.total}</span></div>
+        <div style={{ padding: 8, background: C.maroonSoft, borderRadius: 8, display: "flex", gap: 5 }}><span>📋</span><span style={{ fontSize:11 }}><strong>{lang==="hi"?"प्रशासन":"Admin"}:</strong> {a.done}/{a.total}</span></div>
+        <div style={{ padding: 8, background: C.pBg, borderRadius: 8, display: "flex", gap: 5 }}><span>🛡️</span><span style={{ fontSize:11 }}><strong>{lang==="hi"?"सुरक्षा":"Security"}:</strong> {s.done}/{s.total}</span></div>
       </div>
     </div>
   );
@@ -415,7 +415,7 @@ export default function Dashboard({ tasks, prop, user, lang, att, setView, dirs 
             border: `1px solid ${d.pct === 100 ? C.green : C.border}`
           }}>
             <Ring pct={d.pct} color={d.c} bg={d.bg} icon={d.i} label={d.n} done={d.done} total={d.total} size={isMobile ? 68 : 78} />
-            {d.pct === 100 && <span style={{ fontSize:9, color: C.green, fontWeight: 700, marginTop: 3 }}>✓ Complete</span>}
+            {d.pct === 100 && <span style={{ fontSize:9, color: C.green, fontWeight: 700, marginTop: 3 }}>✓ {L.completedWork||"Complete"}</span>}
           </div>
         ))}
       </div>
