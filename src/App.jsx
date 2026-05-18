@@ -142,6 +142,42 @@ function SearchSelect({value,onChange,options,style:cs,placeholder}){
 function Sel2({value,onChange,options,style:cs}){return <SearchSelect value={value} onChange={onChange} options={options} style={cs}/>;}
 function Btn2({children,onClick,primary,small,style:cs}){const C=useT();return <button onClick={onClick} style={{padding:small?"6px 12px":"10px 18px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:small?11:13,fontWeight:600,background:primary?C.maroon:C.bg,color:primary?C.white:C.text,...cs}}>{children}</button>;}
 
+function GroupedUserSelect({value,onChange,allUsers,style:cs}){
+  const C=useT();const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
+  useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
+  const deptLabel=(u)=>u.designation||(u.department==="h"?"Horticulture":u.department==="k"?"Housekeeping":u.department==="s"?"Security":u.department==="a"?"Admin":u.department||"Staff");
+  const admins=(allUsers||[]).filter(u=>u.role==="a");
+  const office=(allUsers||[]).filter(u=>OFFICE_DEPTS.includes(u.department)&&u.role!=="a");
+  const byProp={pp:[],ex:[],mk:[],rs:[]};
+  (allUsers||[]).filter(u=>u.role==="e"&&!OFFICE_DEPTS.includes(u.department)).forEach(u=>{if(byProp[u.property])byProp[u.property].push(u);});
+  const groups=[
+    {label:"ADMINS",users:admins},{label:"OFFICE STAFF",users:office},
+    {label:"PUSHPANJALI",users:byProp.pp},{label:"EXOTICA",users:byProp.ex},
+    {label:"MANAKTALA",users:byProp.mk},{label:"RESTRO",users:byProp.rs},
+  ].filter(g=>g.users.length>0);
+  const filt=(u)=>!q||u.name.toLowerCase().includes(q.toLowerCase())||(u.designation||"").toLowerCase().includes(q.toLowerCase());
+  const cur=(allUsers||[]).find(u=>u.id===value);
+  const curLabel=cur?`${cur.name}${cur.designation?` (${cur.designation})`:""}`:value||"Select person...";
+  return(<div ref={ref} style={{position:"relative",...cs}}>
+    <button onClick={()=>{setOpen(p=>!p);setQ("");}} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.white,fontFamily:F.b,fontSize:12,color:C.text,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
+      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{curLabel}</span>
+      <span style={{fontSize:9,color:C.tl,flexShrink:0}}>▾</span>
+    </button>
+    {open&&<div style={{position:"absolute",top:"100%",left:0,zIndex:9999,minWidth:"100%",width:300,background:C.white,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,0.18)",marginTop:2,overflow:"hidden"}}>
+      <div style={{padding:5,borderBottom:`1px solid ${C.border}`}}><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:11,outline:"none",boxSizing:"border-box"}}/></div>
+      <div style={{maxHeight:260,overflowY:"auto"}}>
+        {groups.map(g=>{const fu=g.users.filter(filt);if(!fu.length)return null;return(<div key={g.label}>
+          <div style={{padding:"4px 10px",fontSize:9,fontWeight:700,color:C.tl,background:C.bg,letterSpacing:"0.06em",borderBottom:`1px solid ${C.border}`}}>{g.label}</div>
+          {fu.map(u2=>{const sel=u2.id===value;return(<div key={u2.id} onMouseDown={()=>{onChange(u2.id);setOpen(false);setQ("");}} style={{padding:"7px 10px 7px 16px",cursor:"pointer",fontSize:12,fontFamily:F.b,background:sel?C.maroonSoft:"transparent",color:sel?C.maroon:C.text,fontWeight:sel?600:400}}>
+            {u2.name}{u2.property&&u2.property!=="all"&&<span style={{fontSize:9,color:C.tl,marginLeft:5}}>({deptLabel(u2)} · {PROPS[u2.property]?.sn||u2.property})</span>}
+          </div>);})}
+        </div>);})}
+        {groups.every(g=>g.users.filter(filt).length===0)&&<div style={{padding:10,fontSize:11,color:C.tl,textAlign:"center"}}>No results</div>}
+      </div>
+    </div>}
+  </div>);
+}
+
 // ═══ LOGIN ═══
 function LoginScreen({onLogin,lang,setLang,onValetMode}){
   const C=useT();const L=LANGS[lang];const[u,sU]=useState("");const[p,sP]=useState("");const[err,sE]=useState("");const[sh,sSh]=useState(false);const[rem,setRem]=useState(false);const[loading,setLoading]=useState(false);
@@ -413,16 +449,17 @@ const PROPERTY_ADMIN_IDS=ADMIN_TARGETS.map(t=>t.id);
 // Find admin target by id OR username (handles DB id mismatches)
 function findAT(u){return ADMIN_TARGETS.find(t=>t.id===u.id||(t.username&&t.username===u.username));}
 
-function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
+function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView,allDbUsers}){
   const C=useT();const isMobile=useIsMobile();
   const isSA=u.role==="sa";
   const isOfficeMember=OFFICE_DEPTS.includes(u.department);
+  const isAdmin=!isSA&&!isOfficeMember&&u.role==="a";
   const canCreate=isSA||isOfficeMember;
   const[officeTab,setOfficeTab]=useState("sent");
   // Determine which dirs to show
   const sentDirs=dirs.filter(d=>d.from===u.id||(!!u.username&&d.from===u.username));
   const receivedDirs=dirs.filter(d=>d.to===u.id||(!!u.username&&d.to===u.username));
-  const myDirs=isSA?dirs:isOfficeMember?(officeTab==="sent"?sentDirs:receivedDirs):receivedDirs;
+  const myDirs=isSA?dirs:isOfficeMember?(officeTab==="sent"?sentDirs:receivedDirs):isAdmin?dirs:receivedDirs;
   const[showNew,setShowNew]=useState(false);
   const[newTo,setNewTo]=useState("");
   const[admins,setAdmins]=useState([]);
@@ -432,24 +469,39 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
   const[nPh,setNPh]=useState(null);
   const[nDue,setNDue]=useState("");
   const[filterTo,setFilterTo]=useState("all");
+  const[showEdit,setShowEdit]=useState(false);
+  const[editDir,setEditDir]=useState(null);
+  const[editText,setEditText]=useState("");
+  const[editTo,setEditTo]=useState("");
+  const[editDue,setEditDue]=useState("");
+  const[editStatus,setEditStatus]=useState("sent");
 
-  // Fetch assign-to list: SA fetches real DB IDs; office staff uses ADMIN_TARGETS directly
+  // Fetch assign-to list: SA uses allDbUsers from App; office staff uses ADMIN_TARGETS
   useEffect(()=>{
     if(!canCreate)return;
-    if(isSA){
-      supabase.from("users").select("id,name,property,username").eq("role","a")
-        .then(({data})=>{
-          if(data&&data.length>0){setAdmins(data);setNewTo(data[0].id);}
-          else{const fb=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));setAdmins(fb);setNewTo(fb[0].id);}
-        });
-    }else{
+    if(!isSA){
       const targets=ADMIN_TARGETS.map(t=>({id:t.id,name:t.name,property:t.prop,username:t.username}));
       setAdmins(targets);setNewTo(targets[0].id);
     }
   },[canCreate,isSA]);
 
+  const openEdit=(dir)=>{setEditDir(dir);setEditText(dir.text);setEditTo(dir.to);setEditDue(dir.dueDate||"");setEditStatus(dir.status==="approval_req"?"approval_requested":dir.status);setShowEdit(true);};
+  const saveEdit=async()=>{
+    if(!editText.trim()||!editDir)return;
+    const oldTo=editDir.to;
+    const newToUser=(allDbUsers||[]).find(x=>x.id===editTo)||{name:editTo};
+    const newToName=newToUser.name||editTo;
+    await supabase.from("assigned_tasks").update({text:editText.trim(),to_user:editTo,to_name:newToName,due_date:editDue||null,status:editStatus}).eq("id",editDir.id);
+    setDirs(prev=>prev.map(d=>d.id===editDir.id?{...d,text:editText.trim(),to:editTo,toName:newToName,dueDate:editDue||null,status:editStatus}:d));
+    if(oldTo!==editTo){
+      notifyMultiple("task_reassigned","📝 Task reassigned to you by "+u.name+": "+editText.trim().slice(0,80),u.id,u.name,[editTo],editDir.prop);
+      notifyMultiple("task_reassigned","📋 Task reassigned from you: "+editText.trim().slice(0,80),u.id,u.name,[oldTo],editDir.prop);
+    }
+    setShowEdit(false);setEditDir(null);
+  };
+
   const sendTask=async()=>{if(!newText.trim()||!newTo)return;
-    const tgt=admins.find(a=>a.id===newTo)||{name:newTo};
+    const tgt=(isSA?(allDbUsers||[]):admins).find(a=>a.id===newTo)||{name:newTo};
     const tgtColor=ADMIN_TARGETS.find(t=>t.id===newTo||t.username===newTo)?.color||C.blue;
     const atId="at_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
     const{data,error}=await supabase.from("assigned_tasks").insert({id:atId,from_user:u.id,from_name:u.name,to_user:newTo,to_name:tgt.name||"",to_color:tgtColor,property:newProp,text:newText.trim(),photo_url:nPh?.data||null,status:"sent",due_date:nDue||null}).select().single();
@@ -458,6 +510,11 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     setDirs(prev=>[newDir,...prev]);
     setNs(p=>[{type:"newTask",task:"📝 New task: "+newText.trim().slice(0,40),by:u.name,prop:newProp,time:newDir.createdTime,forUser:newTo},...p]);
     notifyMultiple("task_assigned","📝 New task from "+u.name+": "+newText.trim().slice(0,80),u.id,u.name,[newTo],newProp);
+    // Also notify property admin when assigning to field employee
+    const assignedUser=(allDbUsers||[]).find(x=>x.id===newTo);
+    if(assignedUser?.role==="e"&&assignedUser.property&&assignedUser.property!=="all"){
+      getSAAndAdminIds(assignedUser.property).then(ids=>{const adminIds=ids.filter(id=>id!==u.id&&id!==newTo);if(adminIds.length)notifyMultiple("task_assigned_team","📋 Task assigned to "+assignedUser.name+": "+newText.trim().slice(0,80),u.id,u.name,adminIds,assignedUser.property);});
+    }
     setNewText("");setNPh(null);setNDue("");setShowNew(false);
   };
 
@@ -484,7 +541,7 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     {/* NEW TASK FORM */}
     <Modal isOpen={showNew&&canCreate} onClose={()=>setShowNew(false)} title={`➕ ${L.newDirective}`} size="lg">
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-        <SearchSelect value={newTo} onChange={setNewTo} options={admins.map(a=>({v:a.id,l:a.name+(a.property?` — ${a.property}`:"")}))} style={{width:"100%"}}/>
+        {isSA?<GroupedUserSelect value={newTo} onChange={setNewTo} allUsers={allDbUsers||[]} style={{width:"100%"}}/>:<SearchSelect value={newTo} onChange={setNewTo} options={admins.map(a=>({v:a.id,l:a.name+(a.property?` — ${a.property}`:"")})) } style={{width:"100%"}}/>}
         <SearchSelect value={newProp} onChange={setNewProp} options={[{v:"all",l:"All Properties"},...Object.entries(PROPS).map(([k,p])=>({v:k,l:`${p.icon} ${p.sn}`}))]} style={{width:"100%"}}/>
       </div>
       <textarea placeholder={L.writeTask} value={newText} onChange={e=>setNewText(e.target.value)} style={{width:"100%",padding:12,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:8}}/>
@@ -497,21 +554,42 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
       <div style={{display:"flex",gap:8}}><Btn2 primary onClick={sendTask}>{L.send} →</Btn2><Btn2 onClick={()=>setShowNew(false)}>{L.cancel}</Btn2></div>
     </Modal>
 
-    {/* FILTER BY MEMBER — color coded */}
+    {/* FILTER BY MEMBER — all unique assignees */}
     {isSA&&<div style={{display:"flex",gap:4,marginBottom:14,flexWrap:"wrap"}}>
       <button onClick={()=>setFilterTo("all")} style={{padding:"6px 14px",borderRadius:8,border:filterTo==="all"?`2px solid ${C.maroon}`:`1px solid ${C.border}`,background:filterTo==="all"?C.maroonSoft:C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:C.maroon}}>All ({myDirs.length})</button>
-      {admins.map(a=>{const tgt=ADMIN_TARGETS.find(t=>t.id===a.id||t.username===a.username);const col=tgt?.color||C.blue;const cnt=myDirs.filter(d=>d.to===a.id).length;return cnt>0&&<button key={a.id} onClick={()=>setFilterTo(a.id)} style={{padding:"6px 14px",borderRadius:8,border:filterTo===a.id?`2px solid ${col}`:`1px solid ${C.border}`,background:filterTo===a.id?col+"15":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:col}}>{a.name} ({cnt})</button>;})}
+      {[...new Map(myDirs.map(d=>[d.to,{id:d.to,name:d.toName,color:d.toColor||C.blue}])).values()].map(a=>{const cnt=myDirs.filter(d=>d.to===a.id).length;const col=a.color;return(<button key={a.id} onClick={()=>setFilterTo(a.id)} style={{padding:"6px 14px",borderRadius:8,border:filterTo===a.id?`2px solid ${col}`:`1px solid ${C.border}`,background:filterTo===a.id?col+"22":C.white,cursor:"pointer",fontFamily:F.b,fontSize:11,fontWeight:600,color:col}}>{a.name} ({cnt})</button>);})}
     </div>}
+
+    {/* EDIT TASK MODAL — SA only */}
+    <Modal isOpen={showEdit&&isSA} onClose={()=>setShowEdit(false)} title="✏️ Edit Task" size="lg">
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+        <GroupedUserSelect value={editTo} onChange={setEditTo} allUsers={allDbUsers||[]} style={{width:"100%"}}/>
+        <select value={editStatus} onChange={e=>setEditStatus(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none",cursor:"pointer"}}>
+          <option value="sent">⏳ Pending</option>
+          <option value="approval_requested">🔔 Awaiting Approval</option>
+          <option value="approved">✅ Approved</option>
+          <option value="rejected">❌ Rejected</option>
+          <option value="completed">🏁 Completed</option>
+        </select>
+      </div>
+      <textarea value={editText} onChange={e=>setEditText(e.target.value)} style={{width:"100%",padding:12,borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:8}}/>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12}}>
+        <span style={{fontSize:11,fontWeight:600,color:C.tl}}>📅 Due:</span>
+        <input type="date" value={editDue} onChange={e=>setEditDue(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,fontFamily:F.b,fontSize:12,outline:"none"}}/>
+        {editDue&&<button onClick={()=>setEditDue("")} style={{padding:"3px 8px",borderRadius:6,border:"none",background:C.rBg,color:C.red,fontSize:10,cursor:"pointer"}}>✕ Clear</button>}
+      </div>
+      <div style={{display:"flex",gap:8}}><Btn2 primary onClick={saveEdit}>💾 Save Changes</Btn2><Btn2 onClick={()=>setShowEdit(false)}>{L.cancel||"Cancel"}</Btn2></div>
+    </Modal>
 
     {/* TASK GRID */}
     <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
       {filteredDirs.length===0&&<div style={{gridColumn:"1/-1",background:C.white,borderRadius:12,padding:30,textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:22}}>📝</div><div style={{fontFamily:F.d,fontSize:13,fontWeight:700,marginTop:4}}>{L.noDirectives}</div></div>}
-      {filteredDirs.map(dir=><ATCard key={dir.id} dir={dir} user={u} setDirs={setDirs} L={L} setNs={setNs}/>)}
+      {filteredDirs.map(dir=><ATCard key={dir.id} dir={dir} user={u} setDirs={setDirs} L={L} setNs={setNs} onEdit={isSA?openEdit:undefined}/>)}
     </div>
   </div>);
 }
 
-function ATCard({dir,user:u,setDirs,L,setNs}){
+function ATCard({dir,user:u,setDirs,L,setNs,onEdit}){
   const C=useT();const[showComplete,setShowComplete]=useState(false);
   const[cNote,setCNote]=useState("");
   const[cPhotos,setCPhotos]=useState([]);
@@ -573,7 +651,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     const newReply={id:repRow?.id||"r_"+Date.now(),by:u.name,text:replyText,photo:photoJson,type:"completed",time:tm,date:dt};
     setDirs(prev=>prev.map(d=>d.id===dir.id?{...d,status:"completed",completedAt:new Date().toISOString(),completionNote:cNote.trim(),completionPhoto:photoJson,replies:[...d.replies,newReply]}:d));
     setNs(p=>[{type:"completed",task:"✅ Completed: "+dir.text.slice(0,30),by:u.name,prop:dir.prop,time:tm,forUser:dir.from},...p]);
-    notifyMultiple("assigned_completed","📸 "+u.name+" completed: "+dir.text.slice(0,80),u.id,u.name,[dir.from],dir.prop);
+    getSAAndAdminIds(u.prop||u.property||dir.prop).then(ids=>{notifyMultiple("assigned_completed","📸 "+u.name+" completed: "+dir.text.slice(0,80),u.id,u.name,ids.length?ids:[dir.from],dir.prop);});
     setCNote("");setCPhotos([]);setShowComplete(false);
   };
 
@@ -659,6 +737,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         </div>
       </div>
       <Bdg color={st.c} bg={st.b}>{st.l}</Bdg>
+      {isSA&&onEdit&&<button onClick={()=>onEdit(dir)} style={{width:22,height:22,borderRadius:6,border:"none",cursor:"pointer",background:C.maroonSoft,color:C.maroon,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>}
       {isSA&&<button onClick={async()=>{await supabase.from("assigned_tasks").delete().eq("id",dir.id);setDirs(prev=>prev.filter(d=>d.id!==dir.id));}} style={{width:22,height:22,borderRadius:6,border:"none",cursor:"pointer",background:C.rBg,color:C.red,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>}
     </div>
 
@@ -858,15 +937,25 @@ export default function App(){
         }
         // 2. Assigned tasks + replies
         let atQ=supabase.from("assigned_tasks").select("*").order("created_at",{ascending:false});
-        if(user.role!=="sa"){
+        const _isVicky=user.id==="vicky"||user.username==="vicky";
+        if(user.role!=="sa"&&!_isVicky){
           const _uid=user.id||"";const _uname=user.username||"";
           const _isOffice=OFFICE_DEPTS.includes(user.department);
+          const _isAdmin=user.role==="a";
           if(_isOffice){
-            // Office staff see tasks they sent (from_user) OR tasks assigned to them (to_user)
+            // Office staff see tasks they sent OR tasks assigned to them
             if(_uname&&_uname!==_uid){atQ=atQ.or(`from_user.eq.${_uid},to_user.eq.${_uid},from_user.eq.${_uname},to_user.eq.${_uname}`);}
             else{atQ=atQ.or(`from_user.eq.${_uid},to_user.eq.${_uid}`);}
+          }else if(_isAdmin){
+            // Property admin: see tasks for their entire team
+            const{data:teamData}=await supabase.from("users").select("id").eq("property",user.property||user.prop||"pp").eq("is_active",true);
+            const teamIds=(teamData||[]).map(x=>x.id);
+            if(!teamIds.includes(_uid))teamIds.push(_uid);
+            if(_uname&&_uname!==_uid&&!teamIds.includes(_uname))teamIds.push(_uname);
+            if(teamIds.length>0){atQ=atQ.or(teamIds.map(id=>`to_user.eq.${id}`).join(","));}
+            else{atQ=atQ.eq("to_user",_uid);}
           }else{
-            // Property admins and employees: only tasks assigned to them
+            // Employee: only tasks assigned to them
             if(_uname&&_uname!==_uid){atQ=atQ.or(`to_user.eq.${_uid},to_user.eq.${_uname}`);}
             else{atQ=atQ.eq("to_user",_uid);}
           }
@@ -947,16 +1036,20 @@ export default function App(){
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
   const _badgeIsOffice=OFFICE_DEPTS.includes(eU.department);
+  const _isVickyUser=eU.id==="vicky"||eU.username==="vicky";
   const _todayStr=new Date().toISOString().split("T")[0];
   const _overdueDirs=dirs.filter(d=>{const st=d.status==="approval_req"?"approval_requested":d.status;return st!=="completed"&&d.dueDate&&d.dueDate<_todayStr;});
   const pendDirsBadge=dirs.filter(d=>
-    eU.role==="sa"&&!pm?(d.status==="approval_requested"||d.status==="approval_req")
+    (eU.role==="sa"||_isVickyUser)&&!pm?(d.status==="approval_requested"||d.status==="approval_req")
     :_badgeIsOffice?((d.to===eU.id&&(d.status==="sent"||d.status==="rejected"))||(d.from===eU.id&&(d.status==="approval_requested"||d.status==="approval_req")))
-    :d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved"))
+    :eU.role==="a"?(d.status==="sent"||d.status==="rejected"||d.status==="approval_requested"||d.status==="approval_req")
+    :d.to===eU.id&&(d.status==="sent"||d.status==="rejected"))
   .length + _overdueDirs.length;
   const _dirsBadgeRed=_overdueDirs.length>0;
+  const _empHasDirs=!isA&&dirs.some(d=>d.to===eU.id||(eU.username&&d.to===eU.username));
+  const _empDirsBadge=_empHasDirs?dirs.filter(d=>(d.to===eU.id||(eU.username&&d.to===eU.username))&&(d.status==="sent"||d.status==="rejected")).length:0;
   const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge,badgeRed:_dirsBadgeRed},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
-  const EMP_NAV=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
+  const EMP_NAV=[{id:"mytasks",i:"✅",l:L.myTasks},...(_empHasDirs?[{id:"directives",i:"📝",l:L.directives,badge:_empDirsBadge}]:[]),{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const navForBottom=isA?(eU.role==="sa"?ALL_ADMIN_NAV:(!eU.access||!eU.access.length)?ALL_ADMIN_NAV:ALL_ADMIN_NAV.filter(n=>eU.access.includes(n.id))):EMP_NAV;
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
   const doRefresh=()=>{setRefreshing(true);setRK(k=>k+1);};
@@ -977,7 +1070,7 @@ export default function App(){
       {isA?(<>
         {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV} dirs={dirs}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt={hasCustomAccess&&eU.role==="e"?"mytasks":"tasks"} L={L} lang={lang}/>}
-        {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
+        {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded} allDbUsers={allDbUsers}/>}
         {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI} allDbUsers={allDbUsers}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
         {view==="roster"&&<DutyRoster prop={prop} user={eU} lang={lang}/>}
@@ -989,6 +1082,7 @@ export default function App(){
         {view==="fire"&&<FireExtinguishers user={eU} lang={lang}/>}
       </>):(<>
         {view==="mytasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt="mytasks" L={L} lang={lang}/>}
+        {view==="directives"&&_empHasDirs&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded} allDbUsers={allDbUsers}/>}
         {view==="att"&&<AttView user={eU} att={att} setAtt={setAtt} prop={prop} L={L}/>}
         {view==="leaves"&&<LeaveManager prop={prop} user={eU} lang={lang}/>}
         {view==="training"&&<TrainingView user={eU} prop={prop} lang={lang}/>}
