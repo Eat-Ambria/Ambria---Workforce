@@ -246,12 +246,16 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
   const isSA=u.role==="sa";const isEffAdmin=eU.role==="sa"||eU.role==="a"||!!findAT(eU)||!!(eU.access&&eU.access.length>0);const isA=isEffAdmin;
   // Pending count for assigned tasks — when previewing, show previewed user's count
   const _pendIsOffice=OFFICE_DEPTS.includes(eU.department);
-  const pendDirs=isSA&&!pm
+  const _sidebarToday=new Date().toISOString().split("T")[0];
+  const _sidebarOverdue=dirs.filter(d=>{const st=d.status==="approval_req"?"approval_requested":d.status;return st!=="completed"&&d.dueDate&&d.dueDate<_sidebarToday;}).length;
+  const _pendDirsBase=isSA&&!pm
     ?dirs.filter(d=>d.status==="approval_requested"||d.status==="approval_req").length
     :_pendIsOffice
       ?dirs.filter(d=>(d.to===eU.id&&(d.status==="sent"||d.status==="rejected"))||(d.from===eU.id&&(d.status==="approval_requested"||d.status==="approval_req"))).length
       :dirs.filter(d=>d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved")).length;
-  const allAdminNav=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
+  const pendDirs=_pendDirsBase+_sidebarOverdue;
+  const _sidebarBadgeRed=_sidebarOverdue>0;
+  const allAdminNav=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirs,badgeRed:_sidebarBadgeRed},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
   const empNav=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const nav=isA?(eU.role==="sa"?allAdminNav:(!eU.access||!eU.access.length)?allAdminNav:allAdminNav.filter(n=>eU.access.includes(n.id))):empNav;
   const rL={sa:L.superAdmin,a:L.admin,e:L.staff};
@@ -263,7 +267,7 @@ function Sidebar({view,setView,user:u,effectiveUser,onLogout,lang,setLang,nC,set
     <div style={{flex:1,padding:"8px 6px",display:"flex",flexDirection:"column",gap:2}}>
       {nav.map(n=><button key={n.id} onClick={()=>setView(n.id)} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:F.b,fontSize:12,fontWeight:view===n.id?600:400,background:view===n.id?C.maroonSoft:"transparent",color:view===n.id?C.maroon:C.tl,textAlign:"left",position:"relative"}}>
         <span style={{fontSize:13}}>{n.i}</span><span style={{flex:1}}>{n.l}</span>
-        {n.badge>0&&<span style={{background:C.red,color:C.white,borderRadius:10,padding:"1px 6px",fontSize:9,fontWeight:700,minWidth:16,textAlign:"center"}}>{n.badge}</span>}
+        {n.badge>0&&<span style={{background:n.badgeRed?"#CC0000":C.red,color:C.white,borderRadius:10,padding:"1px 6px",fontSize:9,fontWeight:700,minWidth:16,textAlign:"center",animation:n.badgeRed?"overduePulse 2s ease-in-out infinite":undefined}}>{n.badge}</span>}
       </button>)}
       {isSA&&<div style={{marginTop:6,padding:8,background:pm?C.bBg:C.bg,borderRadius:8,border:`1px solid ${pm?C.blue:C.border}`}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:pm?6:0}}>
@@ -457,7 +461,9 @@ function AssignedTasksView({user:u,dirs,setDirs,L,setNs,setView}){
     setNewText("");setNPh(null);setNDue("");setShowNew(false);
   };
 
-  const filteredDirs=(filterTo==="all"?myDirs:myDirs.filter(d=>d.to===filterTo)).sort((a,b)=>{const norm=s=>s==="approval_req"?"approval_requested":s;const aS=norm(a.status),bS=norm(b.status);if(aS==="completed"&&bS!=="completed")return 1;if(bS==="completed"&&aS!=="completed")return -1;const saPri={approval_requested:0,rejected:1,sent:2,approved:3,completed:4};const admPri={rejected:0,sent:1,approval_requested:2,approved:3,completed:4};const pri=isSA?saPri:admPri;return(pri[aS]??5)-(pri[bS]??5);});
+  const _atToday=new Date().toISOString().split("T")[0];
+  const _isOverdueDir=(d)=>{const st=d.status==="approval_req"?"approval_requested":d.status;return st!=="completed"&&d.dueDate&&d.dueDate<_atToday;};
+  const filteredDirs=(filterTo==="all"?myDirs:myDirs.filter(d=>d.to===filterTo)).sort((a,b)=>{const norm=s=>s==="approval_req"?"approval_requested":s;const aS=norm(a.status),bS=norm(b.status);const aOd=_isOverdueDir(a),bOd=_isOverdueDir(b);if(aOd&&!bOd)return -1;if(!aOd&&bOd)return 1;if(aS==="completed"&&bS!=="completed")return 1;if(bS==="completed"&&aS!=="completed")return -1;const saPri={approval_requested:0,rejected:1,sent:2,approved:3,completed:4};const admPri={rejected:0,sent:1,approval_requested:2,approved:3,completed:4};const pri=isSA?saPri:admPri;return(pri[aS]??5)-(pri[bS]??5);});
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -536,8 +542,9 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
   const bdrC=status==="rejected"?C.red:status==="approved"?C.green:status==="approval_requested"?C.accent:status==="completed"?"#b8dcc8":C.border;
   const topC=status==="rejected"?C.red:status==="approved"?C.green:status==="approval_requested"?C.accent:status==="completed"?C.green:mC;
 
-  const isOverdue=dir.dueDate&&new Date(dir.dueDate)<td&&status==="sent";
+  const isOverdue=dir.dueDate&&new Date(dir.dueDate)<td&&status!=="completed";
   const dueFmt=dir.dueDate?new Date(dir.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"}):"";
+  const overdueDays=isOverdue?Math.floor((td-new Date(dir.dueDate))/86400000):0;
 
   // MARK COMPLETE — at least 1 photo REQUIRED, compress + upload all
   const handleComplete=async()=>{
@@ -638,7 +645,7 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
     setRemarks("");setShowRemarks(false);
   };
 
-  return(<div style={{background:cardBg,borderRadius:12,border:`1px solid ${bdrC}`,overflow:"hidden",borderTop:`4px solid ${topC}`}}>
+  return(<div style={{background:isOverdue?"#FFF5F5":cardBg,borderRadius:12,border:`1px solid ${isOverdue?"#CC0000":bdrC}`,overflow:"hidden",borderTop:`4px solid ${isOverdue?"#CC0000":topC}`,borderLeft:isOverdue?"4px solid #CC0000":undefined}}>
     {/* HEADER */}
     <div style={{padding:"10px 14px",borderBottom:`1px solid ${bdrC}`,display:"flex",alignItems:"center",gap:8}}>
       <div style={{width:30,height:30,borderRadius:"50%",background:mC,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:700,fontSize:11,flexShrink:0}}>{dir.toName[0]}</div>
@@ -647,7 +654,8 @@ function ATCard({dir,user:u,setDirs,L,setNs}){
         {!isSA&&isTarget&&dir.fromName&&<div style={{fontSize:9,color:C.tl,marginTop:1}}>From: {dir.fromName}</div>}
         <div style={{display:"flex",gap:6,alignItems:"center",marginTop:1}}>
           <span style={{fontSize:9,color:C.tl}}>{dir.createdDate} · {dir.createdTime}</span>
-          {dueFmt&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:isOverdue?C.rBg:C.yBg,color:isOverdue?C.red:C.yellow}}>{isOverdue?"⚠️ "+L.overdue:"📅 "+(L.dueOn||"Due")} {dueFmt}</span>}
+          {dueFmt&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:isOverdue?"#FFE4E4":C.yBg,color:isOverdue?"#CC0000":C.yellow}}>{isOverdue?"⚠️ "+(L.overdue||"Overdue"):"📅 "+(L.dueOn||"Due")} {dueFmt}</span>}
+          {isOverdue&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:"#CC0000",color:"#FFF",animation:"overduePulse 2s ease-in-out infinite"}}>⚠️ {overdueDays}d {L.overdue||"OVERDUE"}</span>}
         </div>
       </div>
       <Bdg color={st.c} bg={st.b}>{st.l}</Bdg>
@@ -774,7 +782,7 @@ function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L,
       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         {more.map(n=><button key={n.id} onClick={()=>{setView(n.id);setShowMore(false);}} style={{flex:"1 1 auto",minWidth:100,padding:"10px 8px",display:"flex",alignItems:"center",gap:8,border:"none",background:view===n.id?C.maroonSoft:"transparent",cursor:"pointer",borderRadius:10,color:view===n.id?C.maroon:C.text,fontFamily:F.b,fontSize:13,fontWeight:view===n.id?700:400}}>
           <span style={{fontSize:22}}>{n.i}</span><span>{n.l}</span>
-          {n.badge>0&&<span style={{background:C.red,color:C.white,borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:700,marginLeft:"auto"}}>{n.badge}</span>}
+          {n.badge>0&&<span style={{background:n.badgeRed?"#CC0000":C.red,color:C.white,borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:700,marginLeft:"auto"}}>{n.badge}</span>}
         </button>)}
       </div>
       <div style={{display:"flex",gap:4,marginTop:4,padding:"4px 0",borderTop:`1px solid ${C.border}`}}>
@@ -788,7 +796,7 @@ function BottomNav({nav,view,setView,onLogout,user:u,nC,setShowN,lang,setLang,L,
       {main.map(n=><button key={n.id} onClick={()=>setView(n.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,border:"none",background:"transparent",cursor:"pointer",position:"relative",padding:"4px 0"}}>
         <span style={{fontSize:22,lineHeight:1}}>{n.i}</span>
         {view===n.id&&<div style={{width:5,height:5,borderRadius:"50%",background:C.maroon}}/>}
-        {n.badge>0&&<span style={{position:"absolute",top:4,right:"15%",background:C.red,color:C.white,borderRadius:10,padding:"0 5px",fontSize:10,fontWeight:700}}>{n.badge}</span>}
+        {n.badge>0&&<span style={{position:"absolute",top:4,right:"15%",background:n.badgeRed?"#CC0000":C.red,color:C.white,borderRadius:10,padding:"0 5px",fontSize:10,fontWeight:700}}>{n.badge}</span>}
       </button>)}
       {more.length>0&&<button onClick={()=>setShowMore(p=>!p)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,border:"none",background:showMore?C.maroonSoft:"transparent",cursor:"pointer",padding:"4px 0"}}>
         <span style={{fontSize:22,lineHeight:1}}>⋯</span>
@@ -886,6 +894,19 @@ export default function App(){
         if(notifData&&notifData.length>0){setNs(notifData.map(n=>({id:n.id,type:n.type,task:n.task_text,by:n.by_name,prop:n.property,time:new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})})));}
         // 5. Fire extinguisher expiry check — once per day for SA/Admin
         if(user.role==="sa"||user.role==="a"){checkFireExtinguisherExpiry(user.id);}
+        // 6. Daily overdue reminder — once per day for SA/Admin
+        if((user.role==="sa"||user.role==="a")&&atData){
+          const _todayKey="ambria_overdue_check_"+new Date().toISOString().split("T")[0]+"_"+user.id;
+          if(!localStorage.getItem(_todayKey)){
+            const _todayISO=new Date().toISOString().split("T")[0];
+            const _overdue=atData.filter(t=>{const st=t.status==="approval_req"?"approval_requested":t.status;return st!=="completed"&&t.due_date&&t.due_date<_todayISO;});
+            if(_overdue.length>0){
+              // Send summary notification to SA/admin
+              await supabase.from("notifications").insert({for_user:user.id,type:"overdue_summary",task_text:`⚠️ ${_overdue.length} overdue task${_overdue.length>1?"s":""} need attention today`,by_name:"System",property:"all",is_read:false});
+              localStorage.setItem(_todayKey,"1");
+            }
+          }
+        }
       }catch(e){console.error("Load error:",e);}
       finally{setLoading(false);setRefreshing(false);}
     })();
@@ -926,12 +947,15 @@ export default function App(){
   const setTasks=(fn)=>{sTS(prev=>{const nt=typeof fn==="function"?fn(prev[eP]||[]):fn;const ot=prev[eP]||[];nt.forEach(n2=>{const o=ot.find(t=>t.id===n2.id);if(o){const tm=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});if(o.status!=="completed"&&n2.status==="completed"){setNs(p=>[{type:"done",task:n2.title,by:n2.completedBy||n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("task_completed","✅ "+n2.assigneeName+" completed: "+n2.title+" ("+prop.sn+")",n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!=="issue"&&n2.status==="issue"){setNs(p=>[{type:"issue",task:n2.title,by:n2.assigneeName,prop:prop.sn,time:tm},...p]);getSAAndAdminIds(eP).then(ids=>notifyMultiple("issue_reported","⚠️ "+n2.assigneeName+" reported issue: "+n2.title,n2.assignedTo,n2.assigneeName,ids,eP));}if(o.status!==n2.status||o.notes!==n2.notes||(n2.photos?.length||0)!==(o.photos?.length||0))syncTask(n2);}});return{...prev,[eP]:nt};});};
 
   const _badgeIsOffice=OFFICE_DEPTS.includes(eU.department);
+  const _todayStr=new Date().toISOString().split("T")[0];
+  const _overdueDirs=dirs.filter(d=>{const st=d.status==="approval_req"?"approval_requested":d.status;return st!=="completed"&&d.dueDate&&d.dueDate<_todayStr;});
   const pendDirsBadge=dirs.filter(d=>
     eU.role==="sa"&&!pm?(d.status==="approval_requested"||d.status==="approval_req")
     :_badgeIsOffice?((d.to===eU.id&&(d.status==="sent"||d.status==="rejected"))||(d.from===eU.id&&(d.status==="approval_requested"||d.status==="approval_req")))
     :d.to===eU.id&&(d.status==="sent"||d.status==="rejected"||d.status==="approved"))
-  .length;
-  const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
+  .length + _overdueDirs.length;
+  const _dirsBadgeRed=_overdueDirs.length>0;
+  const ALL_ADMIN_NAV=[{id:"dashboard",i:"📊",l:L.dashboard},{id:"tasks",i:"✅",l:L.dailyTasks||"Daily Tasks"},{id:"directives",i:"📝",l:L.directives,badge:pendDirsBadge,badgeRed:_dirsBadgeRed},{id:"team",i:"👥",l:L.team||"Team"},{id:"att",i:"🕐",l:L.attendance},{id:"roster",i:"🗓️",l:L.roster||"Duty Roster"},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"},{id:"chemicals",i:"🧪",l:L.chemCalc||"Chemicals"},{id:"valet",i:"🚗",l:L.valetPlan||"Valet Planning"},{id:"vendors",i:"📞",l:L.vendorDir||"Vendors"},{id:"fire",i:"🧯",l:L.fireSafety||"Fire Safety"}];
   const EMP_NAV=[{id:"mytasks",i:"✅",l:L.myTasks},{id:"att",i:"🕐",l:L.attendance},{id:"leaves",i:"🏖️",l:L.leaveRequest||"Leaves"},{id:"training",i:"🎓",l:L.training||"Training"}];
   const navForBottom=isA?(eU.role==="sa"?ALL_ADMIN_NAV:(!eU.access||!eU.access.length)?ALL_ADMIN_NAV:ALL_ADMIN_NAV.filter(n=>eU.access.includes(n.id))):EMP_NAV;
   const onLogout=()=>{localStorage.removeItem("ambria_user");setUser(null);setPM(false);setPAs("");sV("dashboard");};
@@ -951,7 +975,7 @@ export default function App(){
       {pm&&previewDbUser&&<div style={{background:`linear-gradient(90deg,${C.blue},${C.maroon})`,color:C.white,padding:"8px 14px",borderRadius:10,marginTop:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>👁️</span><span style={{fontSize:12,fontWeight:700}}>{L.previewAs}: {eU.name} ({eU.role==="a"||!!findAT(eU)?L.admin:L.staff} — {PROPS[eU.prop]?.sn||eU.prop||"All"})</span></div><button onClick={()=>{setPM(false);setPAs("");sV("dashboard");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.5)",background:"rgba(255,255,255,0.15)",color:C.white,fontFamily:F.b,fontSize:10,fontWeight:700,cursor:"pointer"}}>{L.previewOff}</button></div>}
       {!pm&&!["members","roster","valet","vendors","team","chemicals","fire"].includes(view)&&<div style={{position:"sticky",top:isMobile?0:0,zIndex:40,background:C.bg,padding:"8px 0"}}><PropBar ap={aP} setAP={sAP} user={user}/></div>}
       {isA?(<>
-        {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV}/>}
+        {view==="dashboard"&&<Dashboard tasks={tasks} prop={prop} user={eU} lang={lang} att={att} setView={sV} dirs={dirs}/>}
         {view==="tasks"&&<TLV tasks={tasks} setTasks={setTasks} prop={prop} user={eU} vt={hasCustomAccess&&eU.role==="e"?"mytasks":"tasks"} L={L} lang={lang}/>}
         {view==="directives"&&<AssignedTasksView user={eU} dirs={dirs} setDirs={setDirs} L={L} setNs={setNs} setView={sV} atLoaded={atLoaded}/>}
         {view==="team"&&<TeamPage user={eU} lang={lang} customMembers={customMembers} setCustomMembers={setCM} removedIds={removedIds} setRemovedIds={setRI} allDbUsers={allDbUsers}/>}

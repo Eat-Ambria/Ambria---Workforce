@@ -136,6 +136,23 @@ export const L_EN = {
   vendorDir:"Vendors",
   dailyTasks:"Daily Tasks",
   fireSafety:"Fire Safety",
+  // Overdue tasks
+  overdueTasksTitle:"Overdue Tasks",
+  remindNow:"Remind Now",
+  reminded:"Reminded",
+  noOverdue:"No overdue tasks",
+  dayOverdue:"day overdue",
+  daysOverdue:"days overdue",
+  // Valet Planning
+  bookings:"Bookings",
+  staffCalc:"Staff Calculator",
+  guestCount:"Guest Count",
+  estimatedCost:"Estimated Cost",
+  editRates:"Edit Rates",
+  bookThis:"Book This Event",
+  viewFullTable:"View Full Table",
+  valetProp:"Property",
+  noBookings:"No bookings yet",
 };
 
 export const L_HI = {
@@ -214,6 +231,23 @@ export const L_HI = {
   vendorDir:"वेंडर",
   dailyTasks:"दैनिक कार्य",
   fireSafety:"अग्नि सुरक्षा",
+  // Overdue tasks
+  overdueTasksTitle:"देरी से काम",
+  remindNow:"याद दिलाएं",
+  reminded:"याद दिलाया",
+  noOverdue:"कोई देरी नहीं",
+  dayOverdue:"दिन देरी",
+  daysOverdue:"दिन देरी",
+  // Valet Planning
+  bookings:"बुकिंग",
+  staffCalc:"स्टाफ कैलकुलेटर",
+  guestCount:"मेहमान संख्या",
+  estimatedCost:"अनुमानित लागत",
+  editRates:"दरें बदलें",
+  bookThis:"यह बुक करें",
+  viewFullTable:"पूरी तालिका",
+  valetProp:"प्रॉपर्टी",
+  noBookings:"अभी कोई बुकिंग नहीं",
 };
 
 export const LANGS = { en: L_EN, hi: L_HI };

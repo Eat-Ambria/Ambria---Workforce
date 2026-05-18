@@ -258,8 +258,99 @@ function Suggestions({ tasks, L }) {
   );
 }
 
+// ─── Overdue Widget ───────────────────────────────────────────────────────────
+function OverdueWidget({ dirs, user, L }) {
+  const C = useT();
+  const isMobile = useIsMobile();
+  const [reminded, setReminded] = useState({});
+  const today = new Date().toISOString().split("T")[0];
+
+  const overdueTasks = (dirs || []).filter(d => {
+    const st = d.status === "approval_req" ? "approval_requested" : d.status;
+    return st !== "completed" && d.dueDate && d.dueDate < today;
+  });
+
+  if (!overdueTasks.length) return null;
+
+  const getDays = (dueDate) => Math.floor((new Date(today) - new Date(dueDate)) / 86400000);
+
+  const getStyle = (days) => {
+    if (days >= 7) return { color: "#7B0000", bg: "#FFE4E4", border: "#CC0000", pulse: true };
+    if (days >= 4) return { color: C.red, bg: C.rBg, border: C.red, pulse: false };
+    return { color: "#B45309", bg: C.yBg, border: C.yellow, pulse: false };
+  };
+
+  const handleRemind = async (task) => {
+    const now = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    setReminded(prev => ({ ...prev, [task.id]: now }));
+    await supabase.from("notifications").insert({
+      for_user: task.to,
+      type: "overdue_reminder",
+      task_text: `⚠️ ${L.overdue||"OVERDUE"}: "${task.text.slice(0, 60)}" — ${L.dueDate||"due"} ${task.dueDate}`,
+      by_name: user.name,
+      property: task.prop || "all",
+      is_read: false
+    });
+  };
+
+  return (
+    <div style={{
+      background: C.rBg, border: `1.5px solid ${C.red}`, borderRadius: 12,
+      padding: 14, marginBottom: 12
+    }}>
+      <div style={{ fontFamily: F.d, fontSize: 13, fontWeight: 700, color: C.red, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+        ⚠️ {L.overdueTasksTitle || "Overdue Tasks"}
+        <span style={{ background: C.red, color: "#FFF", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>
+          {overdueTasks.length}
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {overdueTasks.slice(0, 5).map(task => {
+          const days = getDays(task.dueDate);
+          const sty = getStyle(days);
+          const wasReminded = !!reminded[task.id];
+          return (
+            <div key={task.id} style={{
+              background: sty.bg, border: `1px solid ${sty.border}`, borderRadius: 8,
+              padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+              ...(sty.pulse ? { animation: "overduePulse 2s ease-in-out infinite" } : {})
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: sty.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {task.text.slice(0, 55)}{task.text.length > 55 ? "…" : ""}
+                </div>
+                <div style={{ fontSize: 9, color: C.tl, marginTop: 2 }}>
+                  {task.toName} · {days} {days === 1 ? (L.dayOverdue || "day overdue") : (L.daysOverdue || "days overdue")}
+                </div>
+              </div>
+              {wasReminded ? (
+                <div style={{ fontSize: 9, color: C.green, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  ✅ {reminded[task.id]}
+                </div>
+              ) : (
+                <button onClick={() => handleRemind(task)} style={{
+                  padding: "4px 8px", borderRadius: 6, border: `1px solid ${sty.border}`,
+                  background: sty.color, color: "#FFF", fontFamily: F.b, fontSize: 9,
+                  fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0
+                }}>
+                  🔔 {L.remindNow || "Remind Now"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {overdueTasks.length > 5 && (
+          <div style={{ fontSize: 10, color: C.tl, textAlign: "center", paddingTop: 2 }}>
+            +{overdueTasks.length - 5} more
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard (main export) ──────────────────────────────────────────────────
-export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
+export default function Dashboard({ tasks, prop, user, lang, att, setView, dirs }) {
   const C = useT();
   const L = LANGS[lang];
   const isMobile = useIsMobile();
@@ -303,6 +394,9 @@ export default function Dashboard({ tasks, prop, user, lang, att, setView }) {
 
       {/* ── Fire Safety Widget ── */}
       {setView && <FireSafetyWidget setView={setView} />}
+
+      {/* ── Overdue Tasks Widget (SA + Admin only) ── */}
+      {(user.role === "sa" || user.role === "a") && <OverdueWidget dirs={dirs} user={user} L={L} />}
 
       {/* ── Absent Widget ── */}
       <AbsentWidget att={att} leaves={leaves} prop={prop} today={today} L={L} />
