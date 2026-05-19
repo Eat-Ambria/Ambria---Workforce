@@ -153,6 +153,12 @@ export const L_EN = {
   viewFullTable:"View Full Table",
   valetProp:"Property",
   noBookings:"No bookings yet",
+  tasks:"Tasks",
+  sopTasks:"SOP Tasks",
+  people:"People",
+  knowledge:"Knowledge",
+  organisation:"Organisation",
+  leave:"Leave",
 };
 
 export const L_HI = {
@@ -248,6 +254,12 @@ export const L_HI = {
   viewFullTable:"पूरी तालिका",
   valetProp:"प्रॉपर्टी",
   noBookings:"अभी कोई बुकिंग नहीं",
+  tasks:"कार्य",
+  sopTasks:"एसओपी कार्य",
+  people:"लोग",
+  knowledge:"ज्ञान",
+  organisation:"संगठन",
+  leave:"छुट्टी",
 };
 
 export const LANGS = { en: L_EN, hi: L_HI };
