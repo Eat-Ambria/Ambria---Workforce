@@ -1,0 +1,66 @@
+/* ===== Ambria Ops — global styles ===== */
+:root {
+  --maroon: #8A2438;
+  --border: #ECEEF2;
+  --ring: rgba(138, 36, 56, 0.16);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: inherit; }
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  color: #0F172A;
+  background: #F7F8FA;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; transition: opacity .15s ease, transform .06s ease, box-shadow .15s ease; }
+button:active { transform: scale(0.985); }
+button:disabled { cursor: not-allowed; }
+
+input, select, textarea {
+  font-family: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--maroon) !important;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+a { text-decoration: none; color: inherit; }
+img { max-width: 100%; }
+
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+::selection { background: rgba(138, 36, 56, 0.14); }
+
+/* subtle, professional scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #DCE0E7; border-radius: 999px; border: 2px solid #F7F8FA; }
+::-webkit-scrollbar-thumb:hover { background: #C4C8CF; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* animations */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+.overlay-in { animation: overlayIn 0.18s ease; }
+
+/* interactive card hover */
+.hoverable { transition: transform .16s ease, box-shadow .16s ease; }
+.hoverable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,24,40,0.10); }
+
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
