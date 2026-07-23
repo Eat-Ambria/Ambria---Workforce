@@ -149,11 +149,12 @@ export default function MyTasks() {
     <div>
       <SectionTitle>{t.myTasks}</SectionTitle>
 
-      {/* status filter (driven by dashboard tiles, also toggleable here) */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto' }} className="no-scrollbar">
-        {statusChips.map((sc) => (
-          <Chip key={sc.key} C={C} active={status === sc.key} onClick={() => setStatus(sc.key)}>{sc.label}</Chip>
-        ))}
+      {/* status filter — dropdown (driven by dashboard tiles, also selectable here) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Icon name="inbox" size={16} color={C.tl} />
+        <select style={inputStyle(C)} value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t.status || 'Status'}>
+          {statusChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
+        </select>
       </div>
 
       {/* category filter — full-width segmented row */}
