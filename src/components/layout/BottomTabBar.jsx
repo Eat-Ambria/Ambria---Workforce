@@ -38,6 +38,7 @@ export default function BottomTabBar() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
+            justifyContent: 'flex-start',
             gap: 3,
             padding: '9px 2px 10px',
             fontSize: 10.5,
@@ -55,7 +56,21 @@ export default function BottomTabBar() {
                   </span>
                 )}
               </span>
-              {t[item.key] || item.key}
+              <span
+                style={{
+                  textAlign: 'center',
+                  lineHeight: 1.15,
+                  // reserve two lines for every tab so single- and two-word
+                  // labels (e.g. "Repair Request") stay vertically aligned
+                  minHeight: '2.3em',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'center',
+                  width: '100%',
+                }}
+              >
+                {t[item.key] || item.key}
+              </span>
             </>
           )}
         </NavLink>

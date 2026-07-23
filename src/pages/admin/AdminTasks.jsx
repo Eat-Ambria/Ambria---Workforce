@@ -183,17 +183,23 @@ export default function AdminTasks() {
         {t.tasks}
       </SectionTitle>
 
-      {/* venue filter (left) + staff-name filter (right) on one row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+      {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         {canSeeAllProps && (
-          <div className="no-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0 }}>
-            <PropChip C={C} active={propFilter === 'all'} onClick={() => changeProp('all')}>{t.all}</PropChip>
-            {PROPERTIES.map((p) => (
-              <PropChip key={p.code} C={C} active={propFilter === p.code} onClick={() => changeProp(p.code)}>{p.name}</PropChip>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
+            <Icon name="pin" size={16} color={C.tl} />
+            <select
+              style={inputStyle(C)}
+              value={propFilter}
+              onChange={(e) => changeProp(e.target.value)}
+              aria-label={t.properties}
+            >
+              <option value="all">{t.properties} — {t.all}</option>
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+            </select>
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', maxWidth: 340, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
           <Icon name="user" size={16} color={C.tl} />
           <select
             style={inputStyle(C)}
