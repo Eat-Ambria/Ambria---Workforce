@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useColors } from '../../context/ThemeContext'
-import { useLang, useT } from '../../context/LangContext'
+import { useT } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { PROPERTY_MAP } from '../../constants/org'
 import NotificationBell from './NotificationBell'
@@ -13,8 +13,7 @@ function initials(name = '') {
 export default function Header({ showBrand, onMenu }) {
   const C = useColors()
   const t = useT()
-  const { toggle: toggleLang, lang } = useLang()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -59,12 +58,6 @@ export default function Header({ showBrand, onMenu }) {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <NotificationBell />
-        <button onClick={toggleLang} aria-label="Language" style={langBtn(C)}>
-          {lang === 'en' ? 'हिं' : 'EN'}
-        </button>
-        <button onClick={logout} aria-label={t.logout} title={t.logout} style={iconBtn(C)}>
-          <Icon name="power" size={18} />
-        </button>
         <button
           onClick={toggleAccount}
           title={t.myAccount || 'My Account'}
@@ -79,11 +72,6 @@ export default function Header({ showBrand, onMenu }) {
 const brandMark = (C) => ({
   width: 32, height: 32, borderRadius: 9, background: C.maroon, color: '#fff',
   display: 'grid', placeItems: 'center', fontWeight: 700, fontFamily: 'Georgia, serif', fontSize: 18,
-})
-
-const langBtn = (C) => ({
-  minWidth: 40, height: 38, padding: '0 10px', borderRadius: 10,
-  background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 13, fontWeight: 700,
 })
 
 const iconBtn = (C) => ({

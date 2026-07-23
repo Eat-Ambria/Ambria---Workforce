@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useColors } from '../../context/ThemeContext'
-import { useT } from '../../context/LangContext'
+import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { navForUser } from '../../constants/nav'
 import { ROLES } from '../../constants/org'
@@ -12,6 +12,7 @@ const roleLabels = (t) => ({ [ROLES.SUPER_ADMIN]: t.roleSuperAdmin, [ROLES.ADMIN
 export default function Sidebar({ mobile = false, onNavigate }) {
   const C = useColors()
   const t = useT()
+  const { toggle: toggleLang, lang } = useLang()
   const { user } = useAuth()
   const items = navForUser(user)
   const fixCount = useFixRequestCount()
@@ -75,9 +76,24 @@ export default function Sidebar({ mobile = false, onNavigate }) {
         ))}
       </nav>
 
-      <div style={{ marginTop: 'auto', padding: '14px 8px 2px', borderTop: `1px solid ${C.border}` }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{user?.name}</div>
-        <div style={{ fontSize: 12, color: C.faint }}>{roleLabels(t)[user?.role] || ''}</div>
+      <div style={{ marginTop: 'auto' }}>
+        {/* language toggle */}
+        <button
+          onClick={toggleLang}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+            padding: '11px 13px', borderRadius: 11, fontSize: 14.5, fontWeight: 600,
+            color: C.tl, background: 'transparent', border: 'none', cursor: 'pointer',
+          }}
+        >
+          <Icon name="globe" size={20} />
+          {lang === 'en' ? 'हिंदी में देखें' : 'View in English'}
+        </button>
+
+        <div style={{ padding: '14px 8px 2px', borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{user?.name}</div>
+          <div style={{ fontSize: 12, color: C.faint }}>{roleLabels(t)[user?.role] || ''}</div>
+        </div>
       </div>
     </aside>
   )

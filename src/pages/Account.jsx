@@ -15,7 +15,7 @@ const isPin = (v) => /^\d{4}$/.test(v)
 export default function Account() {
   const C = useColors()
   const t = useT()
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, logout } = useAuth()
 
   const [phone, setPhone] = useState(user?.phone || '')
   const [pin, setPin] = useState('')
@@ -171,6 +171,11 @@ export default function Account() {
 
         <Button variant="primary" onClick={save} disabled={busy} full>{t.save}</Button>
       </Card>
+
+      {/* logout lives here, under My Account */}
+      <Button variant="danger" onClick={logout} full style={{ marginTop: 14 }}>
+        <Icon name="power" size={16} color="#fff" style={{ marginRight: 6 }} /> {t.logout}
+      </Button>
     </div>
   )
 }
