@@ -159,17 +159,18 @@ function AdminDashboard({ user }) {
         {t.welcome}, {user?.name}
       </SectionTitle>
 
-      {/* venue selector (left) + staff filter (right) on one row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+      {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
         {scopeAll && (
-          <div className="no-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0 }}>
-            <PropChip C={C} active={prop === 'all'} onClick={() => setProp('all')}>{t.all}</PropChip>
-            {PROPERTIES.map((p) => (
-              <PropChip key={p.code} C={C} active={prop === p.code} onClick={() => setProp(p.code)}>{p.name}</PropChip>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
+            <Icon name="pin" size={16} color={C.tl} />
+            <select style={inputStyle(C)} value={prop} onChange={(e) => setProp(e.target.value)} aria-label={t.properties}>
+              <option value="all">{t.properties} — {t.all}</option>
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+            </select>
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', maxWidth: 340, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
           <Icon name="user" size={16} color={C.tl} />
           <select
             style={inputStyle(C)}
@@ -448,21 +449,6 @@ const FIX_STATUS_LABEL = { assigned: 'pending', in_progress: 'inProgress', appro
 
 const kpiGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }
 const widgetGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }
-
-function PropChip({ children, active, onClick, C }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        whiteSpace: 'nowrap', padding: '8px 15px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
-        background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
-        border: `1px solid ${active ? C.maroon : C.border}`,
-      }}
-    >
-      {children}
-    </button>
-  )
-}
 
 function Kpi({ C, icon, value, label, tone, border, onClick }) {
   return (
