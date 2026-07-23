@@ -9,7 +9,7 @@ import Icon from '../common/Icon'
 
 const roleLabels = (t) => ({ [ROLES.SUPER_ADMIN]: t.roleSuperAdmin, [ROLES.ADMIN]: t.roleAdmin, [ROLES.EMPLOYEE]: t.roleEmployee })
 
-export default function Sidebar() {
+export default function Sidebar({ mobile = false, onNavigate }) {
   const C = useColors()
   const t = useT()
   const { user } = useAuth()
@@ -18,16 +18,18 @@ export default function Sidebar() {
 
   return (
     <aside
+      className={mobile ? 'no-scrollbar' : undefined}
       style={{
-        width: 244,
+        width: mobile ? '100%' : 244,
         background: C.card,
-        borderRight: `1px solid ${C.border}`,
-        height: '100vh',
-        position: 'sticky',
+        borderRight: mobile ? 'none' : `1px solid ${C.border}`,
+        height: mobile ? '100%' : '100vh',
+        position: mobile ? 'static' : 'sticky',
         top: 0,
         display: 'flex',
         flexDirection: 'column',
         padding: '20px 14px',
+        overflowY: 'auto',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '2px 8px 22px' }}>
@@ -43,6 +45,7 @@ export default function Sidebar() {
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={onNavigate}
             style={({ isActive }) => ({
               position: 'relative',
               display: 'flex',

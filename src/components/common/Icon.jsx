@@ -47,6 +47,7 @@ const PATHS = {
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /></>,
   download: <><path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></>,
   copy: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>,
+  menu: <><path d="M3 6h18M3 12h18M3 18h18" /></>,
 }
 
 export default function Icon({ name, size = 20, color = 'currentColor', strokeWidth = 2, fill = 'none', style }) {

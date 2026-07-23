@@ -10,7 +10,7 @@ function initials(name = '') {
   return name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'A'
 }
 
-export default function Header({ showBrand }) {
+export default function Header({ showBrand, onMenu }) {
   const C = useColors()
   const t = useT()
   const { toggle: toggleLang, lang } = useLang()
@@ -41,6 +41,11 @@ export default function Header({ showBrand }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+        {onMenu && (
+          <button onClick={onMenu} aria-label="Menu" style={iconBtn(C)}>
+            <Icon name="menu" size={20} />
+          </button>
+        )}
         {showBrand && (
           <div style={brandMark(C)}>A</div>
         )}
