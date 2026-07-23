@@ -30,7 +30,9 @@ export function navForUser(user) {
   return base.filter((i) => ALWAYS_VISIBLE.includes(i.path) || access.includes(i.path))
 }
 
-// Items shown in the mobile bottom tab bar (max 5).
+// Items shown in the mobile bottom tab bar. All of the user's nav items are
+// included — the bar scrolls horizontally when they don't all fit (e.g. admins
+// with Vendors + User Management).
 export function bottomTabsForUser(user) {
-  return navForUser(user).slice(0, 5)
+  return navForUser(user)
 }

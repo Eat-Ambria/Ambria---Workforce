@@ -31,7 +31,8 @@ export default function AppLayout() {
           style={{
             flex: 1,
             padding: 16,
-            paddingBottom: isMobile ? 84 : 24,
+            // clear the fixed bottom tab bar + the phone's home-indicator safe area
+            paddingBottom: isMobile ? 'calc(80px + env(safe-area-inset-bottom, 0px))' : 24,
             maxWidth: 1100,
             width: '100%',
             margin: '0 auto',

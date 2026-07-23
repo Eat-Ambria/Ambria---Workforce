@@ -15,7 +15,7 @@ export default function BottomTabBar() {
 
   return (
     <nav
-      className="safe-bottom"
+      className="safe-bottom no-scrollbar"
       style={{
         position: 'fixed',
         bottom: 0,
@@ -24,8 +24,10 @@ export default function BottomTabBar() {
         background: C.card,
         borderTop: `1px solid ${C.border}`,
         display: 'flex',
-        justifyContent: 'space-around',
+        justifyContent: 'flex-start',
         alignItems: 'stretch',
+        overflowX: 'auto',       // scroll horizontally when items overflow (e.g. admin's Vendors/Users)
+        WebkitOverflowScrolling: 'touch',
         zIndex: 500,
       }}
     >
@@ -34,14 +36,14 @@ export default function BottomTabBar() {
           key={item.path}
           to={item.path}
           style={({ isActive }) => ({
-            flex: 1,
+            flex: '1 0 auto',
+            minWidth: 66,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'flex-start',
             gap: 3,
-            padding: '9px 1px 10px',
-            minWidth: 0,
+            padding: '9px 8px 10px',
             fontSize: 'clamp(9px, 2.6vw, 10.5px)',
             fontWeight: 600,
             color: isActive ? C.maroon : C.faint,
@@ -57,19 +59,7 @@ export default function BottomTabBar() {
                   </span>
                 )}
               </span>
-              <span
-                style={{
-                  textAlign: 'center',
-                  lineHeight: 1.15,
-                  // reserve two lines for every tab so single- and two-word
-                  // labels (e.g. "Repair Request") stay vertically aligned
-                  minHeight: '2.3em',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'center',
-                  width: '100%',
-                }}
-              >
+              <span style={{ whiteSpace: 'nowrap', lineHeight: 1.15, textAlign: 'center' }}>
                 {t[item.key] || item.key}
               </span>
             </>
