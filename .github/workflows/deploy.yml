@@ -23,7 +23,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # npm install (not `npm ci`): the lockfile is generated on Windows and
+      # omits Linux-only optional binaries (esbuild, @emnapi/*), which makes the
+      # strict `npm ci` fail on the Linux runner. `npm install` resolves them.
+      - run: npm install --no-audit --no-fund
       - run: npm run build
         env:
           # Set these in: GitHub repo -> Settings -> Secrets and variables -> Actions
