@@ -256,6 +256,7 @@ function WorkModal({ task, onClose, onSaved, user }) {
   const isInProgress = task.status === TASK_STATUS.IN_PROGRESS
   const isWaiting = task.status === TASK_STATUS.COMPLETION_REQUESTED
   const isDone = task.status === TASK_STATUS.COMPLETED
+  const isIssueState = [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING, TASK_STATUS.ISSUE_RESOLVED].includes(task.status)
 
   const canStart = beforePhotos.length > 0   // must add a "before" photo to start
   const canComplete = photos.length > 0      // must add an "after" photo to submit
@@ -408,8 +409,10 @@ function WorkModal({ task, onClose, onSaved, user }) {
       {isWaiting && <Notice C={C} tone={C.yellow} bg={C.yBg} icon="clock" title={t.completionRequested} sub={t.awaitingApprovalMsg} />}
       {isDone && <Notice C={C} tone={C.green} bg={C.gBg} icon="check" title={t.completed} sub={t.completedMsg} />}
       {task.status === TASK_STATUS.ISSUE && <Notice C={C} tone={C.red} bg={C.rBg} icon="warning" title={t.issue} sub={task.notes} />}
+      {task.status === TASK_STATUS.ISSUE_WORKING && <Notice C={C} tone={C.yellow} bg={C.yBg} icon="clock" title={t.issueWorking} sub={t.issueWorkingMsg} />}
+      {task.status === TASK_STATUS.ISSUE_RESOLVED && <Notice C={C} tone={C.green} bg={C.gBg} icon="check" title={t.issueResolved} sub={t.issueResolvedMsg} />}
 
-      {!isDone && !isWaiting && (
+      {!isDone && !isWaiting && !isIssueState && (
         <div style={{ marginTop: 16 }}>
           {!issueMode ? (
             <button onClick={() => setIssueMode(true)} style={{ background: 'transparent', color: C.red, fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>

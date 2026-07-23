@@ -7,6 +7,8 @@ export const STATUS_META = {
   [TASK_STATUS.COMPLETION_REQUESTED]: { key: 'completionRequested', color: 'yellow', bg: 'yBg' },
   [TASK_STATUS.COMPLETED]: { key: 'completed', color: 'green', bg: 'gBg' },
   [TASK_STATUS.ISSUE]: { key: 'issue', color: 'red', bg: 'rBg' },
+  [TASK_STATUS.ISSUE_WORKING]: { key: 'issueWorking', color: 'yellow', bg: 'yBg' },
+  [TASK_STATUS.ISSUE_RESOLVED]: { key: 'issueResolved', color: 'green', bg: 'gBg' },
 }
 
 export function statusColors(status, C) {

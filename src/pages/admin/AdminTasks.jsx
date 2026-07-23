@@ -30,7 +30,7 @@ export default function AdminTasks() {
   const presetMember = location.state?.member // staff filter carried from the dashboard
 
   const PAGE_SIZE = 20
-  const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'completed', 'review', 'all']
+  const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'completed', 'all']
 
   const [members, setMembers] = useState([])
   const [list, setList] = useState([])       // current page of rows for the active tab
@@ -65,6 +65,7 @@ export default function AdminTasks() {
     if (key === 'inprogress') return q.eq('status', TASK_STATUS.IN_PROGRESS)
     if (key === 'completed') return q.eq('status', TASK_STATUS.COMPLETED)
     if (key === 'review') return q.eq('status', TASK_STATUS.COMPLETION_REQUESTED)
+    if (key === 'issues') return q.in('status', [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING])
     if (key === 'overdue') return q.lt('due_date', today).neq('status', TASK_STATUS.COMPLETED)
     return q // 'all'
   }, [today])
@@ -140,6 +141,7 @@ export default function AdminTasks() {
     { key: 'inprogress', label: `${t.inProgress}${c('inprogress')}` },
     { key: 'completed', label: `${t.completed}${c('completed')}` },
     { key: 'review', label: `${t.reviewQueue}${c('review')}` },
+    { key: 'issues', label: `${t.issues}${c('issues')}` },
     { key: 'all', label: `${t.all} (${counts.all || 0})` },
   ]
 
@@ -370,6 +372,25 @@ function ReviewModal({ task, user, onClose, onSaved }) {
     }
   }
 
+  // ---- issue lifecycle: admin acknowledges & resolves a staff-reported issue ----
+  // notify the staff member who reported it (bell + push via the notifications table)
+  async function notifyEmployee(type) {
+    if (!task.assigned_to) return
+    await supabase.from('notifications').insert({
+      type, task_text: task.title, for_user: task.assigned_to, property: task.property, entity_id: String(task.id),
+    })
+  }
+  async function startIssue() {
+    if (await update({ status: TASK_STATUS.ISSUE_WORKING })) { await notifyEmployee('issue_working'); onSaved() }
+  }
+  async function resolveIssue() {
+    if (await update({ status: TASK_STATUS.ISSUE_RESOLVED })) { await notifyEmployee('issue_resolved'); onSaved() }
+  }
+
+  const isIssue = task.status === TASK_STATUS.ISSUE
+  const isIssueWorking = task.status === TASK_STATUS.ISSUE_WORKING
+  const isIssueState = isIssue || isIssueWorking || task.status === TASK_STATUS.ISSUE_RESOLVED
+
   return (
     <Modal
       open onClose={onClose} title={task.title}
@@ -385,6 +406,16 @@ function ReviewModal({ task, user, onClose, onSaved }) {
             <Button variant="success" onClick={approve} disabled={busy} style={{ flex: 2 }}>{t.approve}</Button>
           </>
         )
+      ) : isIssue ? (
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
+          <Button variant="primary" onClick={startIssue} disabled={busy} style={{ flex: 2 }}>{t.startWorkingIssue}</Button>
+        </>
+      ) : isIssueWorking ? (
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
+          <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>
+        </>
       ) : task.status === TASK_STATUS.COMPLETED ? (
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
@@ -402,6 +433,16 @@ function ReviewModal({ task, user, onClose, onSaved }) {
       </div>
       <div style={{ fontSize: 14, marginBottom: 6 }}>{t.members}: <b>{task.assignee_name || '—'}</b></div>
       {task.completion_requested_at && <div style={{ fontSize: 13, color: C.tl, marginBottom: 12 }}>{fmtDateTime(task.completion_requested_at)}</div>}
+
+      {/* staff-reported issue text */}
+      {isIssueState && task.notes && (
+        <div style={{ background: C.rBg, border: `1px solid ${C.red}22`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.red, fontWeight: 700, fontSize: 13.5 }}>
+            <Icon name="warning" size={16} /> {t.issue}
+          </div>
+          <div style={{ fontSize: 14, color: C.text, marginTop: 6 }}>{task.notes}</div>
+        </div>
+      )}
 
       {/* time taken */}
       {durMs != null && (

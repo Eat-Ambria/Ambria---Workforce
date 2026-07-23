@@ -86,7 +86,9 @@ export const TASK_STATUS = {
   IN_PROGRESS: 'in_progress',
   COMPLETION_REQUESTED: 'completion_requested',
   COMPLETED: 'completed',
-  ISSUE: 'issue',
+  ISSUE: 'issue',                 // staff reported a problem
+  ISSUE_WORKING: 'issue_working', // admin is working on the reported issue
+  ISSUE_RESOLVED: 'issue_resolved', // admin resolved the reported issue
 }
 
 export const PRIORITIES = ['low', 'medium', 'high']

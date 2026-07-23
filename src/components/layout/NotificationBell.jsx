@@ -26,6 +26,8 @@ function meta(n, hi) {
     case 'task_approved': return { icon: 'check', link: '/my-tasks', title: hi ? 'आपका काम मंज़ूर हुआ' : 'Your work was approved', body: item }
     case 'task_submitted': return { icon: 'inbox', link: '/tasks', title: hi ? 'मंज़ूरी के लिए टास्क आया' : 'Task submitted for approval', body: item + who }
     case 'task_issue': return { icon: 'warning', link: '/tasks', title: hi ? 'स्टाफ ने समस्या बताई' : 'Staff reported an issue', body: item + who }
+    case 'issue_working': return { icon: 'clock', link: '/my-tasks', title: hi ? 'एडमिन आपकी समस्या पर काम कर रहा है' : 'Admin is working on your issue', body: item }
+    case 'issue_resolved': return { icon: 'check', link: '/my-tasks', title: hi ? 'आपकी समस्या हल हो गई' : 'Your issue was resolved', body: item }
     case 'fix_assigned': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'मरम्मत अनुरोध सौंपा गया' : 'Repair request assigned to you', body: item }
     case 'fix_new': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'नया मरम्मत अनुरोध' : 'New repair request raised', body: item + who }
     case 'fix_approval': return { icon: 'inbox', link: '/task-board', title: hi ? 'मरम्मत मंज़ूरी के लिए' : 'Repair awaiting approval', body: item + who }

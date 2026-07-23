@@ -32,6 +32,8 @@ function render(n: Record<string, unknown>, lang: string) {
     task_approved: ['Your work was approved', 'आपका काम मंज़ूर हुआ', 'my-tasks'],
     task_submitted: ['Task submitted for approval', 'मंज़ूरी के लिए टास्क आया', 'tasks'],
     task_issue: ['Staff reported an issue', 'स्टाफ ने समस्या बताई', 'tasks'],
+    issue_working: ['Admin is working on your issue', 'एडमिन आपकी समस्या पर काम कर रहा है', 'my-tasks'],
+    issue_resolved: ['Your issue was resolved', 'आपकी समस्या हल हो गई', 'my-tasks'],
     task_due: ['Task due / overdue', 'टास्क की समय-सीमा', 'my-tasks'],
     fix_assigned: ['Fix request assigned to you', 'फिक्स रिक्वेस्ट सौंपी गई', 'task-board'],
     fix_new: ['New fix request raised', 'नई फिक्स रिक्वेस्ट', 'task-board'],
