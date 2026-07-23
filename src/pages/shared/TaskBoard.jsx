@@ -410,7 +410,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const superAdmin = isSuperAdmin(user?.role) // super admin also picks the property when assigning
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
+  const [propFilter, setPropFilter] = useState(row.property || 'pp') // property to assign within (super admin)
   const [deptFilter, setDeptFilter] = useState('all') // narrow the assign list by department
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
   const [note, setNote] = useState(row.resolution_note || '')
@@ -418,21 +420,30 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const [reassigning, setReassigning] = useState(false) // admin editing the assignment
   const [rating, setRating] = useState(row.rating || 0)  // 1..5 stars given by admin
 
-  // departments that actually have staff, for the assign filter
+  // super admin assigns within a chosen property; other admins are already scoped
+  const scopedMembers = useMemo(
+    () => (superAdmin ? members.filter((m) => m.property === propFilter) : members),
+    [members, superAdmin, propFilter]
+  )
+
+  // departments that actually have staff in the chosen property, for the assign filter
   const deptOptions = useMemo(() => {
-    const codes = [...new Set(members.map((m) => m.department).filter(Boolean))]
+    const codes = [...new Set(scopedMembers.map((m) => m.department).filter(Boolean))]
     return codes
       .map((code) => ({ code, name: DEPARTMENT_MAP[code]?.name || code }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [members])
+  }, [scopedMembers])
 
-  // staff shown in the assign dropdown — filtered by the chosen department
+  // staff shown in the assign dropdown — filtered by property (super admin) + department
   const assignable = useMemo(
-    () => (deptFilter === 'all' ? members : members.filter((m) => m.department === deptFilter)),
-    [members, deptFilter]
+    () => (deptFilter === 'all' ? scopedMembers : scopedMembers.filter((m) => m.department === deptFilter)),
+    [scopedMembers, deptFilter]
   )
 
-  // if the current pick isn't in the filtered department, clear it
+  // changing the property resets the department filter
+  useEffect(() => { setDeptFilter('all') }, [propFilter])
+
+  // if the current pick isn't in the filtered list, clear it
   useEffect(() => {
     if (assignTo && !assignable.some((m) => m.id === assignTo)) setAssignTo('')
   }, [assignable, assignTo])
@@ -472,6 +483,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     setStatus(status, {
       assigned_to: assignTo,
       assigned_to_name: m?.name || null,
+      property: superAdmin ? propFilter : (row.property || null),
       department: m?.department || row.department || null,
       due_date: dueDate || null,
     })
@@ -553,6 +565,13 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       {/* assignment editor — shown for a new (open) request or when reassigning */}
       {admin && (s === 'open' || reassigning) && (
         <>
+          {superAdmin && (
+            <Field label={t.properties || 'Property'}>
+              <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)}>
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            </Field>
+          )}
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1 }}>
               <Field label={t.department}>
