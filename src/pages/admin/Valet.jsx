@@ -153,13 +153,14 @@ export default function Valet() {
         <BookingsList C={C} t={t} user={user} scopeAll={scopeAll} reloadSignal={bump} onEdit={openEdit} />
       ) : (
         <>
-          {/* property filter — only for admins who oversee all properties */}
+          {/* property filter — dropdown, only for admins who oversee all properties */}
           {scopeAll && (
-            <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
-              <PropChip C={C} active={propFilter === 'all'} onClick={() => setPropFilter('all')}>{t.all}</PropChip>
-              {PROPERTIES.map((p) => (
-                <PropChip key={p.code} C={C} active={propFilter === p.code} onClick={() => setPropFilter(p.code)}>{p.name}</PropChip>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, maxWidth: 320 }}>
+              <Icon name="pin" size={16} color={C.tl} />
+              <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
+                <option value="all">{t.properties} — {t.all}</option>
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
             </div>
           )}
 
@@ -824,11 +825,12 @@ function BookingsList({ C, t, user, scopeAll, reloadSignal, onEdit }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {scopeAll && (
-          <div className="no-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0 }}>
-            <PropChip C={C} active={propFilter === 'all'} onClick={() => setPropFilter('all')}>{t.all}</PropChip>
-            {PROPERTIES.map((p) => (
-              <PropChip key={p.code} C={C} active={propFilter === p.code} onClick={() => setPropFilter(p.code)}>{p.name}</PropChip>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
+            <Icon name="pin" size={16} color={C.tl} />
+            <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
+              <option value="all">{t.properties} — {t.all}</option>
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+            </select>
           </div>
         )}
         {upcoming.length > 0 && (
@@ -1029,21 +1031,6 @@ function MatrixEditor({ C, t, property, matrix, onSaved, onCancel }) {
 }
 
 /* ------------------------------- primitives ------------------------------- */
-function PropChip({ children, active, onClick, C }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
-        background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
-        border: `1px solid ${active ? C.maroon : C.border}`,
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
 function navBtn(C, disabled) {
   return {
     width: 38, height: 38, borderRadius: 10, border: `1px solid ${C.border}`, background: C.card,
