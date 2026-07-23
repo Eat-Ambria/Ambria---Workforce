@@ -213,11 +213,11 @@ export default function AdminTasks() {
         </div>
       </div>
 
-      {/* category filter — daily / weekly / monthly */}
-      <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
-        <PropChip C={C} active={catFilter === 'all'} onClick={() => changeCat('all')}>{t.all}</PropChip>
+      {/* category filter — full-width segmented row: all / daily / weekly / monthly */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <PropChip C={C} full active={catFilter === 'all'} onClick={() => changeCat('all')}>{t.all}</PropChip>
         {TASK_CATEGORIES.map((cat) => (
-          <PropChip key={cat} C={C} active={catFilter === cat} onClick={() => changeCat(cat)}>{t[cat]}</PropChip>
+          <PropChip key={cat} C={C} full active={catFilter === cat} onClick={() => changeCat(cat)}>{t[cat]}</PropChip>
         ))}
       </div>
 
@@ -302,7 +302,7 @@ export default function AdminTasks() {
   )
 }
 
-function PropChip({ children, active, onClick, C }) {
+function PropChip({ children, active, onClick, C, full }) {
   return (
     <button
       onClick={onClick}
@@ -310,6 +310,7 @@ function PropChip({ children, active, onClick, C }) {
         whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
         background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
+        flex: full ? 1 : undefined, // full: stretch to share the row evenly (segmented control)
       }}
     >
       {children}
