@@ -40,15 +40,16 @@ export default function BottomTabBar() {
             alignItems: 'center',
             justifyContent: 'flex-start',
             gap: 3,
-            padding: '9px 2px 10px',
-            fontSize: 10.5,
+            padding: '9px 1px 10px',
+            minWidth: 0,
+            fontSize: 'clamp(9px, 2.6vw, 10.5px)',
             fontWeight: 600,
             color: isActive ? C.maroon : C.faint,
           })}
         >
           {({ isActive }) => (
             <>
-              <span style={{ position: 'relative', padding: '4px 16px', borderRadius: 999, background: isActive ? C.maroonSoft : 'transparent', display: 'grid', placeItems: 'center' }}>
+              <span style={{ position: 'relative', padding: '4px 12px', borderRadius: 999, background: isActive ? C.maroonSoft : 'transparent', display: 'grid', placeItems: 'center' }}>
                 <Icon name={item.icon} size={21} />
                 {item.path === '/task-board' && fixCount > 0 && (
                   <span style={{ position: 'absolute', top: -1, right: 8, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: C.maroon, color: '#fff', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, border: `1.5px solid ${C.card}` }}>

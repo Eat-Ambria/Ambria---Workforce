@@ -46,7 +46,15 @@ export default function NotificationBell() {
   const navigate = useNavigate()
   const { items, unread, markRead, markAll } = useNotifications()
   const [open, setOpen] = useState(false)
+  const [top, setTop] = useState(0)
   const ref = useRef(null)
+  const btnRef = useRef(null)
+
+  // open below the bell but pinned to the viewport's right edge (see panel style)
+  const toggle = () => {
+    if (!open && btnRef.current) setTop(btnRef.current.getBoundingClientRect().bottom + 8)
+    setOpen((o) => !o)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -74,7 +82,8 @@ export default function NotificationBell() {
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={toggle}
         aria-label={t.notifications || 'Notifications'}
         title={t.notifications || 'Notifications'}
         style={{ position: 'relative', width: 38, height: 38, borderRadius: 10, background: C.card, border: `1px solid ${C.border}`, color: C.tl, display: 'grid', placeItems: 'center' }}
@@ -88,7 +97,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 500, width: 'min(340px, calc(100vw - 24px))', background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: C.shadowLg || C.shadow, overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top, right: 12, zIndex: 600, width: 'min(360px, calc(100vw - 24px))', background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: C.shadowLg || C.shadow, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: `1px solid ${C.border}` }}>
             <span style={{ fontWeight: 800, fontSize: 14.5, color: C.text }}>{t.notifications || 'Notifications'}</span>
             {unread > 0 && (
