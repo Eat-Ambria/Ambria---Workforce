@@ -46,7 +46,6 @@ export default function AdminTasks() {
   const [memberFilter, setMemberFilter] = useState(presetMember || 'all') // all | <staff id>
   const [review, setReview] = useState(null)
   const [creating, setCreating] = useState(false)
-  const [xlate, setXlate] = useState('') // one-time Hindi-title backfill status
 
   const today = todayISO()
 
@@ -115,22 +114,6 @@ export default function AdminTasks() {
 
   useEffect(() => { load() }, [load])
 
-  // one-time: fill Hindi titles for existing tasks that don't have one yet
-  async function backfillHindiTitles() {
-    setXlate('working')
-    const { data } = await supabase.from('tasks').select('id, title').is('title_hi', null)
-    let done = 0
-    for (const row of (data || [])) {
-      if (!row.title) continue
-      try {
-        const hiTitle = await translateToHindi(row.title)
-        if (hiTitle) { await supabase.from('tasks').update({ title_hi: hiTitle }).eq('id', row.id); done++ }
-      } catch { /* skip this one */ }
-    }
-    setXlate(`done:${done}`)
-    load()
-  }
-
   // filter/tab changes reset to the first page (single fetch, no double-load)
   const changeTab = (k) => { setTab(k); setPage(0) }
   const changeProp = (p) => { setPropFilter(p); setPage(0) }
@@ -169,15 +152,9 @@ export default function AdminTasks() {
     <div>
       <SectionTitle
         right={(
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {xlate === 'working'
-              ? <span style={{ fontSize: 12.5, color: C.tl }}>{t.translating || 'Translating…'}</span>
-              : xlate.startsWith('done:') && <span style={{ fontSize: 12.5, color: C.green }}>+{xlate.slice(5)} हिंदी</span>}
-            <Button variant="ghost" onClick={backfillHindiTitles} disabled={xlate === 'working'} title={t.hindiTitles || 'Fill Hindi titles'}>
-              <Icon name="refresh" size={15} style={{ marginRight: 4 }} />{t.hindiTitles || 'Hindi titles'}
-            </Button>
-            <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />{t.tasks}</Button>
-          </div>
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />{t.tasks}
+          </Button>
         )}
       >
         {t.tasks}
