@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useColors } from '../../context/ThemeContext'
 import { useLang, useT } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
@@ -16,8 +16,12 @@ export default function Header({ showBrand }) {
   const { toggle: toggleLang, lang } = useLang()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const prop = PROPERTY_MAP[user?.property]?.name || ''
+  const onAccount = location.pathname === '/account'
+  // toggle: open My Account, or if already there, close it (go back)
+  const toggleAccount = () => (onAccount ? navigate(-1) : navigate('/account'))
 
   return (
     <header
@@ -56,7 +60,12 @@ export default function Header({ showBrand }) {
         <button onClick={logout} aria-label={t.logout} title={t.logout} style={iconBtn(C)}>
           <Icon name="power" size={18} />
         </button>
-        <button onClick={() => navigate('/account')} title={t.myAccount || 'My Account'} aria-label={t.myAccount || 'My Account'} style={{ ...avatar(C), cursor: 'pointer' }}>{initials(user?.name)}</button>
+        <button
+          onClick={toggleAccount}
+          title={t.myAccount || 'My Account'}
+          aria-label={t.myAccount || 'My Account'}
+          style={{ ...avatar(C), cursor: 'pointer', ...(onAccount ? { background: C.maroon, color: '#fff' } : {}) }}
+        >{initials(user?.name)}</button>
       </div>
     </header>
   )
