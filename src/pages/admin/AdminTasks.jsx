@@ -211,16 +211,9 @@ export default function AdminTasks() {
             const od = isTaskOverdue(task, today)
             return (
               <Card key={task.id} onClick={() => setReview(task)} style={{ cursor: 'pointer', borderLeft: `4px solid ${sc.color}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>{task.title}</span>
-                      {task.category && (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, padding: '2px 8px', borderRadius: 999 }}>
-                          {t[task.category]}
-                        </span>
-                      )}
-                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{task.title}</div>
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
                       {task.assignee_name || '—'}{task.area ? ` · ${task.area}` : ''}
                     </div>
@@ -236,8 +229,9 @@ export default function AdminTasks() {
                       </div>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexShrink: 0 }}>
-                    <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+                  {/* right column: status + fixed-width category badge, vertically centered,
+                      so Daily/Weekly/Monthly line up in one straight column across cards */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     {task.status === TASK_STATUS.COMPLETED && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setReview(task) }}
@@ -247,6 +241,12 @@ export default function AdminTasks() {
                       >
                         <Icon name="close" size={18} color={C.tl} />
                       </button>
+                    )}
+                    <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+                    {task.category && (
+                      <span style={{ minWidth: 62, textAlign: 'center', fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, padding: '3px 6px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                        {t[task.category]}
+                      </span>
                     )}
                   </div>
                 </div>
