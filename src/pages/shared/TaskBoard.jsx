@@ -157,6 +157,9 @@ export default function TaskBoard() {
         {t.taskBoard}
       </SectionTitle>
 
+      {/* admins can grab the public (no-login) repair-request link to share */}
+      {admin && <PublicLinkBar C={C} t={t} />}
+
       {/* staff view toggle — work assigned to me vs requests I raised */}
       {!admin && (
         <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
@@ -243,6 +246,46 @@ export default function TaskBoard() {
 
       {creating && <PostModal user={user} members={members} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load() }} />}
       {active && <DetailModal row={active} user={user} admin={admin} members={members} onClose={() => { setActive(null); load() }} onSaved={() => { setActive(null); load() }} />}
+    </div>
+  )
+}
+
+// Admin-only bar showing the PUBLIC (no-login) repair-request link + a copy
+// button, so the shareable link can always be found without memorizing it.
+function PublicLinkBar({ C, t }) {
+  const [copied, setCopied] = useState(false)
+  // origin + Vite base ('/Ambria---Workforce/') + route → full public URL
+  const link = `${window.location.origin}${import.meta.env.BASE_URL}fix-request`
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link)
+    } catch {
+      // clipboard blocked (e.g. non-secure context) — select the field instead
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Icon name="taskBoard" size={15} color={C.maroon} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{t.publicRepairLink}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          readOnly
+          value={link}
+          onFocus={(e) => e.target.select()}
+          style={{ ...inputStyle(C), flex: 1, minWidth: 220, fontSize: 13 }}
+        />
+        <Button variant="soft" onClick={copy} style={{ padding: '9px 14px', flexShrink: 0 }}>
+          <Icon name={copied ? 'check' : 'copy'} size={15} color={C.maroon} style={{ marginRight: 4 }} />
+          {copied ? t.copied : t.copy}
+        </Button>
+      </div>
+      <div style={{ fontSize: 12, color: C.tl, marginTop: 8 }}>{t.publicLinkHint}</div>
     </div>
   )
 }
