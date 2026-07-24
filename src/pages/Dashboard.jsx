@@ -116,10 +116,10 @@ function AdminDashboard({ user }) {
     setD({
       task: {
         total: cnt(total), pending: cnt(pending), inProgress: cnt(inProgress),
-        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue) + cnt(boardOverdue),
+        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue),
         priority: { high: cnt(pHigh), medium: cnt(pMed), low: cnt(pLow) },
       },
-      board: { open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone) },
+      board: { open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue) },
       vendors: cnt(vendors),
       fire: fireStat,
       chem: { entries: chemRows.length, total: chemRows.reduce((s, r) => s + Number(r.quantity || 0), 0) },
@@ -201,6 +201,7 @@ function AdminDashboard({ user }) {
         <Widget C={C} icon="taskBoard" title={t.taskBoard} onView={() => go('/task-board')}>
           <Row C={C} label="Open" value={d.board.open} tone={C.blue} />
           <Row C={C} label={t.inProgress} value={d.board.progress} tone={C.yellow} />
+          <Row C={C} label={t.overdue} value={d.board.overdue} tone={C.red} danger={d.board.overdue > 0} />
           <Row C={C} label={t.completed} value={d.board.done} tone={C.green} />
         </Widget>
 
@@ -310,7 +311,8 @@ function EmployeeDashboard({ user }) {
         inProgress: c((r) => r.status === TASK_STATUS.IN_PROGRESS),
         waiting: c((r) => r.status === TASK_STATUS.COMPLETION_REQUESTED),
         done: c((r) => r.status === TASK_STATUS.COMPLETED),
-        overdue: c((r) => isTaskOverdue(r, today)) + fixOverdue,
+        overdue: c((r) => isTaskOverdue(r, today)),
+        fixOverdue,
         priorityTasks,
         fixRequests,
         training,
@@ -331,6 +333,7 @@ function EmployeeDashboard({ user }) {
       <div style={kpiGrid}>
         <Kpi C={C} icon="tasks" tone={C.maroon} value={s.total} label={t.totalTasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
         <Kpi C={C} icon="warning" tone={C.red} border={C.red} value={s.overdue} label={t.overdue} onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
+        <Kpi C={C} icon="taskBoard" tone={TR_ORANGE} border={TR_ORANGE} value={s.fixOverdue} label={lang === 'hi' ? 'मरम्मत — समय पार' : 'Overdue Repairs'} onClick={() => navigate('/task-board')} />
         <Kpi C={C} icon="myTasks" tone={C.yellow} border={C.yellow} value={s.pending} label={t.pending} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.PENDING } })} />
         <Kpi C={C} icon="refresh" tone={C.blue} value={s.inProgress} label={t.inProgress} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.IN_PROGRESS } })} />
         <Kpi C={C} icon="clock" tone={C.indigo} value={s.waiting} label={t.completionRequested} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
