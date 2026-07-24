@@ -93,6 +93,10 @@ Deno.serve(async (req) => {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           msg,
+          // 'high' urgency = deliver EVERY notification immediately (FCM/Android
+          // & Apple), instead of batching to save battery. TTL 5min so a stale
+          // push expires rather than arriving much later.
+          { urgency: 'high', TTL: 300 },
         )
         sent++
         console.log('sent OK to', s.endpoint.slice(0, 40))
