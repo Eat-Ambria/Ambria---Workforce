@@ -455,37 +455,28 @@ function ReviewModal({ task, user, onClose, onSaved }) {
   return (
     <Modal
       open onClose={onClose} title={task.title}
-      footer={isQueue ? (
-        rejectMode ? (
-          <>
-            <Button variant="ghost" onClick={() => setRejectMode(false)} style={{ flex: 1 }}>{t.cancel}</Button>
-            <Button variant="danger" onClick={sendBack} disabled={busy || (!rejectNote.trim() && !rejectVoice)} style={{ flex: 2 }}>{t.reject}</Button>
-          </>
-        ) : (
-          <>
-            <Button variant="ghost" onClick={() => setRejectMode(true)} style={{ flex: 1 }}>{t.reject}</Button>
-            <Button variant="success" onClick={approve} disabled={busy} style={{ flex: 2 }}>{t.approve}</Button>
-          </>
-        )
-      ) : isIssue ? (
+      footer={isQueue && rejectMode ? (
         <>
-          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
-          <Button variant="primary" onClick={startIssue} disabled={busy} style={{ flex: 2 }}>{t.startWorkingIssue}</Button>
-        </>
-      ) : isIssueWorking ? (
-        <>
-          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
-          <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>
-        </>
-      ) : task.status === TASK_STATUS.COMPLETED ? (
-        <>
-          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
-          <Button variant="danger" onClick={del} disabled={busy} style={{ flex: 1 }}>
-            <Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}
-          </Button>
+          <Button variant="ghost" onClick={() => setRejectMode(false)} style={{ flex: 1 }}>{t.cancel}</Button>
+          <Button variant="danger" onClick={sendBack} disabled={busy || (!rejectNote.trim() && !rejectVoice)} style={{ flex: 2 }}>{t.reject}</Button>
         </>
       ) : (
-        <Button variant="ghost" onClick={onClose} full>{t.close}</Button>
+        // Close + the status-specific action(s) + an always-available Delete.
+        // (This page is admin-only, so any task can be removed directly.)
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
+          {isQueue && (
+            <>
+              <Button variant="ghost" onClick={() => setRejectMode(true)} style={{ flex: 1 }}>{t.reject}</Button>
+              <Button variant="success" onClick={approve} disabled={busy} style={{ flex: 2 }}>{t.approve}</Button>
+            </>
+          )}
+          {isIssue && <Button variant="primary" onClick={startIssue} disabled={busy} style={{ flex: 2 }}>{t.startWorkingIssue}</Button>}
+          {isIssueWorking && <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>}
+          <Button variant="danger" onClick={del} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
+            <Icon name="trash" size={16} color="#fff" />
+          </Button>
+        </>
       )}
     >
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
