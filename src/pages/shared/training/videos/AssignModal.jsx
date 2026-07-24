@@ -7,6 +7,7 @@ import { scopedProperty, scopedDepartment, DEPARTMENT_MAP } from '../../../../co
 import { Button, Field, inputStyle, Loader } from '../../../../components/common/UI'
 import Modal from '../../../../components/common/Modal'
 import Icon from '../../../../components/common/Icon'
+import { notifyUser } from '../../../../lib/notify'
 
 // Admin: assign a video to specific staff, each with a shared deadline.
 export default function AssignModal({ video, user, onClose, onSaved }) {
@@ -57,6 +58,12 @@ export default function AssignModal({ video, user, onClose, onSaved }) {
     if (toRemove.length) {
       await supabase.from('training_assignments').delete().eq('video_id', video.id).in('user_id', toRemove)
     }
+    // notify only the NEWLY assigned staff (not people who were already assigned)
+    const newlyAssigned = ids.filter((id) => !(id in assigned))
+    await Promise.all(newlyAssigned.map((uid) => {
+      const m = (staff || []).find((s) => s.id === uid)
+      return notifyUser('training_assigned', { taskText: video.topic, forUser: uid, property: m?.property || null, entityId: video.id, byName: user?.name, byUser: user.id })
+    }))
     setBusy(false)
     onSaved()
   }

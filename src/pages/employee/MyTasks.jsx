@@ -12,6 +12,7 @@ import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import AudioPlayer from '../../components/common/AudioPlayer'
 import Icon from '../../components/common/Icon'
+import { notifyAdmins } from '../../lib/notify'
 
 const AUTO_REFRESH_MS = 30000
 const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
@@ -353,14 +354,20 @@ function WorkModal({ task, onClose, onSaved, user }) {
       // completed/approved (admin deletes it then), so the recording isn't
       // orphaned in storage. It's hidden from staff once resubmitted anyway.
     })
-    if (ok) onSaved()
+    if (ok) {
+      await notifyAdmins('task_submitted', { taskText: task.title, property: task.property, department: task.department, entityId: task.id, byName: user?.name, byUser: user?.id })
+      onSaved()
+    }
   }
 
   async function reportIssue() {
     if (!issueText.trim()) return
     // report the issue WITHOUT touching the task's lifecycle status — the task
     // stays Pending/In Progress; only issue_status changes.
-    if (await update({ issue_status: TASK_STATUS.ISSUE, notes: issueText })) onSaved()
+    if (await update({ issue_status: TASK_STATUS.ISSUE, notes: issueText })) {
+      await notifyAdmins('task_issue', { taskText: task.title, property: task.property, department: task.department, entityId: task.id, byName: user?.name, byUser: user?.id })
+      onSaved()
+    }
   }
 
   const beforeLabel = hi ? 'काम से पहले' : 'Before work'
