@@ -80,7 +80,7 @@ function AdminDashboard({ user }) {
 
     const [
       total, pending, inProgress, waiting, done, overdue, pHigh, pMed, pLow,
-      bOpen, bProg, bDone, vendors, videos, fireR, chemR,
+      bOpen, bProg, bDone, vendors, videos, fireR, chemR, boardOverdue,
     ] = await Promise.all([
       taskBase(),
       taskBase().eq('status', TASK_STATUS.PENDING),
@@ -98,6 +98,8 @@ function AdminDashboard({ user }) {
       supabase.from('training_videos').select('*', { count: 'exact', head: true }).eq('is_active', true),
       scopedRows('fire_extinguishers', 'expiry_date', false),
       scopedRows('chemical_usage', 'quantity', true),
+      // repair requests past their due date and not finished (counted as overdue)
+      boardBase().lt('due_date', today).neq('status', 'approved').neq('status', 'completed'),
     ])
 
     const cnt = (r) => r.count || 0
@@ -114,7 +116,7 @@ function AdminDashboard({ user }) {
     setD({
       task: {
         total: cnt(total), pending: cnt(pending), inProgress: cnt(inProgress),
-        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue),
+        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue) + cnt(boardOverdue),
         priority: { high: cnt(pHigh), medium: cnt(pMed), low: cnt(pLow) },
       },
       board: { open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone) },
@@ -255,7 +257,7 @@ function EmployeeDashboard({ user }) {
         supabase.from('training_videos').select('id, deadline').eq('is_active', true).eq('department', user.department),
         supabase.from('training_assignments').select('video_id, deadline').eq('user_id', user.id),
         supabase.from('training_progress').select('video_key, completed').eq('user_id', user.id),
-        supabase.from('work_board').select('id, title, status, priority, category').eq('assigned_to', user.id),
+        supabase.from('work_board').select('id, title, status, priority, category, due_date').eq('assigned_to', user.id),
       ])
       const [tasksR, deptVidsR, asgR, progR, fixR] = settled.map((r) => (r.status === 'fulfilled' ? r.value : { data: [] }))
 
@@ -277,9 +279,10 @@ function EmployeeDashboard({ user }) {
       // fix requests (task board) assigned to this member that are still open —
       // sorted by priority: urgent → high → normal → low
       const PRIO_RANK = { urgent: 0, high: 1, normal: 2, low: 3 }
-      const fixRequests = (fixR.data || [])
-        .filter((r) => !['completed', 'approved'].includes(r.status))
-        .sort((a, b) => (PRIO_RANK[a.priority] ?? 9) - (PRIO_RANK[b.priority] ?? 9))
+      const openFixes = (fixR.data || []).filter((r) => !['completed', 'approved'].includes(r.status))
+      const fixRequests = [...openFixes].sort((a, b) => (PRIO_RANK[a.priority] ?? 9) - (PRIO_RANK[b.priority] ?? 9))
+      // repair requests past their due date count toward the overdue total
+      const fixOverdue = openFixes.filter((r) => r.due_date && r.due_date < today0).length
 
       let vids = deptVidsR.data || []
       const dl = {}
@@ -307,7 +310,7 @@ function EmployeeDashboard({ user }) {
         inProgress: c((r) => r.status === TASK_STATUS.IN_PROGRESS),
         waiting: c((r) => r.status === TASK_STATUS.COMPLETION_REQUESTED),
         done: c((r) => r.status === TASK_STATUS.COMPLETED),
-        overdue: c((r) => isTaskOverdue(r, today)),
+        overdue: c((r) => isTaskOverdue(r, today)) + fixOverdue,
         priorityTasks,
         fixRequests,
         training,
