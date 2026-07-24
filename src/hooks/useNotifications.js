@@ -22,10 +22,32 @@ export function useNotifications() {
   useEffect(() => {
     load()
     const id = setInterval(load, 60000)
-    const onFocus = () => load()
-    window.addEventListener('focus', onFocus)
-    return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
+    // `focus` alone is unreliable on mobile — phones fire `visibilitychange`
+    // when the app returns to the foreground, so refresh on both.
+    const refresh = () => { if (!document.hidden) load() }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
   }, [load])
+
+  // Realtime: push new/updated notifications straight into the bell so the
+  // count updates instantly on every device, not just on the next 60s poll.
+  useEffect(() => {
+    if (!user) return undefined
+    const channel = supabase
+      .channel(`notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `for_user=eq.${user.id}` },
+        () => load(),
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user, load])
 
   const unread = items.reduce((n, x) => n + (x.is_read ? 0 : 1), 0)
 
