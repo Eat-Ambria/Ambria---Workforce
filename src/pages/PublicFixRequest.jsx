@@ -46,6 +46,7 @@ export default function PublicFixRequest() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('list')   // 'list' | 'form'
   const [tab, setTab] = useState('open')     // 'open' | 'assigned' | 'completed'
+  const [propFilter, setPropFilter] = useState('all') // filter the list by venue
   const [mine, setMine] = useState(() => readMine())
 
   const load = useCallback(async () => {
@@ -72,19 +73,25 @@ export default function PublicFixRequest() {
     }
   }, [load])
 
+  // narrow to the selected property; counts + sections both reflect the filter
+  const shownRows = useMemo(
+    () => (propFilter === 'all' ? rows : rows.filter((r) => r.property === propFilter)),
+    [rows, propFilter]
+  )
+
   const counts = useMemo(() => {
-    const done = rows.filter((r) => ['completed', 'approved'].includes(r.status)).length
-    return { total: rows.length, ongoing: rows.length - done, done }
-  }, [rows])
+    const done = shownRows.filter((r) => ['completed', 'approved'].includes(r.status)).length
+    return { total: shownRows.length, ongoing: shownRows.length - done, done }
+  }, [shownRows])
 
   // sections by status. Open shows ONLY unassigned requests; once assigned they
   // move to "Assigned" (incl. in-progress / awaiting approval); once approved
   // they move to "Completed".
   const groups = useMemo(() => ({
-    open: rows.filter((r) => r.status === 'open'),
-    assigned: rows.filter((r) => ['assigned', 'in_progress', 'approval_requested'].includes(r.status)),
-    completed: rows.filter((r) => ['completed', 'approved'].includes(r.status)),
-  }), [rows])
+    open: shownRows.filter((r) => r.status === 'open'),
+    assigned: shownRows.filter((r) => ['assigned', 'in_progress', 'approval_requested'].includes(r.status)),
+    completed: shownRows.filter((r) => ['completed', 'approved'].includes(r.status)),
+  }), [shownRows])
 
   const gradient = `linear-gradient(150deg, ${C.maroon} 0%, ${C.maroonDark} 100%)`
 
@@ -128,6 +135,20 @@ export default function PublicFixRequest() {
             <button type="button" onClick={() => setView('form')} style={addBtn(C)}>
               <Icon name="plus" size={18} color="#fff" /> {hi ? 'नया अनुरोध जोड़ें' : 'Add Request'}
             </button>
+
+            {/* filter the list by venue */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
+              <Icon name="pin" size={16} color={C.tl} />
+              <select
+                style={inputStyle(C)}
+                value={propFilter}
+                onChange={(e) => setPropFilter(e.target.value)}
+                aria-label={hi ? 'प्रॉपर्टी' : 'Property'}
+              >
+                <option value="all">{hi ? 'सभी प्रॉपर्टी' : 'All properties'}</option>
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            </div>
 
             <div style={{ display: 'flex', gap: 10, margin: '14px 0 16px' }}>
               <StatTile C={C} label={hi ? 'कुल' : 'Total'} value={counts.total} tone={C.text} />
