@@ -468,7 +468,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   const postedPhotos = Array.isArray(row.photos) ? row.photos : []
   const isAssignee = !!row.assigned_to && row.assigned_to === user.id
+  const isPoster = !!row.posted_by && row.posted_by === user.id
   const s = row.status
+  // the person who raised the request can delete it (e.g. added by mistake),
+  // but not once it's completed/approved (keep finished records intact)
+  const canPosterDelete = isPoster && !['completed', 'approved'].includes(s)
 
   async function setStatus(status, patch = {}) {
     setBusy(true); setErr('')
@@ -544,7 +548,18 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   return (
     <Modal open onClose={onClose} title={row.title}
-      footer={<><Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>{actions}</>}>
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
+          {/* poster can delete their own request (unless already completed/approved) */}
+          {canPosterDelete && (
+            <Button variant="danger" disabled={busy} onClick={del} style={{ flex: 1 }}>
+              <Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}
+            </Button>
+          )}
+          {actions}
+        </>
+      )}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Badge color={C[(STATUS_META[s] || STATUS_META.open).tone]} bg={C[(STATUS_META[s] || STATUS_META.open).bg]}>{statusLabel(s, t)}</Badge>
         <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
