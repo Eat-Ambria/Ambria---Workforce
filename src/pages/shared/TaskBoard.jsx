@@ -10,6 +10,7 @@ import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inp
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import Icon from '../../components/common/Icon'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 const PRIOS = { low: 'tl', normal: 'blue', high: 'yellow', urgent: 'red' }
 
@@ -141,6 +142,8 @@ export default function TaskBoard() {
     return [...byId.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }, [rows, members])
 
+  // collapse the status tabs into a dropdown on narrow screens (≤813px)
+  const statusCompact = useMediaQuery('(max-width: 813px)')
   const tabs = [
     { key: 'open', label: `${t.open} (${groups.open.length})` },
     { key: 'in_progress', label: `${t.inProgress} (${groups.in_progress.length})` },
@@ -184,7 +187,22 @@ export default function TaskBoard() {
         </div>
       )}
 
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      {/* status tabs on wide screens; one labeled dropdown when tight (≤813px) */}
+      {statusCompact ? (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.repairStatus}</div>
+          <select
+            style={inputStyle(C)}
+            value={tab}
+            onChange={(e) => setTab(e.target.value)}
+            aria-label={t.repairStatus}
+          >
+            {tabs.map((tb) => <option key={tb.key} value={tb.key}>{tb.label}</option>)}
+          </select>
+        </div>
+      ) : (
+        <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      )}
 
       {list.length === 0 ? (
         <EmptyState icon={null} title={t.noData} />
