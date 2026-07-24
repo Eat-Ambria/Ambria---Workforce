@@ -10,7 +10,6 @@ import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inp
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import Icon from '../../components/common/Icon'
-import { notifyUser, notifyAdmins } from '../../lib/notify'
 
 const PRIOS = { low: 'tl', normal: 'blue', high: 'yellow', urgent: 'red' }
 
@@ -334,8 +333,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     setBusy(true); setErr('')
     const assignee = members.find((m) => m.id === form.assignTo)
     const property = superAdmin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp')
-    const dept = assignee?.department || user.department || null
-    const { data: created, error } = await supabase.from('work_board').insert({
+    const { error } = await supabase.from('work_board').insert({
       title: form.title.trim(),
       description: form.description || null,
       category: 'other',
@@ -343,22 +341,16 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       posted_by: user.id,
       posted_by_name: user.name,
       // if assigned at creation, the request follows the assignee's department
-      department: dept,
+      department: assignee?.department || user.department || null,
       priority: form.priority,
       due_date: form.due_date || null,
       assigned_to: assignee?.id || null,
       assigned_to_name: assignee?.name || null,
       photos,
       status: assignee ? 'assigned' : 'open',
-    }).select('id').single()
+    })
     setBusy(false)
     if (error) { setErr(error.message); return }
-    // notify: the assignee if assigned at creation, else all relevant admins
-    if (assignee) {
-      await notifyUser('fix_assigned', { taskText: form.title.trim(), forUser: assignee.id, property, entityId: created?.id, byName: user.name, byUser: user.id })
-    } else {
-      await notifyAdmins('fix_new', { taskText: form.title.trim(), property, department: dept, entityId: created?.id, byName: user.name, byUser: user.id })
-    }
     onSaved()
   }
 
@@ -479,7 +471,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   }
 
   // used for the first assignment AND for admin reassignment later
-  async function saveAssignment() {
+  function saveAssignment() {
     if (!assignTo) { setErr(t.required); return }
     if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
     const m = members.find((x) => x.id === assignTo)
@@ -487,10 +479,6 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     // reassigning to a new person resets to 'assigned' (fresh start);
     // editing only the due date keeps the current status
     const status = (s === 'open' || changedAssignee) ? 'assigned' : s
-    // notify the assignee when the person actually changes (not on a due-date edit)
-    if (changedAssignee && assignTo) {
-      await notifyUser('fix_assigned', { taskText: row.title, forUser: assignTo, property: row.property, entityId: row.id, byName: user.name, byUser: user.id })
-    }
     // stamp the assignee's department so the request follows the right team
     setStatus(status, {
       assigned_to: assignTo,
@@ -512,18 +500,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       .eq('id', row.id)
     if (error) setErr(error.message)
   }
-  async function submitForApproval() {
+  function submitForApproval() {
     if (resPhotos.length === 0) { setErr(t.photoRequired || 'Add a photo of the completed work'); return }
-    await notifyAdmins('fix_approval', { taskText: row.title, property: row.property, department: row.department, entityId: row.id, byName: user.name, byUser: user.id })
     setStatus('approval_requested', { resolution_note: note || null, resolution_photos: resPhotos })
-  }
-
-  // admin approves a finished fix — notify the assignee it was approved
-  async function approveFix() {
-    if (row.assigned_to) {
-      await notifyUser('fix_approved', { taskText: row.title, forUser: row.assigned_to, property: row.property, entityId: row.id, byName: user.name, byUser: user.id })
-    }
-    setStatus('completed', { resolved_at: nowISO() })
   }
 
   // footer actions depend on status + who's looking
@@ -538,7 +517,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     actions = (
       <>
         <Button variant="ghost" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 1 }}>{t.reject || 'Send Back'}</Button>
-        <Button variant="success" disabled={busy} onClick={approveFix} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
+        <Button variant="success" disabled={busy} onClick={() => setStatus('completed', { resolved_at: nowISO() })} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
       </>
     )
   } else if (['completed', 'approved'].includes(s) && admin) {

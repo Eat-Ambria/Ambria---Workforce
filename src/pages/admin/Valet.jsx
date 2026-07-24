@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { todayISO, nowISO, fmtTime, to24h } from '../../lib/time'
-import { notifyAdmins } from '../../lib/notify'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
@@ -553,21 +552,15 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
       staff_breakdown: effBreakdown,
       notes: form.notes || null,
     }
-    const newId = `v_${Date.now()}_${Math.round(performance.now())}`
     const { error } = editing
       ? await supabase.from('valet_bookings').update(payload).eq('id', editing.id)
-      : await supabase.from('valet_bookings').insert({ id: newId, ...payload, created_by: user.id })
+      : await supabase.from('valet_bookings').insert({ id: `v_${Date.now()}_${Math.round(performance.now())}`, ...payload, created_by: user.id })
     setBusy(false)
     if (error) {
       setErr(error.code === '23505'
         ? `${PROPERTY_MAP[form.property]?.name || form.property} already has a booking on ${form.event_date}`
         : error.message)
       return
-    }
-    // notify the property's admins of a NEW booking (not on edits)
-    if (!editing) {
-      const label = [form.customer_name, PROPERTY_MAP[form.property]?.name || form.property].filter(Boolean).join(' · ')
-      await notifyAdmins('valet_booking', { taskText: label, property: form.property, entityId: newId, byName: user?.name, byUser: user?.id })
     }
     onSaved()
   }

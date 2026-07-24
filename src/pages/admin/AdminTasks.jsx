@@ -8,7 +8,6 @@ import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { notifyUser } from '../../lib/notify'
 import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue } from '../../constants/org'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
@@ -407,7 +406,6 @@ function ReviewModal({ task, user, onClose, onSaved }) {
     const voiceUrl = task.rejection_voice_url // send-back voice note, no longer needed once completed
     if (await update({ status: TASK_STATUS.COMPLETED, completed_at: nowISO(), completed_by: user.id, approved_by: user.id, approved_at: nowISO(), rejection_voice_url: null })) {
       if (voiceUrl) deleteStorageFile(voiceUrl)
-      await notifyUser('task_approved', { taskText: task.title, forUser: task.assigned_to, property: task.property, entityId: task.id, byName: user?.name, byUser: user?.id })
       onSaved()
     }
   }
@@ -426,7 +424,6 @@ function ReviewModal({ task, user, onClose, onSaved }) {
     const prevVoice = task.rejection_voice_url // an earlier send-back's note, if any — replace it
     if (await update({ status: TASK_STATUS.IN_PROGRESS, rejection_note: rejectNote || null, rejection_voice_url: rejectVoice || null })) {
       if (prevVoice && prevVoice !== rejectVoice) deleteStorageFile(prevVoice)
-      await notifyUser('task_sent_back', { taskText: task.title, forUser: task.assigned_to, property: task.property, entityId: task.id, byName: user?.name, byUser: user?.id })
       onSaved()
     }
   }
@@ -607,17 +604,6 @@ function CreateModal({ user, members, onClose, onSaved }) {
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
-    // notify the assignee (bell + push) that a task was assigned to them
-    if (form.assigned_to) {
-      await notifyUser('task_assigned', {
-        taskText: form.title.trim(),
-        forUser: form.assigned_to,
-        property: form.property || assignee?.property || null,
-        entityId: id,
-        byName: user?.name || null,
-        byUser: user?.id || null,
-      })
-    }
     onSaved()
   }
 

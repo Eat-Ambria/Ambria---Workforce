@@ -8,7 +8,6 @@ import { Button, Loader } from '../../../../components/common/UI'
 import Modal from '../../../../components/common/Modal'
 import Icon from '../../../../components/common/Icon'
 import YTPlayer from './YTPlayer'
-import { notifyAdmins } from '../../../../lib/notify'
 
 const PASS_PCT = 0.6
 const WATCH_PCT = 0.9 // must watch at least this much of the video to unlock the assessment
@@ -78,8 +77,6 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
         { user_id: user.id, video_key: String(video.id), department: video.department, completed: true, completed_at: nowISO() },
         { onConflict: 'user_id,video_key' }
       )
-      // let the relevant admins know this staff member cleared the assessment
-      await notifyAdmins('quiz_completed', { taskText: video.topic, property: user?.property, department: video.department, entityId: video.id, byName: user?.name, byUser: user.id })
     }
     setBusy(false)
     setResult({ score, total, passed })

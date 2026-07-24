@@ -7,7 +7,6 @@ import { PROPERTIES, PROPERTY_MAP } from '../constants/org'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs } from '../components/common/UI'
 import PhotoCapture from '../components/common/PhotoCapture'
 import Icon from '../components/common/Icon'
-import { notifyAdmins } from '../lib/notify'
 
 // PUBLIC, no-login portal (/fix-request). Anyone with the link can:
 //   - SEE all repair requests and their live status / progress
@@ -269,8 +268,6 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
 
     setBusy(false)
     if (err) { setError(hi ? 'भेजने में समस्या हुई। दोबारा कोशिश करें।' : 'Could not submit. Please try again.'); return }
-    // let the property's admins know a new (external) request came in
-    await notifyAdmins('fix_new', { taskText: title, property: form.property, entityId: data?.id, byName: form.name.trim() })
     onSubmitted?.(data?.id)
     setDone(true)
   }

@@ -60,9 +60,13 @@ BEGIN
         INSERT INTO notifications (type, task_text, for_user, property, entity_id)
         VALUES ('task_approved', NEW.title, COALESCE(NEW.assigned_to, NEW.completed_by), NEW.property, NEW.id);
       END IF;
-    ELSIF NEW.status = 'issue' THEN
-      PERFORM notify_admins('task_issue', NEW.title, NEW.assigned_to, NEW.assignee_name, NEW.property, NEW.id);
     END IF;
+  END IF;
+
+  -- Issues are an independent dimension (issue_status), no longer part of status.
+  -- Notify admins the moment a staff member raises a new issue.
+  IF NEW.issue_status IS DISTINCT FROM OLD.issue_status AND NEW.issue_status = 'issue' THEN
+    PERFORM notify_admins('task_issue', NEW.title, NEW.assigned_to, NEW.assignee_name, NEW.property, NEW.id);
   END IF;
   RETURN NEW;
 END; $$;
