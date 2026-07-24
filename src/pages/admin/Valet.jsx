@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { todayISO, nowISO } from '../../lib/time'
+import { todayISO, nowISO, fmtTime, to24h } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
@@ -337,7 +337,7 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, onCr
             <div key={c.rowId} style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{c.customer || c.functionType || 'Venue event'}</div>
               <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {c.time && <Meta C={C} icon="clock" text={String(c.time)} />}
+                {c.time && <Meta C={C} icon="clock" text={fmtTime(c.time)} />}
                 {c.guests != null && <Meta C={C} icon="team" text={`${c.guests} pax`} />}
                 {c.functionType && <Meta C={C} icon="star" text={String(c.functionType)} />}
                 {c.location && <Meta C={C} icon="pin" text={String(c.location)} />}
@@ -392,7 +392,7 @@ function BookingCard({ C, t, b, scopeAll, matrix, busy, onEdit, onDelete }) {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-        {b.event_time && <Meta C={C} icon="clock" text={b.event_time} />}
+        {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
         <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
         {b.phone && <Meta C={C} icon="phone" text={b.phone} />}
       </div>
@@ -613,7 +613,7 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
         </div>
         <div style={{ flex: 1 }}>
           <Field label={`${t.eventTime} (${t.optional})`}>
-            <input style={inputStyle(C)} value={form.event_time} onChange={set('event_time')} placeholder="e.g. 7 PM" />
+            <input type="time" style={inputStyle(C)} value={to24h(form.event_time)} onChange={set('event_time')} />
           </Field>
         </div>
       </div>
@@ -706,7 +706,7 @@ function exportBookingsPdf(sections) {
         <td>${escapeHtml(PROPERTY_MAP[b.property]?.name || b.property)}</td>
         <td>${escapeHtml(b.customer_name || '—')}</td>
         <td>${escapeHtml(b.phone || '—')}</td>
-        <td>${escapeHtml(b.event_time || '—')}</td>
+        <td>${escapeHtml(b.event_time ? fmtTime(b.event_time) : '—')}</td>
         <td class="num">${b.guests || 0}</td>
         <td class="num">${b.staff_total ?? '—'}</td>
       </tr>`).join('')
@@ -795,7 +795,7 @@ function BookingsList({ C, t, user, scopeAll, reloadSignal, onEdit }) {
           <div style={{ fontSize: 12.5, color: C.tl, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <Meta C={C} icon="calendar" text={fmtLong(b.event_date)} />
             <Meta C={C} icon="pin" text={PROPERTY_MAP[b.property]?.name || b.property} />
-            {b.event_time && <Meta C={C} icon="clock" text={b.event_time} />}
+            {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
             <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
             {b.staff_total != null && <Meta C={C} icon="valet" text={`${b.staff_total} staff`} />}
           </div>
