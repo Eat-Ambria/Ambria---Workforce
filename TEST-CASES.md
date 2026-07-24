@@ -24,7 +24,12 @@ Backend logic tested directly against Supabase (rows created + deleted as tests)
 | `fix_assigned` on assignment → assignee | ✅ PASS |
 | Admin fan-out scope (super-admin + property admins, not the actor) | ✅ PASS |
 | Push delivery (function + webhook + subscription) | ✅ PASS (confirmed earlier on device) |
+| `valet_booking` on new booking → admins | ✅ PASS |
+| `quiz_completed` (→ admins) | ✅ PASS (live) — trigger uses `training_videos.topic` |
+| `training_assigned` (→ staff) on assignment | ✅ PASS (live) — assignment works |
 | Auto-assign training by department | ⚠️ NOT ACTIVE — run `SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` |
+
+Note: the repo's `SUPABASE-MIGRATION-NOTIFICATIONS.sql` had `title` (out of sync with the live DB, which uses `topic`); the file was corrected to `topic` to match. Commit it to keep the repo in sync.
 
 Frontend build: ✅ compiles clean (`npm run build`).
 

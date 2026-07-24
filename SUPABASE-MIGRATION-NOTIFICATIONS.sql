@@ -130,7 +130,7 @@ CREATE OR REPLACE FUNCTION trg_quiz_notify() RETURNS trigger LANGUAGE plpgsql SE
 DECLARE uname text; prop text; vtitle text;
 BEGIN
   SELECT name, property INTO uname, prop FROM users WHERE id = NEW.user_id;
-  SELECT title INTO vtitle FROM training_videos WHERE id = NEW.video_id;
+  SELECT topic INTO vtitle FROM training_videos WHERE id = NEW.video_id;
   PERFORM notify_admins(
     'quiz_completed',
     COALESCE(vtitle, 'Quiz') || ' — ' || NEW.score || '/' || NEW.total,
@@ -150,7 +150,7 @@ BEGIN
     CREATE OR REPLACE FUNCTION trg_training_notify() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
     DECLARE vtitle text;
     BEGIN
-      SELECT title INTO vtitle FROM training_videos WHERE id = NEW.video_id;
+      SELECT topic INTO vtitle FROM training_videos WHERE id = NEW.video_id;
       INSERT INTO notifications (type, task_text, for_user, entity_id)
       VALUES ('training_assigned', COALESCE(vtitle, 'Training'), NEW.user_id, NEW.video_id::text);
       RETURN NEW;
