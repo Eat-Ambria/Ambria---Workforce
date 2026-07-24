@@ -400,18 +400,16 @@ function EmployeeDashboard({ user }) {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, fontSize: 15, color: C.text }}>{fix.title}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: pTone, background: tint(pTone, 0.12), padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                          {t[FIX_PRIO_LABEL[fix.priority]] || fix.priority}
-                        </span>
-                        {fix.category && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: C.tl, background: C.cardAlt, padding: '2px 8px', borderRadius: 999 }}>{fix.category}</span>
-                        )}
-                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fix.title}</div>
                       <div style={{ fontSize: 12.5, color: C.tl, marginTop: 4 }}>{t[FIX_STATUS_LABEL[fix.status]] || fix.status}</div>
                     </div>
-                    <Icon name="chevronRight" size={16} color={C.faint} />
+                    {/* priority badge pinned to the right, next to the chevron */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: pTone, background: tint(pTone, 0.12), padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+                        {t[FIX_PRIO_LABEL[fix.priority]] || fix.priority}
+                      </span>
+                      <Icon name="chevronRight" size={16} color={C.faint} />
+                    </div>
                   </div>
                 </Card>
               )
