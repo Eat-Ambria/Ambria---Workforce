@@ -133,6 +133,9 @@ export default function MyTasks() {
     { key: TASK_STATUS.IN_PROGRESS, label: t.inProgress },
     { key: TASK_STATUS.COMPLETION_REQUESTED, label: t.completionRequested },
     { key: TASK_STATUS.COMPLETED, label: t.completed },
+    { key: TASK_STATUS.ISSUE, label: t.issue },
+    { key: TASK_STATUS.ISSUE_WORKING, label: t.issueWorking },
+    { key: TASK_STATUS.ISSUE_RESOLVED, label: t.issueResolved },
   ]
 
   // group by status for a clean read: active first

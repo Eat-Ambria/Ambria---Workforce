@@ -7,6 +7,7 @@ import { nowISO, todayISO, fmtDate, fmtDateTime } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue } from '../../constants/org'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
@@ -48,6 +49,8 @@ export default function AdminTasks() {
   const [creating, setCreating] = useState(false)
 
   const today = todayISO()
+  // collapse the status tabs into a dropdown once the row gets tight (≤1073px)
+  const statusCompact = useMediaQuery('(max-width: 1073px)')
 
   // apply property / department / category / staff filters to any query
   const applyFilters = useCallback((q) => {
@@ -69,6 +72,12 @@ export default function AdminTasks() {
     if (key === 'overdue') return q.lt('due_date', today).neq('status', TASK_STATUS.COMPLETED)
     return q // 'all'
   }, [today])
+
+  // switch to the tab carried by a navigation (e.g. a notification click),
+  // even when we're already on this page and the component doesn't remount.
+  useEffect(() => {
+    if (location.state?.tab) { setTab(location.state.tab); setPage(0) }
+  }, [location.state])
 
   // deep-link from a notification: open the exact task's review modal by id
   const focusedRef = useRef(null)
@@ -93,10 +102,11 @@ export default function AdminTasks() {
     mq.then(({ data }) => setMembers(data || []))
   }, [user])
 
-  // load per-tab counts + the active tab's page whenever filters/tab/page change
-  const load = useCallback(async () => {
+  // load per-tab counts + the active tab's page whenever filters/tab/page change.
+  // `silent` skips the loading dim — used by the background auto-refresh below.
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!user) return
-    setListLoading(true)
+    if (!silent) setListLoading(true)
     const countPairs = await Promise.all(TAB_KEYS.map((k) =>
       withStatus(applyFilters(supabase.from('tasks').select('*', { count: 'exact', head: true })), k)
         .then(({ count }) => [k, count || 0])
@@ -114,6 +124,16 @@ export default function AdminTasks() {
   }, [user, applyFilters, withStatus, tab, page])
 
   useEffect(() => { load() }, [load])
+
+  // keep counts (incl. the Issues badge) + the list fresh without a manual
+  // refresh: silently re-poll every 30s and whenever the tab regains focus.
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) load({ silent: true }) }
+    const id = setInterval(tick, 30000)
+    document.addEventListener('visibilitychange', tick)
+    window.addEventListener('focus', tick)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); window.removeEventListener('focus', tick) }
+  }, [load])
 
   // filter/tab changes reset to the first page (single fetch, no double-load)
   const changeTab = (k) => { setTab(k); setPage(0) }
@@ -135,13 +155,13 @@ export default function AdminTasks() {
   }, [memberOptions, memberFilter, members])
 
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
+  // task-status tabs only — the Issues view is a separate button (see below)
   const tabs = [
     { key: 'overdue', label: `${t.overdue}${c('overdue')}` },
     { key: 'pending', label: `${t.pending}${c('pending')}` },
     { key: 'inprogress', label: `${t.inProgress}${c('inprogress')}` },
     { key: 'completed', label: `${t.completed}${c('completed')}` },
     { key: 'review', label: `${t.reviewQueue}${c('review')}` },
-    { key: 'issues', label: `${t.issues}${c('issues')}` },
     { key: 'all', label: `${t.all} (${counts.all || 0})` },
   ]
 
@@ -200,7 +220,40 @@ export default function AdminTasks() {
         ))}
       </div>
 
-      <Tabs tabs={tabs} active={tab} onChange={changeTab} />
+      {/* task-status on the left (tabs on wide screens, one dropdown when tight),
+          the Issues view as a separate button on the right */}
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.taskStatus}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {statusCompact ? (
+            <select
+              style={inputStyle(C)}
+              value={tabs.some((s) => s.key === tab) ? tab : tabs[0].key}
+              onChange={(e) => changeTab(e.target.value)}
+              aria-label={t.status || 'Status'}
+            >
+              {tabs.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          ) : (
+            <Tabs tabs={tabs} active={tab} onChange={changeTab} noMargin />
+          )}
+        </div>
+        <button
+          onClick={() => changeTab('issues')}
+          aria-pressed={tab === 'issues'}
+          style={{
+            whiteSpace: 'nowrap', flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
+            background: tab === 'issues' ? C.red : C.rBg,
+            color: tab === 'issues' ? '#fff' : C.red,
+            border: `1px solid ${tab === 'issues' ? C.red : 'transparent'}`,
+          }}
+        >
+          <Icon name="warning" size={15} color={tab === 'issues' ? '#fff' : C.red} />
+          {t.issues}{counts.issues ? ` (${counts.issues})` : ''}
+        </button>
+      </div>
 
       {listLoading && list.length === 0 ? (
         <Loader label={t.loading} />
@@ -384,7 +437,8 @@ function ReviewModal({ task, user, onClose, onSaved }) {
     if (await update({ status: TASK_STATUS.ISSUE_WORKING })) { await notifyEmployee('issue_working'); onSaved() }
   }
   async function resolveIssue() {
-    if (await update({ status: TASK_STATUS.ISSUE_RESOLVED })) { await notifyEmployee('issue_resolved'); onSaved() }
+    // stamp resolved_at so the scheduled cleanup can clear the issue one day later
+    if (await update({ status: TASK_STATUS.ISSUE_RESOLVED, resolved_at: nowISO() })) { await notifyEmployee('issue_resolved'); onSaved() }
   }
 
   const isIssue = task.status === TASK_STATUS.ISSUE

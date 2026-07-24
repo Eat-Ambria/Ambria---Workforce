@@ -164,10 +164,10 @@ export function ProgressBar({ value = 0, tone, height = 10 }) {
   )
 }
 
-export function Tabs({ tabs, active, onChange }) {
+export function Tabs({ tabs, active, onChange, noMargin }) {
   const C = useColors()
   return (
-    <div className="no-scrollbar" style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', borderBottom: `1px solid ${C.border}` }}>
+    <div className="no-scrollbar" style={{ display: 'flex', gap: 6, marginBottom: noMargin ? 0 : 16, overflowX: 'auto', borderBottom: `1px solid ${C.border}` }}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
