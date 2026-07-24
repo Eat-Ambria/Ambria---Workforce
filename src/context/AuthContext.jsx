@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { normalizePhone, looksLikePhone } from '../lib/phone'
+import { syncSubscription, releaseSubscription } from '../lib/push'
 
 const AuthContext = createContext(null)
 const STORAGE_KEY = 'ambria_user'
@@ -20,6 +21,7 @@ export function AuthProvider({ children }) {
     }
     if (!saved) { setLoading(false); return }
     setUser(saved) // show immediately from cache
+    syncSubscription(saved.id) // make sure this device is bound to the restored user
 
     // then refresh from the DB so admin-side changes (visible tabs, role,
     // active status, profile edits) take effect on the next app open
@@ -50,6 +52,9 @@ export function AuthProvider({ children }) {
   // persist a logged-in user to state + the chosen storage
   function finishLogin(safeUser, remember) {
     setUser(safeUser)
+    // claim this device's push subscription for the user just logged in, so a
+    // shared device stops delivering the previous user's notifications
+    syncSubscription(safeUser.id)
     if (remember) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(safeUser))
       sessionStorage.removeItem(STORAGE_KEY)
@@ -96,6 +101,8 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    // stop this device from receiving the logged-out user's pushes
+    releaseSubscription()
     setUser(null)
     localStorage.removeItem(STORAGE_KEY)
     sessionStorage.removeItem(STORAGE_KEY)

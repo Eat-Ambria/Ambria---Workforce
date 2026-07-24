@@ -57,6 +57,37 @@ export async function enablePush(userId) {
   if (error) throw error
 }
 
+// Re-associate THIS device's existing push subscription with the current user.
+// Silent (never prompts): does nothing unless push is already enabled here.
+// Called on login/session-restore so a shared device only ever receives the
+// currently signed-in user's notifications — not the previous user's.
+export async function syncSubscription(userId) {
+  if (!userId || !pushSupported() || !pushConfigured()) return
+  if (Notification.permission !== 'granted') return
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    if (!sub) return
+    const { keys } = sub.toJSON()
+    await supabase.from('push_subscriptions').upsert(
+      { user_id: userId, endpoint: sub.endpoint, p256dh: keys.p256dh, auth: keys.auth },
+      { onConflict: 'endpoint' }
+    )
+  } catch { /* ignore — best effort */ }
+}
+
+// On logout, stop this device from receiving the logged-out user's pushes.
+// Keeps the browser subscription intact so the next user re-claims it silently.
+export async function releaseSubscription() {
+  if (!pushSupported()) return
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    if (!sub) return
+    await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+  } catch { /* ignore — best effort */ }
+}
+
 // Remove this device's subscription.
 export async function disablePush() {
   if (!pushSupported()) return
