@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   time_block TEXT,
   assigned_to TEXT,
   assignee_name TEXT,
-  status TEXT DEFAULT 'pending',        -- pending, in_progress, completion_requested, completed, issue
+  status TEXT DEFAULT 'pending',        -- lifecycle only: pending, in_progress, completion_requested, completed
+  issue_status TEXT,                     -- independent issue flag: NULL | issue | issue_working | issue_resolved
+  resolved_at TIMESTAMPTZ,               -- when an issue was marked resolved (drives the 1-day auto-clear)
   is_team BOOLEAN DEFAULT false,
   started_at TIMESTAMPTZ,                -- set when employee taps "Start Work"
   started_by TEXT,                       -- user id who started the task

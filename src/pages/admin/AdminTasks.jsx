@@ -68,7 +68,7 @@ export default function AdminTasks() {
     if (key === 'inprogress') return q.eq('status', TASK_STATUS.IN_PROGRESS)
     if (key === 'completed') return q.eq('status', TASK_STATUS.COMPLETED)
     if (key === 'review') return q.eq('status', TASK_STATUS.COMPLETION_REQUESTED)
-    if (key === 'issues') return q.in('status', [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING])
+    if (key === 'issues') return q.in('issue_status', [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING])
     if (key === 'overdue') return q.lt('due_date', today).neq('status', TASK_STATUS.COMPLETED)
     return q // 'all'
   }, [today])
@@ -263,6 +263,7 @@ export default function AdminTasks() {
         <div style={{ display: 'grid', gap: 12, opacity: listLoading ? 0.6 : 1, transition: 'opacity .15s' }}>
           {list.map((task) => {
             const sc = statusColors(task.status, C)
+            const isc = task.issue_status ? statusColors(task.issue_status, C) : null
             const od = isTaskOverdue(task, today)
             return (
               <Card key={task.id} onClick={() => setReview(task)} style={{ cursor: 'pointer', borderLeft: `4px solid ${sc.color}` }}>
@@ -298,6 +299,7 @@ export default function AdminTasks() {
                       </button>
                     )}
                     <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+                    {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
                     {task.category && (
                       <span style={{ minWidth: 62, textAlign: 'center', fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, padding: '3px 6px', borderRadius: 999, whiteSpace: 'nowrap' }}>
                         {t[task.category]}
@@ -376,6 +378,7 @@ function ReviewModal({ task, user, onClose, onSaved }) {
   const [rejectNote, setRejectNote] = useState('')
   const [rejectVoice, setRejectVoice] = useState('')
   const sc = statusColors(task.status, C)
+  const isc = task.issue_status ? statusColors(task.issue_status, C) : null
   const beforePhotos = Array.isArray(task.before_photo) ? task.before_photo : []
   const photos = Array.isArray(task.completion_photo) ? task.completion_photo : []
   const isQueue = task.status === TASK_STATUS.COMPLETION_REQUESTED
@@ -434,16 +437,20 @@ function ReviewModal({ task, user, onClose, onSaved }) {
     })
   }
   async function startIssue() {
-    if (await update({ status: TASK_STATUS.ISSUE_WORKING })) { await notifyEmployee('issue_working'); onSaved() }
+    // issue lifecycle is independent of task status — only touch issue_status
+    if (await update({ issue_status: TASK_STATUS.ISSUE_WORKING })) { await notifyEmployee('issue_working'); onSaved() }
   }
   async function resolveIssue() {
-    // stamp resolved_at so the scheduled cleanup can clear the issue one day later
-    if (await update({ status: TASK_STATUS.ISSUE_RESOLVED, resolved_at: nowISO() })) { await notifyEmployee('issue_resolved'); onSaved() }
+    // resolving the issue returns the task to Pending so the employee can carry
+    // on. resolved_at lets the scheduled cleanup clear the issue one day later.
+    if (await update({ issue_status: TASK_STATUS.ISSUE_RESOLVED, resolved_at: nowISO(), status: TASK_STATUS.PENDING })) {
+      await notifyEmployee('issue_resolved'); onSaved()
+    }
   }
 
-  const isIssue = task.status === TASK_STATUS.ISSUE
-  const isIssueWorking = task.status === TASK_STATUS.ISSUE_WORKING
-  const isIssueState = isIssue || isIssueWorking || task.status === TASK_STATUS.ISSUE_RESOLVED
+  const isIssue = task.issue_status === TASK_STATUS.ISSUE
+  const isIssueWorking = task.issue_status === TASK_STATUS.ISSUE_WORKING
+  const isIssueState = isIssue || isIssueWorking || task.issue_status === TASK_STATUS.ISSUE_RESOLVED
 
   return (
     <Modal
@@ -481,8 +488,9 @@ function ReviewModal({ task, user, onClose, onSaved }) {
         <Button variant="ghost" onClick={onClose} full>{t.close}</Button>
       )}
     >
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+        {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
         {task.category && <Badge>{t[task.category]}</Badge>}
       </div>
       <div style={{ fontSize: 14, marginBottom: 6 }}>{t.members}: <b>{task.assignee_name || '—'}</b></div>

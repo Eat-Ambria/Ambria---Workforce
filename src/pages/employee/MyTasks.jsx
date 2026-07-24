@@ -72,9 +72,12 @@ export default function MyTasks() {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [cat, setCat] = useState('all')
-  // status filter — may be preset from the dashboard KPI tiles
+  // status filter — may be preset from the dashboard KPI tiles.
+  // Task status (pending/in_progress/…) and issue status are independent
+  // dimensions, each with its own filter.
   const location = useLocation()
   const [status, setStatus] = useState(location.state?.status || 'all')
+  const [issueStatus, setIssueStatus] = useState(location.state?.issueStatus || 'all')
   const [active, setActive] = useState(null) // task open in work modal
 
   const load = useCallback(async () => {
@@ -103,8 +106,11 @@ export default function MyTasks() {
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [load])
 
-  // apply a status preset passed from the dashboard tiles
-  useEffect(() => { if (location.state?.status) setStatus(location.state.status) }, [location.state])
+  // apply a status / issue-status preset passed from dashboard tiles or notifications
+  useEffect(() => {
+    if (location.state?.status) setStatus(location.state.status)
+    if (location.state?.issueStatus) setIssueStatus(location.state.issueStatus)
+  }, [location.state])
 
   // deep-link from a notification: open the exact task by id
   const focusedRef = useRef(null)
@@ -121,11 +127,14 @@ export default function MyTasks() {
   const today = todayISO()
   const filtered = useMemo(() => {
     let rows = cat === 'all' ? tasks : tasks.filter((x) => x.category === cat)
+    // task-status filter (lifecycle) and issue-status filter apply independently
     if (status === 'overdue') rows = rows.filter((x) => isTaskOverdue(x, today))
     else if (status !== 'all') rows = rows.filter((x) => x.status === status)
+    if (issueStatus !== 'all') rows = rows.filter((x) => x.issue_status === issueStatus)
     return rows
-  }, [tasks, cat, status, today])
+  }, [tasks, cat, status, issueStatus, today])
 
+  // normal task-lifecycle statuses (left dropdown)
   const statusChips = [
     { key: 'all', label: t.all },
     { key: 'overdue', label: t.overdue },
@@ -133,17 +142,19 @@ export default function MyTasks() {
     { key: TASK_STATUS.IN_PROGRESS, label: t.inProgress },
     { key: TASK_STATUS.COMPLETION_REQUESTED, label: t.completionRequested },
     { key: TASK_STATUS.COMPLETED, label: t.completed },
+  ]
+  // issue-tracking statuses (separate "Issue Status" dropdown)
+  const issueChips = [
+    { key: 'all', label: t.all },
     { key: TASK_STATUS.ISSUE, label: t.issue },
     { key: TASK_STATUS.ISSUE_WORKING, label: t.issueWorking },
     { key: TASK_STATUS.ISSUE_RESOLVED, label: t.issueResolved },
   ]
-
-  // group by status for a clean read: active first
+  // group by lifecycle status for a clean read: active first
   const order = [
     TASK_STATUS.IN_PROGRESS,
     TASK_STATUS.PENDING,
     TASK_STATUS.COMPLETION_REQUESTED,
-    TASK_STATUS.ISSUE,
     TASK_STATUS.COMPLETED,
   ]
   const sorted = [...filtered].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
@@ -152,12 +163,36 @@ export default function MyTasks() {
     <div>
       <SectionTitle>{t.myTasks}</SectionTitle>
 
-      {/* status filter — dropdown (driven by dashboard tiles, also selectable here) */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <Icon name="inbox" size={16} color={C.tl} />
-        <select style={inputStyle(C)} value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t.status || 'Status'}>
-          {statusChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
-        </select>
+      {/* two filters: normal task status + a separate issue status (share one filter) */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.taskStatus}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="inbox" size={16} color={C.tl} />
+            <select
+              style={inputStyle(C)}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              aria-label={t.taskStatus}
+            >
+              {statusChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.issueStatus}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="warning" size={16} color={C.tl} />
+            <select
+              style={inputStyle(C)}
+              value={issueStatus}
+              onChange={(e) => setIssueStatus(e.target.value)}
+              aria-label={t.issueStatus}
+            >
+              {issueChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* category filter — full-width segmented row */}
@@ -213,6 +248,7 @@ const taskTitle = (task, hi) => (hi && task.title_hi ? task.title_hi : task.titl
 
 function TaskRow({ task, C, t, today, onOpen, hi }) {
   const sc = statusColors(task.status, C)
+  const isc = task.issue_status ? statusColors(task.issue_status, C) : null
   const od = isTaskOverdue(task, today)
   return (
     <Card onClick={onOpen} style={{ cursor: 'pointer', borderLeft: `4px solid ${od ? TR_ORANGE : sc.color}` }}>
@@ -233,7 +269,11 @@ function TaskRow({ task, C, t, today, onOpen, hi }) {
             </div>
           )}
         </div>
-        <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+        {/* independent badges: task lifecycle status + issue status (if any) */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+          <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+          {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
+        </div>
       </div>
     </Card>
   )
@@ -255,11 +295,13 @@ function WorkModal({ task, onClose, onSaved, user }) {
   const [now, setNow] = useState(() => Date.now())
 
   const sc = statusColors(task.status, C)
+  const isc = task.issue_status ? statusColors(task.issue_status, C) : null
   const isPending = task.status === TASK_STATUS.PENDING
   const isInProgress = task.status === TASK_STATUS.IN_PROGRESS
   const isWaiting = task.status === TASK_STATUS.COMPLETION_REQUESTED
   const isDone = task.status === TASK_STATUS.COMPLETED
-  const isIssueState = [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING, TASK_STATUS.ISSUE_RESOLVED].includes(task.status)
+  // issue is an independent dimension — it never blocks the task workflow
+  const hasActiveIssue = [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING].includes(task.issue_status)
 
   const canStart = beforePhotos.length > 0   // must add a "before" photo to start
   const canComplete = photos.length > 0      // must add an "after" photo to submit
@@ -316,7 +358,9 @@ function WorkModal({ task, onClose, onSaved, user }) {
 
   async function reportIssue() {
     if (!issueText.trim()) return
-    if (await update({ status: TASK_STATUS.ISSUE, notes: issueText })) onSaved()
+    // report the issue WITHOUT touching the task's lifecycle status — the task
+    // stays Pending/In Progress; only issue_status changes.
+    if (await update({ issue_status: TASK_STATUS.ISSUE, notes: issueText })) onSaved()
   }
 
   const beforeLabel = hi ? 'काम से पहले' : 'Before work'
@@ -347,8 +391,9 @@ function WorkModal({ task, onClose, onSaved, user }) {
         </>
       }
     >
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
+        {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
         {task.category && <Badge>{t[task.category]}</Badge>}
       </div>
 
@@ -411,11 +456,12 @@ function WorkModal({ task, onClose, onSaved, user }) {
 
       {isWaiting && <Notice C={C} tone={C.yellow} bg={C.yBg} icon="clock" title={t.completionRequested} sub={t.awaitingApprovalMsg} />}
       {isDone && <Notice C={C} tone={C.green} bg={C.gBg} icon="check" title={t.completed} sub={t.completedMsg} />}
-      {task.status === TASK_STATUS.ISSUE && <Notice C={C} tone={C.red} bg={C.rBg} icon="warning" title={t.issue} sub={task.notes} />}
-      {task.status === TASK_STATUS.ISSUE_WORKING && <Notice C={C} tone={C.yellow} bg={C.yBg} icon="clock" title={t.issueWorking} sub={t.issueWorkingMsg} />}
-      {task.status === TASK_STATUS.ISSUE_RESOLVED && <Notice C={C} tone={C.green} bg={C.gBg} icon="check" title={t.issueResolved} sub={t.issueResolvedMsg} />}
+      {task.issue_status === TASK_STATUS.ISSUE && <Notice C={C} tone={C.red} bg={C.rBg} icon="warning" title={t.issue} sub={task.notes} />}
+      {task.issue_status === TASK_STATUS.ISSUE_WORKING && <Notice C={C} tone={C.yellow} bg={C.yBg} icon="clock" title={t.issueWorking} sub={t.issueWorkingMsg} />}
+      {task.issue_status === TASK_STATUS.ISSUE_RESOLVED && <Notice C={C} tone={C.green} bg={C.gBg} icon="check" title={t.issueResolved} sub={t.issueResolvedMsg} />}
 
-      {!isDone && !isWaiting && !isIssueState && (
+      {/* report an issue — independent of task status; hidden once one is open/being worked */}
+      {!isDone && !isWaiting && !hasActiveIssue && (
         <div style={{ marginTop: 16 }}>
           {!issueMode ? (
             <button onClick={() => setIssueMode(true)} style={{ background: 'transparent', color: C.red, fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>

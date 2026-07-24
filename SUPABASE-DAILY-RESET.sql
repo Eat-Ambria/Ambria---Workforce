@@ -115,8 +115,14 @@ BEGIN
   END IF;
 
   -- 2. Clear the whole workflow (incl. both photo columns) and mark tasks pending.
+  --    Issue fields are cleared ONLY when the issue was already resolved — an
+  --    unresolved issue (issue / issue_working) survives the reset so the admin
+  --    doesn't lose it. (CASE reads the pre-update issue_status.)
   UPDATE tasks SET
     status                  = 'pending',
+    issue_status            = CASE WHEN issue_status = 'issue_resolved' THEN NULL ELSE issue_status END,
+    resolved_at             = CASE WHEN issue_status = 'issue_resolved' THEN NULL ELSE resolved_at END,
+    notes                   = CASE WHEN issue_status = 'issue_resolved' THEN NULL ELSE notes END,
     before_photo            = '[]'::jsonb,
     started_at              = NULL,
     started_by              = NULL,

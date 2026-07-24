@@ -26,8 +26,8 @@ function meta(n, hi) {
     case 'task_approved': return { icon: 'check', link: '/my-tasks', status: 'completed', title: hi ? 'आपका काम मंज़ूर हुआ' : 'Your work was approved', body: item }
     case 'task_submitted': return { icon: 'inbox', link: '/tasks', tab: 'review', title: hi ? 'मंज़ूरी के लिए टास्क आया' : 'Task submitted for approval', body: item + who }
     case 'task_issue': return { icon: 'warning', link: '/tasks', tab: 'issues', title: hi ? 'स्टाफ ने समस्या बताई' : 'Staff reported an issue', body: item + who }
-    case 'issue_working': return { icon: 'clock', link: '/my-tasks', status: 'issue_working', title: hi ? 'एडमिन आपकी समस्या पर काम कर रहा है' : 'Admin is working on your issue', body: item }
-    case 'issue_resolved': return { icon: 'check', link: '/my-tasks', status: 'issue_resolved', title: hi ? 'आपकी समस्या हल हो गई' : 'Your issue was resolved', body: item }
+    case 'issue_working': return { icon: 'clock', link: '/my-tasks', issueStatus: 'issue_working', title: hi ? 'एडमिन आपकी समस्या पर काम कर रहा है' : 'Admin is working on your issue', body: item }
+    case 'issue_resolved': return { icon: 'check', link: '/my-tasks', issueStatus: 'issue_resolved', title: hi ? 'आपकी समस्या हल हो गई' : 'Your issue was resolved', body: item }
     case 'fix_assigned': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'मरम्मत अनुरोध सौंपा गया' : 'Repair request assigned to you', body: item }
     case 'fix_new': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'नया मरम्मत अनुरोध' : 'New repair request raised', body: item + who }
     case 'fix_approval': return { icon: 'inbox', link: '/task-board', title: hi ? 'मरम्मत मंज़ूरी के लिए' : 'Repair awaiting approval', body: item + who }
@@ -68,11 +68,11 @@ export default function NotificationBell() {
   function openItem(n) {
     if (!n.is_read) markRead(n.id)
     setOpen(false)
-    const { link, tab, status } = meta(n, hi)
+    const { link, tab, status, issueStatus } = meta(n, hi)
     if (!link) return
     // deep-link: carry the item id so the target page opens that exact task /
-    // fix request, plus the tab (admin) / status filter (employee) so it also
-    // lands on the right list — not just the page.
+    // fix request, plus the tab (admin) / task-status / issue-status filter
+    // (employee) so it also lands on the right list — not just the page.
     const id = n.entity_id
     const state = {}
     if (id) {
@@ -81,6 +81,7 @@ export default function NotificationBell() {
     }
     if (tab) state.tab = tab
     if (status) state.status = status
+    if (issueStatus) state.issueStatus = issueStatus
     navigate(link, Object.keys(state).length ? { state } : undefined)
   }
 
