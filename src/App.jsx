@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import { useColors } from './context/ThemeContext'
@@ -5,17 +6,21 @@ import { isAdminRole, isSuperAdmin } from './constants/org'
 import { Loader } from './components/common/UI'
 import AppLayout from './components/layout/AppLayout'
 
+// Login stays eager — it's the first paint for signed-out users, so no flash.
 import Login from './pages/Login'
-import PublicFixRequest from './pages/PublicFixRequest'
-import Dashboard from './pages/Dashboard'
-import MyTasks from './pages/employee/MyTasks'
-import AdminTasks from './pages/admin/AdminTasks'
-import TaskBoard from './pages/shared/TaskBoard'
-import Training from './pages/shared/Training'
-import Valet from './pages/admin/Valet'
-import Vendors from './pages/admin/Vendors'
-import Users from './pages/admin/Users'
-import Account from './pages/Account'
+
+// Everything else is code-split: each page downloads only when its route is
+// visited, keeping the initial bundle small.
+const PublicFixRequest = lazy(() => import('./pages/PublicFixRequest'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const MyTasks = lazy(() => import('./pages/employee/MyTasks'))
+const AdminTasks = lazy(() => import('./pages/admin/AdminTasks'))
+const TaskBoard = lazy(() => import('./pages/shared/TaskBoard'))
+const Training = lazy(() => import('./pages/shared/Training'))
+const Valet = lazy(() => import('./pages/admin/Valet'))
+const Vendors = lazy(() => import('./pages/admin/Vendors'))
+const Users = lazy(() => import('./pages/admin/Users'))
+const Account = lazy(() => import('./pages/Account'))
 
 // redirect to /login when not authenticated
 function RequireAuth({ children }) {
@@ -35,8 +40,10 @@ function RoleRoute({ allow, children }) {
 
 export default function App() {
   const { isAuthed } = useAuth()
+  const C = useColors()
 
   return (
+    <Suspense fallback={<div style={{ background: C.bg, minHeight: '100vh' }}><Loader /></div>}>
     <Routes>
       <Route path="/login" element={isAuthed ? <Navigate to="/dashboard" replace /> : <Login />} />
 
@@ -76,5 +83,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to={isAuthed ? '/dashboard' : '/login'} replace />} />
     </Routes>
+    </Suspense>
   )
 }
