@@ -27,7 +27,7 @@ Backend logic tested directly against Supabase (rows created + deleted as tests)
 | `valet_booking` on new booking → admins | ✅ PASS |
 | `quiz_completed` (→ admins) | ✅ PASS (live) — trigger uses `training_videos.topic` |
 | `training_assigned` (→ staff) on assignment | ✅ PASS (live) — assignment works |
-| Auto-assign training by department | ⚠️ NOT ACTIVE — run `SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` |
+| Auto-assign training by department (both directions) | ✅ PASS (live) — new employee gets dept videos; new video assigns to dept staff |
 
 Note: the repo's `SUPABASE-MIGRATION-NOTIFICATIONS.sql` had `title` (out of sync with the live DB, which uses `topic`); the file was corrected to `topic` to match. Commit it to keep the repo in sync.
 
@@ -136,7 +136,7 @@ Notifications are created by **database triggers** (single source). The frontend
 - **TRN-01** 🟡 🔷 Staff watches video → progress recorded → quiz can start; pass ≥60%.
 - **TRN-02** 🟡 🔷 Complete quiz → score saved → admins get `quiz_completed`.
 - **TRN-03** 🟡 🔷 Admin manually assigns a video → assigned staff notified (`training_assigned`).
-- **TRN-04** 🔴 ⚠️ **(NEW)** **Auto-assign by department:** a new employee gets all their department's active videos; uploading a video assigns it to all staff in that department. **Requires running `SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` (currently NOT active).**
+- **TRN-04** 🔴 ✅ **(NEW)** **Auto-assign by department:** a new employee gets all their department's active videos; uploading a video assigns it to all staff in that department. *(verified live — both directions)*
 - **TRN-05** 🟡 🔷 Fire Safety: property multi-select filter; log inspection → next-due date + status chip.
 
 ## 11. User Management (super admin)
@@ -183,7 +183,7 @@ Notifications are created by **database triggers** (single source). The frontend
 | `SUPABASE-MIGRATION-NOTIFICATIONS.sql` | Notification triggers (incl. `task_issue` on `issue_status`) | ✅ active |
 | `SUPABASE-MIGRATION-ISSUE-AUTOCLEAR.sql` | `issue_status` column + 1-day auto-clear cron | ✅ active |
 | `SUPABASE-DAILY-RESET.sql` | Daily reset (clears resolved issues only) | run if not yet |
-| `SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` | Auto-assign training by department | ⚠️ **NOT run yet** |
+| `SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` | Auto-assign training by department | ✅ active |
 | Database Webhook: `notifications` INSERT → `send-push` | Push delivery | ✅ active |
 
 ---
