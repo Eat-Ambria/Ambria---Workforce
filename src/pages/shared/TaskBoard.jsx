@@ -42,11 +42,14 @@ export default function TaskBoard() {
   const [rows, setRows] = useState([])
   const [members, setMembers] = useState([]) // staff available for assignment (admin)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('open')
+  const [tab, setTab] = useState(location.state?.tab || 'open')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [creating, setCreating] = useState(false)
   const [active, setActive] = useState(null)
+
+  // react to a tab preset from navigation (e.g. dashboard "Overdue Repairs" tile)
+  useEffect(() => { if (location.state?.tab) setTab(location.state.tab) }, [location.state])
 
   const load = useCallback(async () => {
     try {
@@ -127,12 +130,15 @@ export default function TaskBoard() {
       : rows.filter((r) => r.assigned_to === user.id)
   }, [rows, memberFilter, admin, scope, user.id])
 
+  const today = todayISO()
   const groups = useMemo(() => ({
+    // overdue = past its due date and not yet finished (cross-cuts open/in-progress)
+    overdue: visibleRows.filter((r) => r.due_date && r.due_date < today && !['approved', 'completed'].includes(r.status)),
     open: visibleRows.filter((r) => ['open', 'assigned'].includes(r.status)),
     in_progress: visibleRows.filter((r) => r.status === 'in_progress'),
     review: visibleRows.filter((r) => r.status === 'approval_requested'),
     completed: visibleRows.filter((r) => ['approved', 'completed'].includes(r.status)),
-  }), [visibleRows])
+  }), [visibleRows, today])
 
   // staff who actually have requests assigned — populate the name filter
   const memberOptions = useMemo(() => {
@@ -145,6 +151,7 @@ export default function TaskBoard() {
   // collapse the status tabs into a dropdown on narrow screens (≤813px)
   const statusCompact = useMediaQuery('(max-width: 813px)')
   const tabs = [
+    { key: 'overdue', label: `${t.overdue} (${groups.overdue.length})` },
     { key: 'open', label: `${t.open} (${groups.open.length})` },
     { key: 'in_progress', label: `${t.inProgress} (${groups.in_progress.length})` },
     { key: 'review', label: `${t.reviewQueue} (${groups.review.length})` },
@@ -211,8 +218,9 @@ export default function TaskBoard() {
           {list.map((r) => {
             const st = STATUS_META[r.status] || STATUS_META.open
             const pTone = C[PRIOS[r.priority] || 'blue']
+            const od = r.due_date && r.due_date < today && !['approved', 'completed'].includes(r.status)
             return (
-              <Card key={r.id} onClick={() => setActive(r)} style={{ cursor: 'pointer', borderLeft: `4px solid ${pTone}` }}>
+              <Card key={r.id} onClick={() => setActive(r)} style={{ cursor: 'pointer', borderLeft: `4px solid ${od ? '#EA580C' : pTone}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{r.title}</div>
@@ -230,8 +238,8 @@ export default function TaskBoard() {
                       </div>
                     )}
                     {r.due_date && (
-                      <div style={{ fontSize: 12, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Icon name="clock" size={12} /> {t.dueDate}: {fmtDate(r.due_date)}
+                      <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: od ? '#EA580C' : C.tl, fontWeight: od ? 700 : 400 }}>
+                        <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? '#EA580C' : C.tl} /> {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(r.due_date)}
                       </div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>

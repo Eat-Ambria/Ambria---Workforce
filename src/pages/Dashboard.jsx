@@ -333,7 +333,7 @@ function EmployeeDashboard({ user }) {
       <div style={kpiGrid}>
         <Kpi C={C} icon="tasks" tone={C.maroon} value={s.total} label={t.totalTasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
         <Kpi C={C} icon="warning" tone={C.red} border={C.red} value={s.overdue} label={t.overdue} onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
-        <Kpi C={C} icon="taskBoard" tone={TR_ORANGE} border={TR_ORANGE} value={s.fixOverdue} label={lang === 'hi' ? 'मरम्मत — समय पार' : 'Overdue Repairs'} onClick={() => navigate('/task-board')} />
+        <Kpi C={C} icon="taskBoard" tone={TR_ORANGE} border={TR_ORANGE} value={s.fixOverdue} label={lang === 'hi' ? 'मरम्मत — समय पार' : 'Overdue Repairs'} onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
         <Kpi C={C} icon="myTasks" tone={C.yellow} border={C.yellow} value={s.pending} label={t.pending} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.PENDING } })} />
         <Kpi C={C} icon="refresh" tone={C.blue} value={s.inProgress} label={t.inProgress} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.IN_PROGRESS } })} />
         <Kpi C={C} icon="clock" tone={C.indigo} value={s.waiting} label={t.completionRequested} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
