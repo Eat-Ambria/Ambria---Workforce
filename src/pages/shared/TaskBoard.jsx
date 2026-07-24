@@ -321,7 +321,14 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const [fieldErr, setFieldErr] = useState({}) // per-field validation shown inline
+  const titleRef = useRef(null)
+  const dueRef = useRef(null)
+  // update a field and clear its inline error as the user fixes it
+  const set = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }))
+    setFieldErr((fe) => (fe[k] ? { ...fe, [k]: undefined } : fe))
+  }
 
   // departments that have staff, for the assign filter
   const deptOptions = useMemo(() => {
@@ -346,8 +353,18 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   }, [assignable, form.assignTo])
 
   async function save() {
-    if (!form.title.trim()) { setErr(t.required); return }
-    if (form.due_date && form.due_date < todayISO()) { setErr(t.dueDatePast); return }
+    // validate per-field so the message appears next to the field, not at the bottom
+    const fe = {}
+    if (!form.title.trim()) fe.title = t.required
+    if (form.due_date && form.due_date < todayISO()) fe.due_date = t.dueDatePast
+    setFieldErr(fe)
+    if (Object.keys(fe).length) {
+      // jump the user to the first field that needs fixing
+      const target = fe.title ? titleRef.current : fe.due_date ? dueRef.current : null
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.focus?.({ preventScroll: true })
+      return
+    }
     setBusy(true); setErr('')
     const assignee = members.find((m) => m.id === form.assignTo)
     const property = superAdmin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp')
@@ -375,7 +392,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   return (
     <Modal open onClose={onClose} title={t.taskBoard}
       footer={<><Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button><Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.submit}</Button></>}>
-      <Field label={t.title}><input style={inputStyle(C)} value={form.title} onChange={set('title')} /></Field>
+      <Field label={t.title} required error={fieldErr.title}><input ref={titleRef} style={inputStyle(C)} value={form.title} onChange={set('title')} /></Field>
       <Field label={`${t.description} (${t.optional})`}><textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.description} onChange={set('description')} /></Field>
       {superAdmin && (
         <Field label={t.properties || 'Property'}>
@@ -414,8 +431,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
           </div>
         </div>
       )}
-      <Field label={`${t.dueDate} (${t.optional})`}>
-        <input type="date" min={todayISO()} style={inputStyle(C)} value={form.due_date} onChange={set('due_date')} />
+      <Field label={`${t.dueDate} (${t.optional})`} error={fieldErr.due_date}>
+        <input ref={dueRef} type="date" min={todayISO()} style={inputStyle(C)} value={form.due_date} onChange={set('due_date')} />
       </Field>
       <Field label={`${t.uploadPhoto} (${t.optional})`}><PhotoCapture folder="work_board" value={photos} onChange={setPhotos} /></Field>
       {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}

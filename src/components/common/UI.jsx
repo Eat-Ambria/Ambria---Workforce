@@ -128,15 +128,18 @@ export function EmptyState({ icon, title, hint }) {
   )
 }
 
-export function Field({ label, children, hint }) {
+export function Field({ label, children, hint, required, error }) {
   const C = useColors()
   return (
     <label style={{ display: 'block', marginBottom: 14 }}>
       <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>
-        {label}
+        {label}{required && <span style={{ color: C.red, marginLeft: 3 }}>*</span>}
       </span>
       {children}
-      {hint && <span style={{ display: 'block', fontSize: 12, color: C.tl, marginTop: 4 }}>{hint}</span>}
+      {/* field-level error takes precedence over the hint, shown right here */}
+      {error
+        ? <span style={{ display: 'block', fontSize: 12, color: C.red, fontWeight: 600, marginTop: 4 }}>{error}</span>
+        : hint && <span style={{ display: 'block', fontSize: 12, color: C.tl, marginTop: 4 }}>{hint}</span>}
     </label>
   )
 }
