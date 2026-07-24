@@ -487,9 +487,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const isAssignee = !!row.assigned_to && row.assigned_to === user.id
   const isPoster = !!row.posted_by && row.posted_by === user.id
   const s = row.status
-  // the person who raised the request can delete it (e.g. added by mistake),
-  // but not once it's completed/approved (keep finished records intact)
-  const canPosterDelete = isPoster && !['completed', 'approved'].includes(s)
+  // who can delete this request:
+  //  - admins / super-admins: ANY request, any status (incl. public ones with
+  //    no logged-in owner)
+  //  - the poster: their own request, unless it's already completed/approved
+  const canDelete = admin || (isPoster && !['completed', 'approved'].includes(s))
 
   async function setStatus(status, patch = {}) {
     setBusy(true); setErr('')
@@ -559,17 +561,16 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         <Button variant="success" disabled={busy} onClick={() => setStatus('completed', { resolved_at: nowISO() })} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
       </>
     )
-  } else if (['completed', 'approved'].includes(s) && admin) {
-    actions = <Button variant="danger" disabled={busy} onClick={del} style={{ flex: 2 }}><Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}</Button>
   }
+  // (delete is handled by the always-available button in the footer below)
 
   return (
     <Modal open onClose={onClose} title={row.title}
       footer={(
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
-          {/* poster can delete their own request (unless already completed/approved) */}
-          {canPosterDelete && (
+          {/* admins delete any request; the poster can delete their own */}
+          {canDelete && (
             <Button variant="danger" disabled={busy} onClick={del} style={{ flex: 1 }}>
               <Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}
             </Button>
