@@ -32,6 +32,10 @@ jobs:
           # Set these in: GitHub repo -> Settings -> Secrets and variables -> Actions
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Web Push VAPID *public* key — required for the notifications toggle to
+          # work in production. Safe to expose (it ships in the client bundle).
+          # Prefer a secret/variable; falls back to this literal if unset.
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || 'BMV038-UnoWkekRm7pIbko36dT0cuzlm1rbhz4tVj4FSYI_M1wtX_xVhfLlJi6y2NmMxyNdUWilmIXXFq2p22JE' }}
       # SPA fallback: GitHub Pages serves 404.html for unknown paths. Making it a
       # copy of index.html lets deep links (e.g. /fix-request) load the app so
       # React Router can handle the route instead of showing a 404.
