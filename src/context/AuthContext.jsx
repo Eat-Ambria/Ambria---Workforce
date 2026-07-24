@@ -49,19 +49,17 @@ export function AuthProvider({ children }) {
     })()
   }, [])
 
-  // persist a logged-in user to state + the chosen storage
-  function finishLogin(safeUser, remember) {
+  // persist a logged-in user to state + storage.
+  // The session ALWAYS persists (localStorage) so closing/reopening the app
+  // keeps the user signed in — the login screen only returns after an explicit
+  // logout, which clears storage.
+  function finishLogin(safeUser) {
     setUser(safeUser)
     // claim this device's push subscription for the user just logged in, so a
     // shared device stops delivering the previous user's notifications
     syncSubscription(safeUser.id)
-    if (remember) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(safeUser))
-      sessionStorage.removeItem(STORAGE_KEY)
-    } else {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(safeUser))
-      localStorage.removeItem(STORAGE_KEY)
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(safeUser))
+    sessionStorage.removeItem(STORAGE_KEY)
     return { ok: true, user: safeUser }
   }
 
@@ -71,7 +69,7 @@ export function AuthProvider({ children }) {
   //     is applied — passwords are bcrypt-hashed and the column is hidden).
   //     NOTE: the RPC matches by username only; phone login relies on path 2.
   //  2) Legacy: a direct plain-text query (before that migration is applied).
-  async function login(identifier, password, remember = true) {
+  async function login(identifier, password) {
     const idRaw = (identifier || '').trim()
     const idLower = idRaw.toLowerCase()
     const pw = password || ''
@@ -81,7 +79,7 @@ export function AuthProvider({ children }) {
     const rpc = await supabase.rpc('verify_login', { p_username: idLower, p_password: pw })
     if (!rpc.error && rpc.data) {
       if (rpc.data.is_active === false) return { ok: false, reason: 'inactive' }
-      return finishLogin(rpc.data, remember) // RPC already omits the password
+      return finishLogin(rpc.data) // RPC already omits the password
     }
 
     // 2) legacy plain-text check — match by username OR (normalized) phone
@@ -97,7 +95,7 @@ export function AuthProvider({ children }) {
     if (row.is_active === false) return { ok: false, reason: 'inactive' }
 
     const { password: _pw, ...safeUser } = row
-    return finishLogin(safeUser, remember)
+    return finishLogin(safeUser)
   }
 
   function logout() {

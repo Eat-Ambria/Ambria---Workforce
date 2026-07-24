@@ -18,7 +18,6 @@ export default function Login() {
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(false)
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -30,7 +29,7 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setBusy(true)
-    const res = await login(username, password, remember)
+    const res = await login(username, password)
     setBusy(false)
     if (res.ok) navigate('/dashboard', { replace: true })
     else if (res.reason === 'inactive') setError(t.accountInactive)
@@ -92,14 +91,6 @@ export default function Login() {
           </div>
         </div>
 
-        <div style={{ marginBottom: 18 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, color: C.text, cursor: 'pointer', fontWeight: 600 }}>
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ width: 16, height: 16, accentColor: C.maroon }} />
-            {t.rememberMe}
-          </label>
-          <p style={{ fontSize: 12, color: C.faint, marginTop: 5, marginLeft: 25 }}>{hi ? 'इस डिवाइस पर साइन इन रहें।' : 'Stay signed in on this device.'}</p>
-        </div>
-
         {error && (
           <div style={{ background: C.rBg, color: C.red, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="warning" size={16} color={C.red} /> {error}
@@ -119,18 +110,6 @@ export default function Login() {
           {busy ? <Spinner size={18} color="#fff" /> : null}
           {t.signIn}
         </button>
-      </div>
-
-      {/* how "Remember me" works */}
-      <div style={infoBox(C)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 6 }}>
-          <Icon name="info" size={15} color={C.maroon} /> {hi ? '"साइन इन रहें" कैसे काम करता है' : 'How “Remember me” works'}
-        </div>
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: C.tl, lineHeight: 1.6 }}>
-          <li>{hi ? 'चालू: ऐप बंद करने पर भी आप इस डिवाइस पर साइन इन रहेंगे।' : 'On: you stay signed in on this device, even after closing the app.'}</li>
-          <li>{hi ? 'बंद: ब्राउज़र/टैब बंद करते ही आप अपने-आप साइन आउट हो जाएँगे।' : 'Off: you’re signed out automatically when you close the browser/tab.'}</li>
-          <li>{hi ? 'साझा या सार्वजनिक डिवाइस पर इसे बंद रखें।' : 'Turn it off on shared or public devices.'}</li>
-        </ul>
       </div>
 
       <p style={{ textAlign: 'center', color: C.faint, fontSize: 12, margin: '18px 0 8px' }}>Ambria Ops · Workforce Management</p>
@@ -192,10 +171,6 @@ export default function Login() {
 
 const card = (C) => ({
   background: C.card, borderRadius: 18, padding: 24, border: `1px solid ${C.border}`, boxShadow: C.shadowMd,
-})
-
-const infoBox = (C) => ({
-  background: C.cardAlt, borderRadius: 14, padding: '13px 15px', border: `1px solid ${C.border}`, marginTop: 16,
 })
 
 const fieldLabel = (C) => ({ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.tl, marginBottom: 6 })
