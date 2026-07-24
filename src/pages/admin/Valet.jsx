@@ -731,7 +731,16 @@ function exportBookingsPdf(sections) {
       th { background: #f4eef0; color: #7B1E2F; }
       td.num, th.num { text-align: right; }
       tr { page-break-inside: avoid; }
+      .toolbar { position: sticky; top: 0; display: flex; gap: 10px; padding: 12px 0 14px; background: #fff; z-index: 10; }
+      .toolbar button { font: inherit; font-size: 14px; font-weight: 600; padding: 10px 16px; border-radius: 8px; border: 1px solid #7B1E2F; cursor: pointer; }
+      .toolbar .close { background: #fff; color: #7B1E2F; }
+      .toolbar .print { background: #7B1E2F; color: #fff; }
+      @media print { .toolbar { display: none !important; } }
     </style></head><body>
+      <div class="toolbar">
+        <button class="close" onclick="if(window.history.length>1){history.back()}else{window.close()}">‹ Back</button>
+        <button class="print" onclick="window.print()">Print / Save PDF</button>
+      </div>
       <div class="head">
         <h1>Ambria Ops — Valet Bookings</h1>
         <p>Next ${sections.length} booking day(s) from today · Generated ${escapeHtml(genDate)}</p>
