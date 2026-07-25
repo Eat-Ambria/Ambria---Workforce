@@ -4,6 +4,10 @@ node_modules
 # build output
 dist
 dist-ssr
+dev-dist
+
+# database scripts — kept local, run by hand in the Supabase SQL Editor
+supabase/db/migrations/
 
 # local env (SECRETS — never commit)
 .env
