@@ -373,18 +373,24 @@ npm run build            # -> dist/
 `VITE_VAPID_PUBLIC_KEY` is optional locally — without it the push toggle stays
 hidden and everything else works.
 
-**Database setup order:** `supabase/db/migrations/SUPABASE-COMPLETE-SCHEMA.sql` first, then the
+**Database setup order:** `SUPABASE-COMPLETE-SCHEMA.sql` first, then the
 `SUPABASE-MIGRATION-*.sql` files. They're all idempotent, so running one twice
 is safe. You run them by pasting into the Supabase SQL Editor — they are not
 CLI migrations.
 
+> ⚠️ **The SQL files are not in this repo.** `supabase/db/migrations/` is
+> gitignored, like `.env` — the scripts live on the maintainer's machine only.
+> A fresh clone therefore cannot rebuild the database; ask for a copy of the
+> folder if you need to. Everything already applied is safely inside Postgres,
+> so the running app is unaffected.
+>
 > **Why `supabase/db/migrations/` and not `supabase/migrations/`?** The Supabase
 > CLI reserves `supabase/migrations/` for its own migration history: files there
 > must be named `<timestamp>_name.sql` and get applied in order by
 > `supabase db push` / `db reset`. Ours are hand-run scripts with descriptive
 > names, and one of them seeds dummy data — exactly what you don't want a CLI
 > command applying by accident. The extra `db/` keeps the conventional folder
-> name without standing in the CLI's path. Please don't move it back.
+> name without standing in the CLI's path.
 
 ---
 

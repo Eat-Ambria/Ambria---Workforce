@@ -17,9 +17,13 @@ npm run dev
 | [Md/README.md](Md/README.md) | Folder map, env vars, deploy details |
 | [Md/](Md/) | All other docs: setup guides, checklists, test cases |
 | `src/` | The React app |
-| `supabase/db/migrations/` | Database scripts — run by pasting into the Supabase SQL Editor |
+| `supabase/db/migrations/` | Database scripts — **gitignored, local only** (see below) |
 | `supabase/functions/` | Edge functions (`send-push`, `lms-proxy`) |
 
-> `supabase/db/migrations/` is deliberately **not** `supabase/migrations/` — that
-> path is reserved by the Supabase CLI. See the note at the end of
-> [Md/HOW-IT-WORKS.md](Md/HOW-IT-WORKS.md#12-running-it-locally).
+> **The SQL scripts are not in this repo.** `supabase/db/migrations/` is
+> gitignored like `.env` — the schema, triggers and cron jobs are kept locally
+> and pasted into the Supabase SQL Editor by hand. Ask the maintainer for a copy
+> if you need to stand up a new database.
+>
+> (The path is also deliberately **not** `supabase/migrations/`, which the
+> Supabase CLI reserves for its own migration history.)

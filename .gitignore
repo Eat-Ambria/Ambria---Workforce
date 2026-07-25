@@ -6,7 +6,9 @@ dist
 dist-ssr
 dev-dist
 
-# database scripts — kept local, run by hand in the Supabase SQL Editor
+# database scripts — LOCAL ONLY, like .env. Run by hand in the Supabase SQL
+# Editor. Keep a backup: they are not in the repo, so a fresh clone has no way
+# to rebuild the database.
 supabase/db/migrations/
 
 # local env (SECRETS — never commit)
