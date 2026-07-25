@@ -43,8 +43,8 @@ function render(n: Record<string, unknown>, lang: string) {
     quiz_completed: ['Quiz completed', 'क्विज़ पूरा हुआ', 'training'],
     training_assigned: ['New training assigned', 'नई ट्रेनिंग सौंपी गई', 'training'],
   }
-  // daily due digest: one row for the whole day whose task_text is the count
-  // and which points at no single task (see SUPABASE-MIGRATION-DUE-DIGEST.sql)
+  // daily due digest: one row for the whole day whose task_text is the count and
+  // which points at no single task (see db/migrations/SUPABASE-MIGRATION-DUE-DIGEST.sql)
   if (n.type === 'task_due' && !n.entity_id) {
     return {
       title: hi ? 'टास्क की समय-सीमा' : 'Task due / overdue',
