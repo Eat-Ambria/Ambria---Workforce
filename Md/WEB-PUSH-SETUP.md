@@ -5,7 +5,7 @@ one-time setup steps. In-app notifications (the 🔔 bell) already work without 
 of this — push is an extra delivery channel on top.
 
 ## The pieces (already built in the repo)
-- `push_subscriptions` table — `SUPABASE-MIGRATION-PUSH.sql`
+- `push_subscriptions` table — `supabase/db/migrations/SUPABASE-MIGRATION-PUSH.sql`
 - Client subscribe/unsubscribe — `src/lib/push.js`, toggle in **My Account**
 - Service-worker banner handlers — `public/push-sw.js` (wired via `vite.config.js`)
 - Sender — `supabase/functions/send-push/index.ts`
@@ -26,7 +26,7 @@ VITE_VAPID_PUBLIC_KEY=<public key>
 Rebuild / redeploy the site. (Until this is set, the push toggle stays hidden.)
 
 ### 3. Database: create the subscriptions table
-Run **SUPABASE-MIGRATION-PUSH.sql** in Supabase → SQL Editor.
+Run **supabase/db/migrations/SUPABASE-MIGRATION-PUSH.sql** in Supabase → SQL Editor.
 
 ### 4. Deploy the Edge Function
 Needs the Supabase CLI (`npm i -g supabase`, then `supabase login` and

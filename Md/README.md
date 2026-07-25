@@ -2,6 +2,10 @@
 
 Workforce management PWA for Ambria event venues (React 18 + Vite 5 + Supabase).
 
+> **New here? Read [HOW-IT-WORKS.md](HOW-IT-WORKS.md)** — the architecture and
+> every flow (auth, tasks, repair requests, notifications, training, valet)
+> explained end to end. This file is just the folder map and quick start.
+
 ## Quick start
 
 ```bash
@@ -46,8 +50,8 @@ src/
 - Sidebar/routes adapt to role (see `src/constants/nav.js`).
 
 ## Database
-Run `SUPABASE-COMPLETE-SCHEMA.sql` once in the Supabase SQL Editor (or
-`SUPABASE-MIGRATION-2026-07.sql` to add just the newer columns/tables).
+Run `supabase/db/migrations/SUPABASE-COMPLETE-SCHEMA.sql` once in the Supabase SQL Editor (or
+`supabase/db/migrations/SUPABASE-MIGRATION-2026-07.sql` to add just the newer columns/tables).
 
 ## Deploy
 Push to `main` → GitHub Actions (`.github/workflows/deploy.yml`) builds and

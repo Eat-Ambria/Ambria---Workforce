@@ -13,7 +13,7 @@ passwords) from their browser console.
 
 - [ ] **Hash passwords** (Postgres `pgcrypto` / bcrypt) instead of plain text.
 - [ ] **Move login to a server-side RPC / Edge Function** so the anon key can never `SELECT` from `users`.
-- [ ] **Replace the `"Allow all"` RLS policies** with real per-role rules (see `SUPABASE-COMPLETE-SCHEMA.sql` line ~412).
+- [ ] **Replace the `"Allow all"` RLS policies** with real per-role rules (see `supabase/db/migrations/SUPABASE-COMPLETE-SCHEMA.sql` line ~412).
 - [ ] Note: this will change User Management from "view password" to "reset password only".
 
 > Ask the dev/assistant to "harden the auth" when ready — it's a known, scoped task.
@@ -22,8 +22,8 @@ passwords) from their browser console.
 
 ## 2. Database setup
 
-- [ ] Run `SUPABASE-COMPLETE-SCHEMA.sql` (creates all tables) — if not already done.
-- [ ] Run `SUPABASE-MIGRATION-INDEXES.sql` — adds performance indexes **and** the
+- [ ] Run `supabase/db/migrations/SUPABASE-COMPLETE-SCHEMA.sql` (creates all tables) — if not already done.
+- [ ] Run `supabase/db/migrations/SUPABASE-MIGRATION-INDEXES.sql` — adds performance indexes **and** the
       query/idle timeouts that keep the DB healthy under concurrent load.
 - [ ] Run any other pending `SUPABASE-MIGRATION-*.sql` files.
 - [ ] Confirm the `photos` storage bucket exists and is set up for uploads.

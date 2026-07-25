@@ -29,7 +29,7 @@ Backend logic tested directly against Supabase (rows created + deleted as tests)
 | `training_assigned` (→ staff) on assignment | ✅ PASS (live) — assignment works |
 | Auto-assign training by department (both directions) | ✅ PASS (live) — new employee gets dept videos; new video assigns to dept staff |
 
-Note: the repo's `SUPABASE-MIGRATION-NOTIFICATIONS.sql` had `title` (out of sync with the live DB, which uses `topic`); the file was corrected to `topic` to match. Commit it to keep the repo in sync.
+Note: the repo's `supabase/db/migrations/SUPABASE-MIGRATION-NOTIFICATIONS.sql` had `title` (out of sync with the live DB, which uses `topic`); the file was corrected to `topic` to match. Commit it to keep the repo in sync.
 
 Frontend build: ✅ compiles clean (`npm run build`).
 
@@ -180,10 +180,10 @@ Notifications are created by **database triggers** (single source). The frontend
 
 | Migration | Purpose | Status |
 |---|---|---|
-| `SUPABASE-MIGRATION-NOTIFICATIONS.sql` | Notification triggers (incl. `task_issue` on `issue_status`) | ✅ active |
-| `SUPABASE-MIGRATION-ISSUE-AUTOCLEAR.sql` | `issue_status` column + 1-day auto-clear cron | ✅ active |
-| `SUPABASE-DAILY-RESET.sql` | Daily reset (clears resolved issues only) | run if not yet |
-| `SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` | Auto-assign training by department | ✅ active |
+| `supabase/db/migrations/SUPABASE-MIGRATION-NOTIFICATIONS.sql` | Notification triggers (incl. `task_issue` on `issue_status`) | ✅ active |
+| `supabase/db/migrations/SUPABASE-MIGRATION-ISSUE-AUTOCLEAR.sql` | `issue_status` column + 1-day auto-clear cron | ✅ active |
+| `supabase/db/migrations/SUPABASE-DAILY-RESET.sql` | Daily reset (clears resolved issues only) | run if not yet |
+| `supabase/db/migrations/SUPABASE-MIGRATION-AUTOASSIGN-TRAINING.sql` | Auto-assign training by department | ✅ active |
 | Database Webhook: `notifications` INSERT → `send-push` | Push delivery | ✅ active |
 
 ---

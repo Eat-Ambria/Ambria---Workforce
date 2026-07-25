@@ -27,7 +27,7 @@ All required SQL migrations are **active** in Supabase:
 
 - 🔲 Commit the last doc:
   ```
-  git add TEST-CASES.md GO-LIVE-CHECKLIST.md
+  git add Md/TEST-CASES.md Md/GO-LIVE-CHECKLIST.md
   git commit -m "docs: final QA results + go-live checklist"
   git push origin main
   ```
