@@ -43,6 +43,17 @@ function render(n: Record<string, unknown>, lang: string) {
     quiz_completed: ['Quiz completed', 'क्विज़ पूरा हुआ', 'training'],
     training_assigned: ['New training assigned', 'नई ट्रेनिंग सौंपी गई', 'training'],
   }
+  // daily due digest: one row for the whole day whose task_text is the count
+  // and which points at no single task (see SUPABASE-MIGRATION-DUE-DIGEST.sql)
+  if (n.type === 'task_due' && !n.entity_id) {
+    return {
+      title: hi ? 'टास्क की समय-सीमा' : 'Task due / overdue',
+      body: hi ? `${item} टास्क आज ड्यू हैं` : `${item} tasks due today`,
+      url: BASE + 'my-tasks',
+      tag: 'task_due-digest',
+    }
+  }
+
   const entry = M[n.type as string]
   const title = entry ? (hi ? entry[1] : entry[0]) : 'Ambria Ops'
   const path = entry ? entry[2] : 'dashboard'

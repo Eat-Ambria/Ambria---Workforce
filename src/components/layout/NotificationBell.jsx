@@ -35,7 +35,13 @@ function meta(n, hi) {
     case 'valet_booking': return { icon: 'valet', link: '/valet', title: hi ? 'नई वैले बुकिंग' : 'New valet booking', body: item }
     case 'quiz_completed': return { icon: 'training', link: '/training', title: hi ? 'क्विज़ पूरा हुआ' : 'Quiz completed', body: item + who }
     case 'training_assigned': return { icon: 'training', link: '/training', title: hi ? 'नई ट्रेनिंग सौंपी गई' : 'New training assigned', body: item }
-    case 'task_due': return { icon: 'clock', link: '/my-tasks', status: 'overdue', title: hi ? 'टास्क की समय-सीमा' : 'Task due / overdue', body: item }
+    // one reminder per person per day: a single task carries its title + id,
+    // several arrive as a digest whose task_text is just the count
+    case 'task_due': return {
+      icon: 'clock', link: '/my-tasks', status: 'overdue',
+      title: hi ? 'टास्क की समय-सीमा' : 'Task due / overdue',
+      body: n.entity_id ? item : (hi ? `${item} टास्क आज ड्यू हैं` : `${item} tasks due today`),
+    }
     default: return { icon: 'bell', link: '/dashboard', title: n.type, body: item }
   }
 }
