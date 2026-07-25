@@ -79,6 +79,47 @@ export const scopedProperty = (user) =>
 export const scopedDepartment = (user) =>
   isSuperAdmin(user?.role) ? null : (DEPARTMENT_LOCKED_ADMINS[uname(user)] || null)
 
+// --- Assignment -------------------------------------------------------------
+// Work (tasks + repair requests) can be handed to staff AND to fellow admins —
+// department heads and admins do fieldwork too. Super admins are included so
+// work can be handed "up", and so an admin can assign something to themselves.
+export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.SUPER_ADMIN]
+
+// An "all properties" user (property='all', e.g. Vicky / Sandeep / the super
+// admin) belongs to every venue, so they stay assignable whichever property is
+// selected. `property` = the venue being assigned within ('all' = no filter).
+export const memberInProperty = (member, property) =>
+  !property || property === 'all' || member?.property === property || member?.property === 'all'
+
+// Short role tag shown beside a name when assigning ('' for regular staff).
+export const roleTag = (role, lang) => {
+  if (role === ROLES.SUPER_ADMIN) return lang === 'hi' ? 'सुपर एडमिन' : 'Super Admin'
+  if (role === ROLES.ADMIN) return lang === 'hi' ? 'एडमिन' : 'Admin'
+  return ''
+}
+
+// "Name · Housekeeping · Admin" — the department is dropped when the list is
+// already filtered to one, and falls back to the designation ("Site Head") for
+// admins with no department. `showRole` is off once the list is one role only.
+// Deduped so someone on the legacy "Admin" department isn't "… · Admin · Admin".
+export const assigneeLabel = (member, { showDept = true, showRole = true, lang } = {}) => {
+  const where = member?.department ? deptName(member.department, lang) : member?.designation
+  const parts = [
+    member?.name,
+    showDept ? where : null,
+    showRole ? roleTag(member?.role, lang) : null,
+  ].filter(Boolean)
+  return [...new Set(parts)].join(' · ')
+}
+
+// Admin powers never apply to your OWN assigned work. An admin who was given a
+// task / repair request acts purely as its assignee there: they do the work,
+// but approving, rating, reassigning and deleting it is somebody else's call —
+// any other admin, or the super admin (who is never restricted). Their admin
+// rights over everyone else's work are untouched.
+export const isOwnAssignedWork = (user, assignedTo) =>
+  !!assignedTo && assignedTo === user?.id && !isSuperAdmin(user?.role)
+
 // Task categories & statuses (My Tasks workflow)
 export const TASK_CATEGORIES = ['daily', 'weekly', 'monthly']
 export const TASK_STATUS = {

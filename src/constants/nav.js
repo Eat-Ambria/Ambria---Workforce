@@ -3,7 +3,9 @@
 
 export const NAV_ITEMS = [
   { path: '/dashboard', key: 'dashboard', icon: 'dashboard', roles: ['sa', 'a', 'e'] },
-  { path: '/my-tasks', key: 'myTasks', icon: 'myTasks', roles: ['e'] },
+  // admins get this too — work can be assigned to them, and this is where an
+  // assignee does it (/tasks stays the org-wide management view)
+  { path: '/my-tasks', key: 'myTasks', icon: 'myTasks', roles: ['sa', 'a', 'e'] },
   { path: '/tasks', key: 'tasks', icon: 'tasks', roles: ['sa', 'a'] },
   { path: '/task-board', key: 'taskBoard', icon: 'taskBoard', roles: ['sa', 'a', 'e'] },
   { path: '/training', key: 'training', icon: 'training', roles: ['sa', 'a', 'e'] },

@@ -5,10 +5,11 @@ import { supabase } from '../../lib/supabase'
 import { newId } from '../../lib/id'
 import { nowISO, todayISO, fmtDate, fmtDateTime } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
-import { useT } from '../../context/LangContext'
+import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork } from '../../constants/org'
+import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -91,15 +92,12 @@ export default function AdminTasks() {
     })()
   }, [location.state])
 
-  // staff list for the filter dropdown — scoped to the admin, loaded once
+  // people list for the filter + assign dropdowns — staff and fellow admins,
+  // scoped to this admin, loaded once
   useEffect(() => {
     if (!user) return
-    const propScope = scopedProperty(user)
-    const deptScope = scopedDepartment(user)
-    let mq = supabase.from('users').select('id, name, department, property').eq('is_active', true).eq('role', 'e').order('name')
-    if (propScope) mq = mq.eq('property', propScope)
-    if (deptScope) mq = mq.eq('department', deptScope)
-    mq.then(({ data }) => setMembers(data || []))
+    assigneesQuery({ propScope: scopedProperty(user), deptScope: scopedDepartment(user) })
+      .then(({ data }) => setMembers(data || []))
   }, [user])
 
   // load per-tab counts + the active tab's page whenever filters/tab/page change.
@@ -141,13 +139,13 @@ export default function AdminTasks() {
   const changeCat = (c) => { setCatFilter(c); setPage(0) }
   const changeMember = (m) => { setMemberFilter(m); setPage(0) }
 
-  // staff shown in the name filter — scoped to the selected property when set
+  // people shown in the name filter — scoped to the selected property when set
   const memberOptions = useMemo(() => {
-    const opts = propFilter === 'all' ? members : members.filter((m) => m.property === propFilter)
+    const opts = members.filter((m) => memberInProperty(m, propFilter))
     return [...opts].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }, [members, propFilter])
 
-  // if the selected staff isn't in the current property scope, reset to All
+  // if the selected person isn't in the current property scope, reset to All
   useEffect(() => {
     if (memberFilter !== 'all' && members.length && !memberOptions.some((m) => m.id === memberFilter)) {
       setMemberFilter('all'); setPage(0)
@@ -288,7 +286,8 @@ export default function AdminTasks() {
                   {/* right column: status + fixed-width category badge, vertically centered,
                       so Daily/Weekly/Monthly line up in one straight column across cards */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    {task.status === TASK_STATUS.COMPLETED && (
+                    {/* shortcut into the delete action — hidden on your own work */}
+                    {task.status === TASK_STATUS.COMPLETED && !isOwnAssignedWork(user, task.assigned_to) && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setReview(task) }}
                         title={t.delete}
@@ -451,6 +450,10 @@ function ReviewModal({ task, user, onClose, onSaved }) {
   const isIssue = task.issue_status === TASK_STATUS.ISSUE
   const isIssueWorking = task.issue_status === TASK_STATUS.ISSUE_WORKING
   const isIssueState = isIssue || isIssueWorking || task.issue_status === TASK_STATUS.ISSUE_RESOLVED
+  // this task is on my own plate: I'm its assignee, not its admin. Approving,
+  // sending back, closing the issue and deleting are another admin's call — I
+  // do the actual work over in My Tasks. Untouched for everyone else's tasks.
+  const ownWork = isOwnAssignedWork(user, task.assigned_to)
 
   return (
     <Modal
@@ -461,21 +464,24 @@ function ReviewModal({ task, user, onClose, onSaved }) {
           <Button variant="danger" onClick={sendBack} disabled={busy || (!rejectNote.trim() && !rejectVoice)} style={{ flex: 2 }}>{t.reject}</Button>
         </>
       ) : (
-        // Close + the status-specific action(s) + an always-available Delete.
-        // (This page is admin-only, so any task can be removed directly.)
+        // Close + the status-specific action(s) + Delete, available on any task
+        // (this page is admin-only) — but none of them on your own work, which
+        // is view-only here.
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
-          {isQueue && (
+          {isQueue && !ownWork && (
             <>
               <Button variant="ghost" onClick={() => setRejectMode(true)} style={{ flex: 1 }}>{t.reject}</Button>
               <Button variant="success" onClick={approve} disabled={busy} style={{ flex: 2 }}>{t.approve}</Button>
             </>
           )}
-          {isIssue && <Button variant="primary" onClick={startIssue} disabled={busy} style={{ flex: 2 }}>{t.startWorkingIssue}</Button>}
-          {isIssueWorking && <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>}
-          <Button variant="danger" onClick={del} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
-            <Icon name="trash" size={16} color="#fff" />
-          </Button>
+          {isIssue && !ownWork && <Button variant="primary" onClick={startIssue} disabled={busy} style={{ flex: 2 }}>{t.startWorkingIssue}</Button>}
+          {isIssueWorking && !ownWork && <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>}
+          {!ownWork && (
+            <Button variant="danger" onClick={del} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
+              <Icon name="trash" size={16} color="#fff" />
+            </Button>
+          )}
         </>
       )}
     >
@@ -526,6 +532,13 @@ function ReviewModal({ task, user, onClose, onSaved }) {
         </>
       )}
 
+      {/* explain the missing admin buttons on work assigned to me */}
+      {ownWork && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.tl, marginTop: 12 }}>
+          <Icon name="warning" size={14} color={C.tl} /> {t.ownWorkLocked}
+        </div>
+      )}
+
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
     </Modal>
   )
@@ -534,6 +547,7 @@ function ReviewModal({ task, user, onClose, onSaved }) {
 function CreateModal({ user, members, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const canSeeAllProps = canSeeAllProperties(user)
   const [form, setForm] = useState({
     title: '', description: '', category: 'daily', priority: 'medium', area: '', time_block: '', assigned_to: '', due_date: '',
@@ -544,7 +558,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
   const [err, setErr] = useState('')
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  // departments that actually have staff, for the assign filter
+  // departments that actually have people, for the assign filter
   const deptOptions = useMemo(() => {
     const codes = [...new Set(members.map((m) => m.department).filter(Boolean))]
     return codes
@@ -552,10 +566,10 @@ function CreateModal({ user, members, onClose, onSaved }) {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [members])
 
-  // staff shown in the assign dropdown — filtered by the chosen property + department
+  // people shown in the assign dropdown — staff and admins, filtered by the
+  // chosen property + department
   const assignable = useMemo(() => {
-    let list = members
-    if (form.property) list = list.filter((m) => m.property === form.property)
+    let list = members.filter((m) => memberInProperty(m, form.property))
     if (dept !== 'all') list = list.filter((m) => m.department === dept)
     return list
   }, [members, dept, form.property])
@@ -648,7 +662,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
               <option value="">—</option>
               {assignable.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}{m.department && dept === 'all' ? ` · ${DEPARTMENT_MAP[m.department]?.name || m.department}` : ''}
+                  {assigneeLabel(m, { showDept: dept === 'all', lang })}
                 </option>
               ))}
             </select>

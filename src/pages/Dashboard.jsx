@@ -5,7 +5,8 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, TASK_STATUS, PROPERTIES, PROPERTY_MAP } from '../constants/org'
+import { isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, TASK_STATUS, PROPERTIES, PROPERTY_MAP } from '../constants/org'
+import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
 
@@ -34,14 +35,11 @@ function AdminDashboard({ user }) {
   const [prop, setProp] = useState('all') // top-level property selector (all-scope admins)
   const [member, setMember] = useState('all') // staff filter for task stats (all | <staff id>)
 
-  // staff list for the filter — scoped to the admin, loaded once
+  // people list for the filter — staff + admins (both can hold tasks),
+  // scoped to the admin, loaded once
   useEffect(() => {
-    const propScope = scopedProperty(user)
-    const deptScope = scopedDepartment(user)
-    let mq = supabase.from('users').select('id, name, property').eq('is_active', true).eq('role', 'e').order('name')
-    if (propScope) mq = mq.eq('property', propScope)
-    if (deptScope) mq = mq.eq('department', deptScope)
-    mq.then(({ data }) => setMembers(data || []))
+    assigneesQuery({ propScope: scopedProperty(user), deptScope: scopedDepartment(user) })
+      .then(({ data }) => setMembers(data || []))
   }, [user])
 
   // all counts computed in the database; re-runs when property / member changes
@@ -78,9 +76,17 @@ function AdminDashboard({ user }) {
     if (propScope) vq = vq.eq('property', propScope)
     else if (prop !== 'all') vq = vq.or(`property.eq.${prop},property.eq.all`)
 
+    // work assigned to THIS admin — admins can be given tasks / repairs too.
+    // Deliberately unfiltered by the property/member selectors: it's personal.
+    const myTasksQ = supabase.from('tasks').select('*', { count: 'exact', head: true })
+      .eq('assigned_to', user.id).neq('status', TASK_STATUS.COMPLETED)
+    const myFixesQ = supabase.from('work_board').select('*', { count: 'exact', head: true })
+      .eq('assigned_to', user.id).neq('status', 'approved').neq('status', 'completed')
+
     const [
       total, pending, inProgress, waiting, done, overdue, pHigh, pMed, pLow,
       bOpen, bProg, bDone, vendors, videos, fireR, chemR, boardOverdue,
+      myTasks, myFixes,
     ] = await Promise.all([
       taskBase(),
       taskBase().eq('status', TASK_STATUS.PENDING),
@@ -100,6 +106,8 @@ function AdminDashboard({ user }) {
       scopedRows('chemical_usage', 'quantity', true),
       // repair requests past their due date and not finished (counted as overdue)
       boardBase().lt('due_date', today).neq('status', 'approved').neq('status', 'completed'),
+      myTasksQ,
+      myFixesQ,
     ])
 
     const cnt = (r) => r.count || 0
@@ -120,6 +128,7 @@ function AdminDashboard({ user }) {
         priority: { high: cnt(pHigh), medium: cnt(pMed), low: cnt(pLow) },
       },
       board: { open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue) },
+      mine: { tasks: cnt(myTasks), fixes: cnt(myFixes) },
       vendors: cnt(vendors),
       fire: fireStat,
       chem: { entries: chemRows.length, total: chemRows.reduce((s, r) => s + Number(r.quantity || 0), 0) },
@@ -130,13 +139,13 @@ function AdminDashboard({ user }) {
 
   useEffect(() => { load() }, [load])
 
-  // staff options for the filter — scoped to the selected property, sorted by name
+  // people options for the filter — scoped to the selected property, sorted by name
   const memberOptions = useMemo(() => {
-    const scoped = prop === 'all' ? members : members.filter((m) => m.property === prop)
+    const scoped = members.filter((m) => memberInProperty(m, prop))
     return [...scoped].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }, [members, prop])
 
-  // reset the staff filter if the chosen member isn't in the current property scope
+  // reset the person filter if the chosen member isn't in the current property scope
   useEffect(() => {
     if (member !== 'all' && members.length && !memberOptions.some((m) => m.id === member)) setMember('all')
   }, [memberOptions, member, members])
@@ -185,6 +194,23 @@ function AdminDashboard({ user }) {
           </select>
         </div>
       </div>
+
+      {/* work handed to this admin personally — only shown when there is some,
+          so the rest of the time the dashboard stays purely org-wide */}
+      {(d.mine.tasks > 0 || d.mine.fixes > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: C.maroonSoft, border: `1px solid ${C.maroon}33`, borderLeft: `3px solid ${C.maroon}`, borderRadius: 12, padding: '11px 14px', marginBottom: 18 }}>
+          <Icon name="myTasks" size={17} color={C.maroon} />
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.maroon }}>{t.assignedToMe}</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
+            {d.mine.tasks > 0 && (
+              <MineChip C={C} label={t.myTasks} value={d.mine.tasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
+            )}
+            {d.mine.fixes > 0 && (
+              <MineChip C={C} label={t.taskBoard} value={d.mine.fixes} onClick={() => navigate('/task-board')} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* KPI row */}
       <div style={kpiGrid}>
@@ -466,6 +492,24 @@ function Kpi({ C, icon, value, label, tone, border, onClick }) {
       <div style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1.15, marginTop: 14, letterSpacing: '-0.02em' }}>{value ?? 0}</div>
       <div style={{ fontSize: 13, color: C.tl, fontWeight: 600, marginTop: 2 }}>{label}</div>
     </Card>
+  )
+}
+
+// pill in the admin's "assigned to me" strip: "My Tasks · 3 →"
+function MineChip({ C, label, value, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 999,
+        background: C.card, border: `1px solid ${C.maroon}33`, color: C.text, fontSize: 13, fontWeight: 700,
+      }}
+    >
+      {label}
+      <span style={{ background: C.maroon, color: '#fff', borderRadius: 999, padding: '1px 8px', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <Icon name="chevronRight" size={14} color={C.faint} />
+    </button>
   )
 }
 

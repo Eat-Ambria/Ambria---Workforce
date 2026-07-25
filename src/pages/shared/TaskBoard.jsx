@@ -5,7 +5,8 @@ import { nowISO, fmtDateTime, todayISO, fmtDate } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, PROPERTIES, deptName } from '../../constants/org'
+import { isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork } from '../../constants/org'
+import { assigneesQuery } from '../../lib/assignees'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
@@ -31,6 +32,13 @@ const statusLabel = (s, t) => ({
 }[s] || t.open)
 const prioLabel = (p, t) => ({ low: t.prioLow, normal: t.prioNormal, high: t.prioHigh, urgent: t.prioUrgent }[p] || p)
 
+// --- assignee picker ---------------------------------------------------------
+// A repair request can go to an admin (site head, supervisor, HR…) or to staff.
+// Pick the kind of person first, then narrow by department, then by name.
+const WHO = { ALL: 'all', ADMIN: 'a', STAFF: 'e' }
+const matchesWho = (m, who) =>
+  who === WHO.ALL || (who === WHO.ADMIN ? isAdminRole(m.role) : m.role === 'e')
+
 export default function TaskBoard() {
   const C = useColors()
   const t = useT()
@@ -40,7 +48,7 @@ export default function TaskBoard() {
   const admin = isAdminRole(user?.role)
 
   const [rows, setRows] = useState([])
-  const [members, setMembers] = useState([]) // staff available for assignment (admin)
+  const [members, setMembers] = useState([]) // staff + admins available for assignment (admin)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState(location.state?.tab || 'open')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
@@ -72,10 +80,8 @@ export default function TaskBoard() {
       setRows(all)
 
       if (admin) {
-        let mq = supabase.from('users').select('id, name, department, property').eq('is_active', true).eq('role', 'e').order('name')
-        if (propScope) mq = mq.eq('property', propScope)
-        if (deptScope) mq = mq.eq('department', deptScope)
-        const { data: mem } = await mq
+        // staff *and* fellow admins can take a repair request
+        const { data: mem } = await assigneesQuery({ propScope, deptScope })
         setMembers(mem || [])
       }
     } catch {
@@ -252,7 +258,8 @@ export default function TaskBoard() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexShrink: 0 }}>
                     <Badge color={C[st.tone]} bg={C[st.bg]}>{statusLabel(r.status, t)}</Badge>
-                    {admin && ['completed', 'approved'].includes(r.status) && (
+                    {/* quick-delete a finished request — never your own work */}
+                    {admin && ['completed', 'approved'].includes(r.status) && !isOwnAssignedWork(user, r.assigned_to) && (
                       <button
                         onClick={(e) => { e.stopPropagation(); removeRow(r.id) }}
                         title={t.delete}
@@ -319,12 +326,13 @@ function PublicLinkBar({ C, t }) {
 function PostModal({ user, members = [], onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const admin = isAdminRole(user?.role)          // admin + super admin can assign at creation
   const superAdmin = isSuperAdmin(user?.role)    // only super admin picks the property
   const [form, setForm] = useState({
     title: '', description: '', priority: 'normal', due_date: '',
     property: user.property && user.property !== 'all' ? user.property : 'pp',
-    dept: 'all', assignTo: '',
+    who: WHO.ALL, dept: 'all', assignTo: '',
   })
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
@@ -338,27 +346,14 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     setFieldErr((fe) => (fe[k] ? { ...fe, [k]: undefined } : fe))
   }
 
-  // departments that have staff, for the assign filter
-  const deptOptions = useMemo(() => {
-    const codes = [...new Set(members.map((m) => m.department).filter(Boolean))]
-    return codes.map((code) => ({ code, name: DEPARTMENT_MAP[code]?.name || code }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [members])
-
-  // staff assignable — scoped to the chosen property + department
-  const assignable = useMemo(() => {
-    let list = members
-    if (form.property) list = list.filter((m) => m.property === form.property)
-    if (form.dept !== 'all') list = list.filter((m) => m.department === form.dept)
-    return list
-  }, [members, form.property, form.dept])
-
-  // clear a pick that no longer matches the property/department filters
-  useEffect(() => {
-    if (form.assignTo && !assignable.some((m) => m.id === form.assignTo)) {
-      setForm((f) => ({ ...f, assignTo: '' }))
-    }
-  }, [assignable, form.assignTo])
+  // everyone at the chosen venue — the picker narrows it by kind + department
+  const atProperty = useMemo(
+    () => members.filter((m) => memberInProperty(m, form.property)),
+    [members, form.property]
+  )
+  const setWho = useCallback((who) => setForm((f) => ({ ...f, who })), [])
+  const setDept = useCallback((dept) => setForm((f) => ({ ...f, dept })), [])
+  const setAssignTo = useCallback((assignTo) => setForm((f) => ({ ...f, assignTo })), [])
 
   async function save() {
     // validate per-field so the message appears next to the field, not at the bottom
@@ -416,28 +411,13 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       </Field>
       {/* admins & super admins can assign the fix right away (optional) */}
       {admin && (
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <Field label={t.department}>
-              <select style={inputStyle(C)} value={form.dept} onChange={set('dept')}>
-                <option value="all">{t.all}</option>
-                {deptOptions.map((dpt) => <option key={dpt.code} value={dpt.code}>{dpt.name}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div style={{ flex: 1 }}>
-            <Field label={`${t.assignTo} (${t.optional})`}>
-              <select style={inputStyle(C)} value={form.assignTo} onChange={set('assignTo')}>
-                <option value="">—</option>
-                {assignable.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}{m.department && form.dept === 'all' ? ` · ${DEPARTMENT_MAP[m.department]?.name || m.department}` : ''}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </div>
+        <AssigneePicker
+          C={C} t={t} lang={lang}
+          members={atProperty}
+          who={form.who} dept={form.dept} value={form.assignTo}
+          onWho={setWho} onDept={setDept} onChange={setAssignTo}
+          label={`${t.assignTo} (${t.optional})`}
+        />
       )}
       <Field label={`${t.dueDate} (${t.optional})`} error={fieldErr.due_date}>
         <input ref={dueRef} type="date" min={todayISO()} style={inputStyle(C)} value={form.due_date} onChange={set('due_date')} />
@@ -451,11 +431,13 @@ function PostModal({ user, members = [], onClose, onSaved }) {
 function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const superAdmin = isSuperAdmin(user?.role) // super admin also picks the property when assigning
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
   const [propFilter, setPropFilter] = useState(row.property || 'pp') // property to assign within (super admin)
+  const [whoFilter, setWhoFilter] = useState(WHO.ALL) // assign to an admin or to staff
   const [deptFilter, setDeptFilter] = useState('all') // narrow the assign list by department
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
   const [note, setNote] = useState(row.resolution_note || '')
@@ -465,41 +447,25 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   // super admin assigns within a chosen property; other admins are already scoped
   const scopedMembers = useMemo(
-    () => (superAdmin ? members.filter((m) => m.property === propFilter) : members),
+    () => (superAdmin ? members.filter((m) => memberInProperty(m, propFilter)) : members),
     [members, superAdmin, propFilter]
-  )
-
-  // departments that actually have staff in the chosen property, for the assign filter
-  const deptOptions = useMemo(() => {
-    const codes = [...new Set(scopedMembers.map((m) => m.department).filter(Boolean))]
-    return codes
-      .map((code) => ({ code, name: DEPARTMENT_MAP[code]?.name || code }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [scopedMembers])
-
-  // staff shown in the assign dropdown — filtered by property (super admin) + department
-  const assignable = useMemo(
-    () => (deptFilter === 'all' ? scopedMembers : scopedMembers.filter((m) => m.department === deptFilter)),
-    [scopedMembers, deptFilter]
   )
 
   // changing the property resets the department filter
   useEffect(() => { setDeptFilter('all') }, [propFilter])
 
-  // if the current pick isn't in the filtered list, clear it
-  useEffect(() => {
-    if (assignTo && !assignable.some((m) => m.id === assignTo)) setAssignTo('')
-  }, [assignable, assignTo])
-
   const postedPhotos = Array.isArray(row.photos) ? row.photos : []
   const isAssignee = !!row.assigned_to && row.assigned_to === user.id
   const isPoster = !!row.posted_by && row.posted_by === user.id
   const s = row.status
+  // work assigned to me: here I'm the worker, not an admin — no approving,
+  // rating, reassigning or deleting my own request at any status
+  const ownWork = isOwnAssignedWork(user, row.assigned_to)
   // who can delete this request:
   //  - admins / super-admins: ANY request, any status (incl. public ones with
   //    no logged-in owner)
   //  - the poster: their own request, unless it's already completed/approved
-  const canDelete = admin || (isPoster && !['completed', 'approved'].includes(s))
+  const canDelete = !ownWork && (admin || (isPoster && !['completed', 'approved'].includes(s)))
 
   async function setStatus(status, patch = {}) {
     setBusy(true); setErr('')
@@ -562,7 +528,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     actions = <Button variant="primary" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 2 }}>{t.startWork}</Button>
   } else if (s === 'in_progress' && isAssignee) {
     actions = <Button variant="success" disabled={busy || resPhotos.length === 0} onClick={submitForApproval} style={{ flex: 2 }}>{t.markForCompletion || 'Submit for Approval'}</Button>
-  } else if (s === 'approval_requested' && admin) {
+  } else if (s === 'approval_requested' && admin && !ownWork) {
     actions = (
       <>
         <Button variant="ghost" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 1 }}>{t.reject || 'Send Back'}</Button>
@@ -610,8 +576,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         </div>
       )}
 
-      {/* admin can reassign a request that isn't finished yet */}
-      {admin && ['assigned', 'in_progress', 'approval_requested'].includes(s) && !reassigning && (
+      {/* admin can reassign a request that isn't finished yet — but not one
+          that's on their own plate; that's for another admin to move */}
+      {admin && !ownWork && ['assigned', 'in_progress', 'approval_requested'].includes(s) && !reassigning && (
         <button
           type="button"
           onClick={() => setReassigning(true)}
@@ -631,28 +598,13 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
               </select>
             </Field>
           )}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <Field label={t.department}>
-                <select style={inputStyle(C)} value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
-                  <option value="all">{t.all}</option>
-                  {deptOptions.map((dpt) => <option key={dpt.code} value={dpt.code}>{dpt.name}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div style={{ flex: 1 }}>
-              <Field label={t.assignTo}>
-                <select style={inputStyle(C)} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
-                  <option value="">—</option>
-                  {assignable.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}{m.department && deptFilter === 'all' ? ` · ${DEPARTMENT_MAP[m.department]?.name || m.department}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          </div>
+          <AssigneePicker
+            C={C} t={t} lang={lang}
+            members={scopedMembers}
+            who={whoFilter} dept={deptFilter} value={assignTo}
+            onWho={setWhoFilter} onDept={setDeptFilter} onChange={setAssignTo}
+            label={t.assignTo}
+          />
           <Field label={`${t.dueDate} (${t.optional})`}>
             <input type="date" min={todayISO()} style={inputStyle(C)} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </Field>
@@ -693,8 +645,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         <div style={{ fontSize: 13, color: C.yellow, fontWeight: 600, marginTop: 10 }}>{t.awaitingApprovalMsg || 'Sent to admin for approval.'}</div>
       )}
 
-      {/* rating — admin rates the work while it's awaiting approval (before approving) */}
-      {s === 'approval_requested' && admin && (
+      {/* rating — admin rates the work while it's awaiting approval (before
+          approving). Never your own work: someone else scores that. */}
+      {s === 'approval_requested' && admin && !ownWork && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.tl, marginBottom: 8 }}>{t.workRating}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -707,23 +660,93 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         </div>
       )}
 
+      {/* explain the missing admin buttons on work assigned to me */}
+      {admin && ownWork && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.tl, marginTop: 12 }}>
+          <Icon name="warning" size={14} color={C.tl} /> {t.ownWorkLocked}
+        </div>
+      )}
+
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 10 }}>{err}</div>}
     </Modal>
   )
 }
 
-function ScopeChip({ children, active, onClick, C }) {
+function ScopeChip({ children, active, onClick, C, full }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
         background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
+        flex: full ? 1 : undefined, // full: share the row evenly (segmented control)
       }}
     >
       {children}
     </button>
+  )
+}
+
+// Assign picker used both when raising a request and when (re)assigning one:
+// Admins / Staff → department → name. `members` must already be property-scoped.
+function AssigneePicker({ C, t, lang, members, who, dept, value, onWho, onDept, onChange, label }) {
+  const pool = useMemo(() => members.filter((m) => matchesWho(m, who)), [members, who])
+
+  // departments that actually have someone of the chosen kind
+  const deptOptions = useMemo(() => {
+    const codes = [...new Set(pool.map((m) => m.department).filter(Boolean))]
+    return codes.map((code) => ({ code, name: DEPARTMENT_MAP[code]?.name || code }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [pool])
+
+  const list = useMemo(
+    () => (dept === 'all' ? pool : pool.filter((m) => m.department === dept)),
+    [pool, dept]
+  )
+
+  // a department the new selection doesn't have (e.g. switching Staff → Admins)
+  // falls back to All, and a name that's no longer listed is cleared
+  useEffect(() => {
+    if (dept !== 'all' && !deptOptions.some((d) => d.code === dept)) onDept('all')
+  }, [deptOptions, dept, onDept])
+  useEffect(() => {
+    if (value && !list.some((m) => m.id === value)) onChange('')
+  }, [list, value, onChange])
+
+  return (
+    <>
+      <Field label={label}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <ScopeChip C={C} full active={who === WHO.ALL} onClick={() => onWho(WHO.ALL)}>{t.all}</ScopeChip>
+          <ScopeChip C={C} full active={who === WHO.ADMIN} onClick={() => onWho(WHO.ADMIN)}>{t.assignAdmins}</ScopeChip>
+          <ScopeChip C={C} full active={who === WHO.STAFF} onClick={() => onWho(WHO.STAFF)}>{t.assignStaff}</ScopeChip>
+        </div>
+      </Field>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <Field label={t.department}>
+            <select style={inputStyle(C)} value={dept} onChange={(e) => onDept(e.target.value)}>
+              <option value="all">{t.all}</option>
+              {deptOptions.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div style={{ flex: 1 }}>
+          <Field label={t.personName}>
+            <select style={inputStyle(C)} value={value} onChange={(e) => onChange(e.target.value)}>
+              <option value="">—</option>
+              {list.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {assigneeLabel(m, { showDept: dept === 'all', showRole: who === WHO.ALL, lang })}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </div>
+    </>
   )
 }
 
