@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { todayISO, nowISO, fmtTime, to24h } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
-import { useT } from '../../context/LangContext'
+import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { PROPERTIES, PROPERTY_MAP, canSeeAllProperties } from '../../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
 import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, inputStyle, Spinner } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -12,7 +12,11 @@ import Icon from '../../components/common/Icon'
 import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE } from '../../lib/lms'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const WEEKDAYS_HI = ['र', 'सो', 'मं', 'बु', 'गु', 'शु', 'श']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const MONTHS_HI = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर']
+const monthName = (i, lang) => (lang === 'hi' ? MONTHS_HI[i] : MONTHS[i])
+const weekdays = (lang) => (lang === 'hi' ? WEEKDAYS_HI : WEEKDAYS)
 
 // digits only; '' stays '' so the field can be cleared
 const digitsOnly = (v) => (v == null ? '' : String(v).replace(/\D/g, ''))
@@ -20,14 +24,15 @@ const overGuestLimit = (v) => Number(v) > MAX_GUESTS
 
 const pad = (n) => String(n).padStart(2, '0')
 const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}` // m is 0-based
-function fmtLong(iso) {
+function fmtLong(iso, lang) {
   const [y, m, d] = iso.split('-').map(Number)
-  return `${d} ${MONTHS[m - 1]} ${y}`
+  return `${d} ${monthName(m - 1, lang)} ${y}`
 }
 
 export default function Valet() {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const { user } = useAuth()
 
   const scopeAll = canSeeAllProperties(user)
@@ -148,9 +153,9 @@ export default function Valet() {
       />
 
       {view === 'calculator' ? (
-        <Calculator C={C} t={t} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix} canEdit={scopeAll} onMatrixSaved={loadMatrix} />
+        <Calculator C={C} t={t} lang={lang} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix} canEdit={scopeAll} onMatrixSaved={loadMatrix} />
       ) : view === 'bookings' ? (
-        <BookingsList C={C} t={t} user={user} scopeAll={scopeAll} reloadSignal={bump} onEdit={openEdit} />
+        <BookingsList C={C} t={t} lang={lang} user={user} scopeAll={scopeAll} reloadSignal={bump} onEdit={openEdit} />
       ) : (
         <>
           {/* property filter — dropdown, only for admins who oversee all properties */}
@@ -159,18 +164,18 @@ export default function Valet() {
               <Icon name="pin" size={16} color={C.tl} />
               <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
                 <option value="all">{t.properties} — {t.all}</option>
-                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
               </select>
             </div>
           )}
 
           {/* month navigator */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <button onClick={() => shiftMonth(-1)} disabled={!canPrev} style={navBtn(C, !canPrev)} aria-label="Previous month">
+            <button onClick={() => shiftMonth(-1)} disabled={!canPrev} style={navBtn(C, !canPrev)} aria-label={t.prevMonth}>
               <Icon name="chevronLeft" size={18} color={canPrev ? C.text : C.faint} />
             </button>
-            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{MONTHS[month.m]} {month.y}</div>
-            <button onClick={() => shiftMonth(1)} disabled={!canNext} style={navBtn(C, !canNext)} aria-label="Next month">
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{monthName(month.m, lang)} {month.y}</div>
+            <button onClick={() => shiftMonth(1)} disabled={!canNext} style={navBtn(C, !canNext)} aria-label={t.nextMonth}>
               <Icon name="chevronRight" size={18} color={canNext ? C.text : C.faint} />
             </button>
           </div>
@@ -181,7 +186,7 @@ export default function Valet() {
             <Card style={{ padding: 10 }}>
               {/* weekday header */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5, marginBottom: 5 }}>
-                {WEEKDAYS.map((w, i) => (
+                {weekdays(lang).map((w, i) => (
                   <div key={i} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: C.tl }}>{w}</div>
                 ))}
               </div>
@@ -248,7 +253,7 @@ export default function Valet() {
 
       {creatingDate && (
         <CreateModal
-          C={C} t={t} user={user} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix}
+          C={C} t={t} lang={lang} user={user} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix}
           date={creatingDate} minDate={today} maxDate={maxDate} existing={bookings} prefill={createPrefill} editing={editingBooking}
           onClose={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null) }}
           onSaved={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null); setBump((b) => b + 1); load() }}
@@ -278,7 +283,7 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', scopeAll, mat
 
   return (
     <Modal
-      open onClose={onClose} title={fmtLong(date)}
+      open onClose={onClose} title={fmtLong(date, lang)}
       footer={
         isPast
           ? <div style={{ fontSize: 13, color: C.tl, textAlign: 'center', width: '100%' }}>{t.pastDateNoBooking || "Past date — bookings can't be added."}</div>
@@ -294,7 +299,7 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', scopeAll, mat
           <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 10 }}>{t.valetBooking}</div>
           <div style={{ display: 'grid', gap: 12 }}>
             {list.map((b) => (
-              <BookingCard key={b.id} C={C} t={t} b={b} scopeAll={scopeAll} matrix={matrix} busy={busy} onEdit={() => onEdit?.(b)} onDelete={() => del(b.id)} />
+              <BookingCard key={b.id} C={C} t={t} lang={lang} b={b} scopeAll={scopeAll} matrix={matrix} busy={busy} onEdit={() => onEdit?.(b)} onDelete={() => del(b.id)} />
             ))}
           </div>
         </>
@@ -359,7 +364,7 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, onCr
   )
 }
 
-function BookingCard({ C, t, b, scopeAll, matrix, busy, onEdit, onDelete }) {
+function BookingCard({ C, t, lang, b, scopeAll, matrix, busy, onEdit, onDelete }) {
   // prefer the snapshot saved with the booking (may be an admin override);
   // fall back to computing from the current matrix, then to the stored total.
   const stored = Array.isArray(b.staff_breakdown) ? b.staff_breakdown : null
@@ -375,7 +380,7 @@ function BookingCard({ C, t, b, scopeAll, matrix, busy, onEdit, onDelete }) {
           <div style={{ fontWeight: 700, fontSize: 15 }}>{b.customer_name || '—'}</div>
           {scopeAll && (
             <div style={{ fontSize: 12.5, color: C.faint, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="pin" size={13} /> {PROPERTY_MAP[b.property]?.name || b.property}
+              <Icon name="pin" size={13} /> {propName(b.property, lang)}
             </div>
           )}
         </div>
@@ -456,7 +461,7 @@ function StaffBreakdown({ C, result }) {
 }
 
 /* ------------------------------ create form ----------------------------- */
-function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, maxDate, matrix, existing = [], prefill = null, editing = null, onClose, onSaved }) {
+function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDate, maxDate, matrix, existing = [], prefill = null, editing = null, onClose, onSaved }) {
   // properties already booked on the chosen date can't be booked again
   // (when editing, the booking being edited doesn't count against itself)
   const bookedOn = (d) => new Set(existing.filter((b) => b.event_date === d && (!editing || b.id !== editing.id)).map((b) => b.property))
@@ -537,7 +542,7 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
       .limit(1)
     if (clash && clash.length && (!editing || clash[0].id !== editing.id)) {
       setBusy(false)
-      setErr(`${PROPERTY_MAP[form.property]?.name || form.property} already has a booking on ${form.event_date}`)
+      setErr(`${propName(form.property, lang)} already has a booking on ${form.event_date}`)
       return
     }
 
@@ -558,7 +563,7 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
     setBusy(false)
     if (error) {
       setErr(error.code === '23505'
-        ? `${PROPERTY_MAP[form.property]?.name || form.property} already has a booking on ${form.event_date}`
+        ? `${propName(form.property, lang)} already has a booking on ${form.event_date}`
         : error.message)
       return
     }
@@ -582,9 +587,9 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
       )}
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Property">
+          <Field label={t.properties}>
             <select style={inputStyle(C)} value={form.property} onChange={set('property')} disabled={availableProps.length <= 1}>
-              {availableProps.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              {availableProps.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
             </select>
           </Field>
         </div>
@@ -607,7 +612,7 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
 
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Date">
+          <Field label={t.dateLabel}>
             <input type="date" min={minDate} max={maxDate} style={inputStyle(C)} value={form.event_date} onChange={onDate} />
           </Field>
         </div>
@@ -665,7 +670,7 @@ function CreateModal({ C, t, user, visibleProps, defaultProp, date, minDate, max
                 ))}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 4px 0', borderTop: `1px solid ${C.border}` }}>
-                <span style={{ fontWeight: 700 }}>Total staff</span>
+                <span style={{ fontWeight: 700 }}>{t.totalStaff}</span>
                 <span style={{ fontWeight: 800, color: C.maroon, fontSize: 20 }}>{effTotal ?? 0}</span>
               </div>
             </>
@@ -703,7 +708,7 @@ function exportBookingsPdf(sections) {
   const body = sections.map((sec) => {
     const rows = sec.items.map((b) => `
       <tr>
-        <td>${escapeHtml(PROPERTY_MAP[b.property]?.name || b.property)}</td>
+        <td>${escapeHtml(propName(b.property, lang))}</td>
         <td>${escapeHtml(b.customer_name || '—')}</td>
         <td>${escapeHtml(b.phone || '—')}</td>
         <td>${escapeHtml(b.event_time ? fmtTime(b.event_time) : '—')}</td>
@@ -742,7 +747,7 @@ function exportBookingsPdf(sections) {
         <button class="print" onclick="window.print()">Print / Save PDF</button>
       </div>
       <div class="head">
-        <h1>Ambria Ops — Valet Bookings</h1>
+        <h1>Workforce — Valet Bookings</h1>
         <p>Next ${sections.length} booking day(s) from today · Generated ${escapeHtml(genDate)}</p>
       </div>
       ${body}
@@ -757,7 +762,7 @@ function exportBookingsPdf(sections) {
 }
 
 /* --------------------- all valet bookings (list view) --------------------- */
-function BookingsList({ C, t, user, scopeAll, reloadSignal, onEdit }) {
+function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
   const [rows, setRows] = useState(null)
   const [propFilter, setPropFilter] = useState('all')
 
@@ -793,8 +798,8 @@ function BookingsList({ C, t, user, scopeAll, reloadSignal, onEdit }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{b.customer_name || '—'}</div>
           <div style={{ fontSize: 12.5, color: C.tl, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <Meta C={C} icon="calendar" text={fmtLong(b.event_date)} />
-            <Meta C={C} icon="pin" text={PROPERTY_MAP[b.property]?.name || b.property} />
+            <Meta C={C} icon="calendar" text={fmtLong(b.event_date, lang)} />
+            <Meta C={C} icon="pin" text={propName(b.property, lang)} />
             {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
             <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
             {b.staff_total != null && <Meta C={C} icon="valet" text={`${b.staff_total} staff`} />}
@@ -838,7 +843,7 @@ function BookingsList({ C, t, user, scopeAll, reloadSignal, onEdit }) {
             <Icon name="pin" size={16} color={C.tl} />
             <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
               <option value="all">{t.properties} — {t.all}</option>
-              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
             </select>
           </div>
         )}
@@ -872,7 +877,7 @@ function BookingsList({ C, t, user, scopeAll, reloadSignal, onEdit }) {
 }
 
 /* --------------------------- staffing calculator --------------------------- */
-function Calculator({ C, t, visibleProps, defaultProp, matrix, canEdit, onMatrixSaved }) {
+function Calculator({ C, t, lang, visibleProps, defaultProp, matrix, canEdit, onMatrixSaved }) {
   const [property, setProperty] = useState(defaultProp)
   const [guests, setGuests] = useState('')
   const [editing, setEditing] = useState(false)
@@ -893,14 +898,14 @@ function Calculator({ C, t, visibleProps, defaultProp, matrix, canEdit, onMatrix
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}>
-            <Field label="Property">
+            <Field label={t.properties}>
               <select style={inputStyle(C)} value={property} onChange={(e) => { setProperty(e.target.value); setEditing(false) }} disabled={visibleProps.length <= 1}>
-                {visibleProps.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+                {visibleProps.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
               </select>
             </Field>
           </div>
           <div style={{ flex: 1 }}>
-            <Field label="Guest count">
+            <Field label={t.guestCount}>
               <input type="number" min={0} max={MAX_GUESTS} style={inputStyle(C)} value={guests} onChange={(e) => setGuests(digitsOnly(e.target.value))} placeholder={`max ${MAX_GUESTS}`} />
             </Field>
           </div>
@@ -936,7 +941,7 @@ function Calculator({ C, t, visibleProps, defaultProp, matrix, canEdit, onMatrix
             <div style={{ width: 52, height: 52, margin: '0 auto 12px', borderRadius: 14, background: C.cardAlt, border: `1px solid ${C.border}`, display: 'grid', placeItems: 'center', color: C.faint }}>
               <Icon name="team" size={24} />
             </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Enter a guest count</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t.enterGuestCount}</div>
             <div style={{ fontSize: 13, marginTop: 3 }}>See the recommended valet staff for this property.</div>
           </div>
         </Card>

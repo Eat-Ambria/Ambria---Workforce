@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import PoweredBy from '../common/PoweredBy'
 
 export default function AppLayout() {
   const C = useColors()
@@ -43,6 +44,7 @@ export default function AppLayout() {
         >
           <Outlet />
         </main>
+        <PoweredBy />
       </div>
 
       {/* mobile slide-out sidebar drawer (replaces the bottom tab bar) */}

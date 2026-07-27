@@ -54,8 +54,8 @@ export default function Vendors() {
                   <div style={{ fontSize: 13, color: C.tl }}>{v.phone}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <a href={`tel:${v.phone}`} style={iconLink(C, C.green)} aria-label="Call"><Icon name="phone" size={18} color="#fff" /></a>
-                  <a href={`https://wa.me/${(v.phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" style={iconLink(C, '#25D366')} aria-label="WhatsApp">
+                  <a href={`tel:${v.phone}`} style={iconLink(C, C.green)} aria-label={t.call}><Icon name="phone" size={18} color="#fff" /></a>
+                  <a href={`https://wa.me/${(v.phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" style={iconLink(C, '#25D366')} aria-label={t.whatsapp}>
                     <Icon name="whatsapp" size={18} color="#fff" />
                   </a>
                 </div>
@@ -95,9 +95,9 @@ function AddModal({ user, onClose, onSaved }) {
   return (
     <Modal open onClose={onClose} title={t.vendors}
       footer={<><Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button><Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button></>}>
-      <Field label="Name"><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
-      <Field label="Phone"><input style={inputStyle(C)} value={form.phone} onChange={set('phone')} /></Field>
-      <Field label="Category"><input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder="e.g. Electrician, Florist" /></Field>
+      <Field label={t.fullName}><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
+      <Field label={t.phone}><input style={inputStyle(C)} value={form.phone} onChange={set('phone')} /></Field>
+      <Field label={t.category}><input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder="e.g. Electrician, Florist" /></Field>
       <Field label={`Company (${t.optional})`}><input style={inputStyle(C)} value={form.company} onChange={set('company')} /></Field>
       {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
     </Modal>

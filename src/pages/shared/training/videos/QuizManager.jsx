@@ -100,7 +100,7 @@ export default function QuizManager({ video, onClose }) {
                 <div key={q.id} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{i + 1}. {q.question}</div>
-                    <button onClick={() => remove(q.id)} style={{ background: 'transparent', color: C.red }} aria-label="Delete">
+                    <button onClick={() => remove(q.id)} style={{ background: 'transparent', color: C.red }} aria-label={t.delete}>
                       <Icon name="trash" size={16} color={C.red} />
                     </button>
                   </div>
@@ -123,12 +123,12 @@ export default function QuizManager({ video, onClose }) {
           {/* add a new question */}
           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>Add Question</div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{t.addQuestion}</div>
               <div style={{ fontSize: 12, color: tErr ? C.red : C.tl, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {translating ? <><Spinner size={13} /> Converting…</>
                   : tErr ? "Auto-convert failed — type Hindi manually"
                   : autoHi ? <><Icon name="check" size={13} color={C.green} /> Hindi auto-fills</>
-                  : <button type="button" onClick={() => setAutoHi(true)} style={{ background: 'transparent', color: C.maroon, fontWeight: 700, padding: 0 }}>Re-enable auto-Hindi</button>}
+                  : <button type="button" onClick={() => setAutoHi(true)} style={{ background: 'transparent', color: C.maroon, fontWeight: 700, padding: 0 }}>{t.reEnableHindi}</button>}
               </div>
             </div>
 
@@ -154,10 +154,10 @@ export default function QuizManager({ video, onClose }) {
               ))}
             </div>
 
-            <Field label="Question" hint={mode === 'translate' ? "Type in English — meaning is translated to Hindi below." : "Type in English letters (e.g. 'theek hai') — Hindi appears below."}>
-              <input style={inputStyle(C)} value={form.question} onChange={setEn('question')} placeholder="Type here…" />
+            <Field label={t.question} hint={mode === 'translate' ? "Type in English — meaning is translated to Hindi below." : "Type in English letters (e.g. 'theek hai') — Hindi appears below."}>
+              <input style={inputStyle(C)} value={form.question} onChange={setEn('question')} placeholder={t.typeHere} />
             </Field>
-            <Field label="Question (हिंदी)"><input style={inputStyle(C)} value={form.question_hi} onChange={setHi('question_hi')} placeholder="अपने आप बनेगा…" /></Field>
+            <Field label={t.questionHi}><input style={inputStyle(C)} value={form.question_hi} onChange={setHi('question_hi')} placeholder="अपने आप बनेगा…" /></Field>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {OPTS.map((o) => (
@@ -165,14 +165,14 @@ export default function QuizManager({ video, onClose }) {
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: C.tl, marginBottom: 5 }}>
                     Option {o.toUpperCase()}{form.correct_option === o ? <span style={{ color: C.green }}> · correct</span> : ''}
                   </div>
-                  <input style={inputStyle(C)} value={form[`option_${o}`]} onChange={setEn(`option_${o}`)} placeholder="Type here…" />
+                  <input style={inputStyle(C)} value={form[`option_${o}`]} onChange={setEn(`option_${o}`)} placeholder={t.typeHere} />
                   <input style={{ ...inputStyle(C), marginTop: 6, fontSize: 14 }} value={form[`option_${o}_hi`]} onChange={setHi(`option_${o}_hi`)} placeholder="हिंदी (अपने आप)" />
                 </div>
               ))}
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <Field label="Correct answer">
+              <Field label={t.correctAnswer}>
                 <select style={inputStyle(C)} value={form.correct_option} onChange={setEn('correct_option')}>
                   {OPTS.map((o) => <option key={o} value={o}>Option {o.toUpperCase()}</option>)}
                 </select>

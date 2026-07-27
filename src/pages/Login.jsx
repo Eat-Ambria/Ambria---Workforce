@@ -5,6 +5,7 @@ import { useLang, useT } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { Spinner, inputStyle } from '../components/common/UI'
+import PoweredBy from '../components/common/PoweredBy'
 import Icon from '../components/common/Icon'
 
 export default function Login() {
@@ -112,7 +113,7 @@ export default function Login() {
         </button>
       </div>
 
-      <p style={{ textAlign: 'center', color: C.faint, fontSize: 12, margin: '18px 0 8px' }}>Ambria Ops · Workforce Management</p>
+      <PoweredBy style={{ paddingTop: 18, paddingBottom: 4 }} />
     </form>
   )
 
@@ -122,8 +123,10 @@ export default function Login() {
       <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'flex', flexDirection: 'column' }}>
         <div style={{ background: gradient, color: '#fff', padding: '40px 20px 34px', position: 'relative', textAlign: 'center' }}>
           <div style={{ position: 'absolute', top: 16, right: 16 }}>{langToggle(true)}</div>
-          <div style={{ width: 60, height: 60, margin: '0 auto', borderRadius: 18, background: '#fff', color: C.maroon, display: 'grid', placeItems: 'center', fontSize: 32, fontWeight: 700, fontFamily: 'Georgia, serif', boxShadow: C.shadowLg }}>A</div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 14 }}>{t.appName}</h1>
+          {/* the Ambria wordmark sits straight on the gradient (transparent PNG) */}
+          <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
+               style={{ width: 168, display: 'block', margin: '0 auto' }} />
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 12 }}>{t.appName}</h1>
           <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13.5, marginTop: 4 }}>Ambria — Get Your Venue Events</p>
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '24px 20px' }}>
@@ -142,8 +145,9 @@ export default function Login() {
         <div style={{ position: 'absolute', top: -80, right: -80, width: 260, height: 260, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
         <div style={{ position: 'absolute', bottom: -100, left: -60, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
         <div style={{ position: 'relative' }}>
-          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#fff', color: C.maroon, display: 'grid', placeItems: 'center', fontSize: 32, fontWeight: 700, fontFamily: 'Georgia, serif', boxShadow: C.shadowLg }}>A</div>
-          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 24 }}>{t.appName}</h1>
+          <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
+               style={{ width: 210, display: 'block' }} />
+          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 18 }}>{t.appName}</h1>
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', marginTop: 10, maxWidth: 360, lineHeight: 1.55 }}>
             {hi ? 'Ambria के वेन्यू के लिए वर्कफोर्स मैनेजमेंट — टास्क, ट्रेनिंग और टीम, सब एक जगह।' : "Workforce management for Ambria's venues — tasks, training, and teams in one place."}
           </p>

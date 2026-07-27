@@ -1,10 +1,10 @@
 // Organization reference data: properties, departments, roles.
 
 export const PROPERTIES = [
-  { code: 'pp', name: 'Pushpanjali', area: 'Dwarka', acreage: '3 Acres' },
-  { code: 'ex', name: 'Exotica', area: 'Dwarka', acreage: '4 Acres' },
-  { code: 'mk', name: 'Manaktala', area: 'Kapashera', acreage: '3 Acres' },
-  { code: 'rs', name: 'Restro', area: 'Palam Vihar', acreage: '0.75 Acre' },
+  { code: 'pp', name: 'Pushpanjali', nameHi: 'पुष्पांजलि', area: 'Dwarka', areaHi: 'द्वारका', acreage: '3 Acres' },
+  { code: 'ex', name: 'Exotica', nameHi: 'एक्सोटिका', area: 'Dwarka', areaHi: 'द्वारका', acreage: '4 Acres' },
+  { code: 'mk', name: 'Manaktala', nameHi: 'मनकतला', area: 'Kapashera', areaHi: 'कापसहेड़ा', acreage: '3 Acres' },
+  { code: 'rs', name: 'Restro', nameHi: 'रेस्ट्रो', area: 'Palam Vihar', areaHi: 'पालम विहार', acreage: '0.75 Acre' },
 ]
 
 // property lookup incl. "all" (Vicky, Sandeep, Super Admin)
@@ -43,6 +43,17 @@ export const propName = (code, lang) => {
   if (!p) return code || ''
   return lang === 'hi' && p.nameHi ? p.nameHi : p.name
 }
+
+// A person's Hindi name when the UI is in Hindi and one has been entered,
+// otherwise their normal name. Names are data, so they live on the user row
+// (users.name_hi) rather than in the translation dictionary.
+export const personName = (user, lang) =>
+  (lang === 'hi' && user?.name_hi ? user.name_hi : (user?.name || ''))
+
+// Measurement units in words for the Hindi UI. Codes stay English in the DB.
+const UNIT_HI = { L: 'लीटर', ml: 'ml', kg: 'किलो', g: 'ग्राम', pcs: 'नग', cans: 'कैन' }
+export const unitName = (unit, lang) =>
+  (lang === 'hi' && UNIT_HI[unit] ? UNIT_HI[unit] : (unit || ''))
 
 // Roles
 export const ROLES = {
@@ -105,7 +116,7 @@ export const roleTag = (role, lang) => {
 export const assigneeLabel = (member, { showDept = true, showRole = true, lang } = {}) => {
   const where = member?.department ? deptName(member.department, lang) : member?.designation
   const parts = [
-    member?.name,
+    personName(member, lang),
     showDept ? where : null,
     showRole ? roleTag(member?.role, lang) : null,
   ].filter(Boolean)

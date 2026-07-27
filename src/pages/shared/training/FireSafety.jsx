@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { todayISO, fmtDate } from '../../../lib/time'
 import { useColors } from '../../../context/ThemeContext'
-import { useT } from '../../../context/LangContext'
-import { PROPERTY_MAP, PROPERTIES } from '../../../constants/org'
+import { useT, useLang } from '../../../context/LangContext'
+import { PROPERTY_MAP, propName, PROPERTIES } from '../../../constants/org'
 import { Card, Loader, EmptyState, Badge, Button, Field, inputStyle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import MultiSelect from '../../../components/common/MultiSelect'
@@ -38,6 +38,7 @@ function inspectStatus(e) {
 export default function FireSafety() {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [logging, setLogging] = useState(null) // extinguisher being inspected
@@ -99,7 +100,7 @@ export default function FireSafety() {
                   <Icon name="fire" size={17} color={C.red} /> {e.location}
                 </div>
                 <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
-                  {PROPERTY_MAP[e.property]?.name} · {e.type}{e.capacity ? ` · ${e.capacity}` : ''}{e.quantity > 1 ? ` · ×${e.quantity}` : ''}
+                  {propName(e.property, lang)} · {e.type}{e.capacity ? ` · ${e.capacity}` : ''}{e.quantity > 1 ? ` · ×${e.quantity}` : ''}
                 </div>
                 <div style={{ fontSize: 12, color: C.tl, marginTop: 2 }}>Expiry: {fmtDate(e.expiry_date)}</div>
               </div>
@@ -122,7 +123,7 @@ export default function FireSafety() {
                 <Button variant="soft" onClick={() => setLogging(e)} style={{ padding: '8px 12px', fontSize: 13 }}>
                   <Icon name="check" size={15} color={C.maroon} style={{ marginRight: 4 }} /> Log inspection
                 </Button>
-                <Button variant="ghost" onClick={() => removeExt(e)} aria-label="Delete cylinder" style={{ padding: '8px 12px', fontSize: 13 }}>
+                <Button variant="ghost" onClick={() => removeExt(e)} aria-label={t.deleteCylinder} style={{ padding: '8px 12px', fontSize: 13 }}>
                   <Icon name="trash" size={15} color={C.red} />
                 </Button>
               </div>
@@ -147,6 +148,7 @@ export default function FireSafety() {
 function AddModal({ onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const [form, setForm] = useState({
     property: PROPERTIES[0].code,
     location: '',
@@ -183,7 +185,7 @@ function AddModal({ onClose, onSaved }) {
 
   return (
     <Modal
-      open onClose={onClose} title="Add cylinder"
+      open onClose={onClose} title={t.addCylinder}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
@@ -191,44 +193,44 @@ function AddModal({ onClose, onSaved }) {
         </>
       }
     >
-      <Field label="Property">
+      <Field label={t.properties}>
         <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
-          {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+          {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
         </select>
       </Field>
-      <Field label="Location">
+      <Field label={t.location}>
         <input style={inputStyle(C)} value={form.location} onChange={set('location')} placeholder="e.g. Main lobby, Kitchen, Gate 2" />
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Type">
+          <Field label={t.typeLabel}>
             <select style={inputStyle(C)} value={form.type} onChange={set('type')}>
               {TYPE_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
           </Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label="Size (kg)">
+          <Field label={t.sizeKg}>
             <input style={inputStyle(C)} value={form.capacity} onChange={set('capacity')} placeholder="e.g. 6 kg" />
           </Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label="Quantity">
-            <input type="number" min="1" style={inputStyle(C)} value={form.quantity} onChange={set('quantity')} placeholder="How many cylinders" />
+          <Field label={t.quantity}>
+            <input type="number" min="1" style={inputStyle(C)} value={form.quantity} onChange={set('quantity')} placeholder={t.howManyCylinders} />
           </Field>
         </div>
       </div>
-      <Field label="Serial number (optional)">
+      <Field label={`${t.serialNo} (${t.optional})`}>
         <input style={inputStyle(C)} value={form.serial_number} onChange={set('serial_number')} />
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Install date (optional)">
+          <Field label={`${t.installDate} (${t.optional})`}>
             <input type="date" max={todayISO()} style={inputStyle(C)} value={form.install_date} onChange={set('install_date')} />
           </Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label="Expiry / next refill">
+          <Field label={t.expiryRefill}>
             <input type="date" style={inputStyle(C)} value={form.expiry_date} onChange={set('expiry_date')} />
           </Field>
         </div>
@@ -242,6 +244,7 @@ function AddModal({ onClose, onSaved }) {
 function LogModal({ ext, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const [date, setDate] = useState(todayISO())
   const [next, setNext] = useState(() => addDays(todayISO(), 90)) // default: quarterly
   const [busy, setBusy] = useState(false)
@@ -271,12 +274,12 @@ function LogModal({ ext, onClose, onSaved }) {
       }
     >
       <div style={{ fontSize: 13, color: C.tl, marginBottom: 14 }}>
-        {PROPERTY_MAP[ext.property]?.name} · {ext.type}{ext.capacity ? ` · ${ext.capacity}` : ''}{ext.quantity > 1 ? ` · ×${ext.quantity}` : ''}
+        {propName(ext.property, lang)} · {ext.type}{ext.capacity ? ` · ${ext.capacity}` : ''}{ext.quantity > 1 ? ` · ×${ext.quantity}` : ''}
       </div>
-      <Field label="Inspection date">
+      <Field label={t.inspectionDate}>
         <input type="date" max={todayISO()} style={inputStyle(C)} value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
-      <Field label="Next inspection due" hint="Defaults to 3 months from today.">
+      <Field label={t.nextInspection} hint="Defaults to 3 months from today.">
         <input type="date" min={date} style={inputStyle(C)} value={next} onChange={(e) => setNext(e.target.value)} />
       </Field>
       {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}

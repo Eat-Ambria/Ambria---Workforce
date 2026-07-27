@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadYT } from '../../../../lib/youtubeApi'
 import { useColors } from '../../../../context/ThemeContext'
+import { useT } from '../../../../context/LangContext'
 import Icon from '../../../../components/common/Icon'
 
 const SPEEDS = [0.5, 1, 1.25, 1.5] // members can never exceed 1.5x
@@ -22,6 +23,7 @@ const fsSupported = typeof document !== 'undefined' && (document.fullscreenEnabl
 
 export default function YTPlayer({ videoId, resumeKey, onProgress }) {
   const C = useColors()
+  const t = useT()
   const containerRef = useRef(null)
   const playerRef = useRef(null)
   const rootRef = useRef(null)
@@ -217,7 +219,7 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
         </select>
 
         {fsSupported && (
-          <button onClick={toggleFs} title={isFs ? 'Exit full screen' : 'Full screen'} aria-label="Full screen" style={{ width: 34, height: 34, borderRadius: 9, background: C.card, border: `1px solid ${C.border}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <button onClick={toggleFs} title={isFs ? 'Exit full screen' : 'Full screen'} aria-label={t.fullScreen} style={{ width: 34, height: 34, borderRadius: 9, background: C.card, border: `1px solid ${C.border}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
             <Icon name={isFs ? 'minimize' : 'maximize'} size={16} color={C.tl} />
           </button>
         )}

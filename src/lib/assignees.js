@@ -10,7 +10,7 @@ export function assigneesQuery({ propScope, deptScope } = {}) {
     .from('users')
     // designation ("Site Head", "Supervisor", …) stands in for the department
     // on admins who aren't attached to one
-    .select('id, name, role, department, property, designation')
+    .select('id, name, name_hi, role, department, property, designation')
     .eq('is_active', true)
     .in('role', ASSIGNABLE_ROLES)
     .order('name')

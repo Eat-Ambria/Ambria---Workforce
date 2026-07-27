@@ -57,7 +57,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
                   position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
                   background: C.red, color: '#fff', fontSize: 13, lineHeight: '18px',
                 }}
-                aria-label="Remove"
+                aria-label={t.remove}
               >×</button>
             </div>
           ))}

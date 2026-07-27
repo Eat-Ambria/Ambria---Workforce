@@ -1,9 +1,9 @@
 {
-  "name": "ambria-ops",
+  "name": "workforce",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Ambria Ops — Workforce management PWA for Ambria event venues",
+  "description": "Workforce — management PWA for Ambria event venues",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

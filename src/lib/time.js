@@ -1,4 +1,13 @@
 // Small date/time helpers.
+//
+// The locale is module state rather than an argument: fmtDate/fmtDateTime are
+// called from dozens of places, and threading `lang` through all of them would
+// be noise. LangProvider sets this during render whenever the language changes,
+// so the very next render already formats dates in the right script.
+let LOCALE = 'en-IN'
+export function setDateLocale(lang) {
+  LOCALE = lang === 'hi' ? 'hi-IN' : 'en-IN'
+}
 export function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -10,7 +19,7 @@ export function nowISO() {
 export function fmtDate(d) {
   if (!d) return ''
   try {
-    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(d).toLocaleDateString(LOCALE, { day: '2-digit', month: 'short', year: 'numeric' })
   } catch {
     return d
   }
@@ -19,7 +28,7 @@ export function fmtDate(d) {
 export function fmtDateTime(d) {
   if (!d) return ''
   try {
-    return new Date(d).toLocaleString('en-IN', {
+    return new Date(d).toLocaleString(LOCALE, {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
     })
   } catch {

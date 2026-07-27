@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPushState, enablePush, disablePush } from '../lib/push'
 import { useColors } from '../context/ThemeContext'
-import { useT } from '../context/LangContext'
+import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { ROLES, PROPERTY_MAP } from '../constants/org'
+import { ROLES, PROPERTY_MAP, propName, personName } from '../constants/org'
 import { normalizePhone } from '../lib/phone'
 import { Card, Button, SectionTitle, Field, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -15,6 +15,7 @@ const isPin = (v) => /^\d{4}$/.test(v)
 export default function Account() {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const { user, updateUser, logout } = useAuth()
 
   const [phone, setPhone] = useState(user?.phone || '')
@@ -78,31 +79,11 @@ export default function Account() {
     setPin(''); setPin2(''); setOk(true)
   }
 
-  const prop = PROPERTY_MAP[user?.property]?.name
+  const prop = propName(user?.property, lang)
 
   return (
     <div>
       <SectionTitle>{t.myAccount || 'My Account'}</SectionTitle>
-
-      {/* identity (read-only) */}
-      <Card style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.maroonSoft, color: C.maroon, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17 }}>
-            {(user?.name || 'A').trim().charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: C.text }}>{user?.name}</div>
-            <div style={{ fontSize: 13, color: C.tl }}>{roleLabels(t)[user?.role] || user?.role}{prop ? ` · ${prop}` : ''}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5 }}>
-          <Icon name="info" size={16} color={C.maroon} />
-          <span>{t.loginIdHint || 'You can sign in with your username or your phone number.'}</span>
-        </div>
-        <div style={{ fontSize: 13.5, color: C.tl, marginTop: 10 }}>
-          {t.username}: <b style={{ color: C.text }}>@{user?.username}</b>
-        </div>
-      </Card>
 
       {/* push notifications for this device */}
       {pushState !== 'unsupported' && pushState !== 'unconfigured' && (
@@ -131,8 +112,27 @@ export default function Account() {
         </Card>
       )}
 
-      {/* editable: phone + PIN */}
+      {/* everything about the account itself, in one card */}
       <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.maroonSoft, color: C.maroon, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17 }}>
+            {(user?.name || 'A').trim().charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: C.text }}>{personName(user, lang)}</div>
+            <div style={{ fontSize: 13, color: C.tl }}>{roleLabels(t)[user?.role] || user?.role}{prop ? ` · ${prop}` : ''}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5 }}>
+          <Icon name="info" size={16} color={C.maroon} />
+          <span>{t.loginIdHint || 'You can sign in with your username or your phone number.'}</span>
+        </div>
+        <div style={{ fontSize: 13.5, color: C.tl, marginTop: 10 }}>
+          {t.username}: <b style={{ color: C.text }}>@{user?.username}</b>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${C.border}`, margin: '16px 0 14px' }} />
+
         <Field label={t.phoneLoginLabel || 'Phone (you can log in with this)'}>
           <input style={inputStyle(C)} value={phone} inputMode="tel" autoComplete="tel"
             onChange={(e) => { setPhone(e.target.value); setOk(false) }} />
@@ -172,10 +172,13 @@ export default function Account() {
         <Button variant="primary" onClick={save} disabled={busy} full>{t.save}</Button>
       </Card>
 
-      {/* logout lives here, under My Account */}
-      <Button variant="danger" onClick={logout} full style={{ marginTop: 14 }}>
-        <Icon name="power" size={16} color="#fff" style={{ marginRight: 6 }} /> {t.logout}
-      </Button>
+      {/* logout lives here, under My Account — compact and centred so it reads
+          as a deliberate action rather than the page's main button */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+        <Button variant="danger" onClick={logout} style={{ padding: '10px 28px' }}>
+          <Icon name="power" size={16} color="#fff" style={{ marginRight: 6 }} /> {t.logout}
+        </Button>
+      </div>
     </div>
   )
 }

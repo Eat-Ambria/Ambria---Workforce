@@ -310,6 +310,21 @@ property, department, designation, 4-digit PIN, and tick which nav tabs they can
 see. Marking someone a Department Head elevates them to the Admin role. The
 screen also shows a staff profile with their fix-request rating history.
 
+**Analytics** (`/analytics`, super admin only) — department-head and staff
+performance over a week, month or 90 days. It deliberately does **not** read
+history from `tasks`: the 06:00 reset clears `started_at`, `completed_at` and
+`approved_by` every morning, so a task finished yesterday is indistinguishable
+from one never started. A trigger therefore writes an immutable row to
+`task_completions` the moment each task is approved, and the page reads that
+instead (`SUPABASE-MIGRATION-TASK-HISTORY.sql`). A head's "team" is defined
+exactly as their own screens are scoped — their property, or every property,
+plus any department lock. Every figure is rolled up by database functions
+(`analytics_by_assignee`, `analytics_by_approver`, `analytics_repairs`,
+`analytics_open`) rather than by fetching rows, because a month of completions
+runs to tens of thousands of records and PostgREST caps a response at 1000 rows.
+Those functions return sums and counts, never averages, so groups can be
+combined without averaging averages.
+
 **My Account** (`/account`, everyone) — change your own phone and PIN, and turn
 push notifications on/off for the current device.
 

@@ -6,7 +6,7 @@ import { ytThumb } from '../../../lib/youtube'
 import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
-import { isAdminRole, DEPARTMENTS, DEPARTMENT_MAP, scopedDepartment } from '../../../constants/org'
+import { isAdminRole, DEPARTMENTS, DEPARTMENT_MAP, scopedDepartment, deptName } from '../../../constants/org'
 import { Card, Loader, EmptyState, ProgressBar, Button } from '../../../components/common/UI'
 import Icon from '../../../components/common/Icon'
 import PlayerModal from './videos/PlayerModal'
@@ -196,7 +196,7 @@ export default function Videos() {
           {empDept && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: C.gBg, borderRadius: 12, border: `1px solid ${empDept.color}28` }}>
               <Icon name="training" size={18} color={empDept.color} />
-              <span style={{ fontSize: 14, fontWeight: 700, color: empDept.color }}>{empDept.name}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: empDept.color }}>{deptName(user?.department, lang)}</span>
               <span style={{ fontSize: 12.5, color: empDept.color, opacity: 0.75 }}>— {lang === 'hi' ? 'आपके विभाग की ट्रेनिंग' : 'Your department training'}</span>
             </div>
           )}
@@ -215,7 +215,7 @@ export default function Videos() {
             <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
               <Chip C={C} active={deptFilter === 'all'} onClick={() => setDeptFilter('all')}>{t.all}</Chip>
               {deptChips.map((d) => (
-                <Chip key={d.code} C={C} active={deptFilter === d.code} onClick={() => setDeptFilter(d.code)}>{d.name}</Chip>
+                <Chip key={d.code} C={C} active={deptFilter === d.code} onClick={() => setDeptFilter(d.code)}>{deptName(d.code, lang)}</Chip>
               ))}
             </div>
           )}

@@ -3,8 +3,8 @@ import { supabase } from '../../../../lib/supabase'
 import { extractYTId, ytThumb } from '../../../../lib/youtube'
 import { translateToHindi } from '../../../../lib/translate'
 import { useColors } from '../../../../context/ThemeContext'
-import { useT } from '../../../../context/LangContext'
-import { DEPARTMENTS } from '../../../../constants/org'
+import { useT, useLang } from '../../../../context/LangContext'
+import { DEPARTMENTS, deptName } from '../../../../constants/org'
 import { Button, Field, inputStyle, Spinner } from '../../../../components/common/UI'
 import Modal from '../../../../components/common/Modal'
 import Icon from '../../../../components/common/Icon'
@@ -13,6 +13,7 @@ import Icon from '../../../../components/common/Icon'
 export default function VideoForm({ video, user, defaultDepartment, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const editing = !!video
   const [form, setForm] = useState({
     topic: video?.topic || '',
@@ -81,8 +82,8 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
         </>
       }
     >
-      <Field label="Topic (English)"><input style={inputStyle(C)} value={form.topic} onChange={set('topic')} placeholder="e.g. Lawn Care & Maintenance" /></Field>
-      <Field label="Topic (हिंदी)">
+      <Field label={t.topicEn}><input style={inputStyle(C)} value={form.topic} onChange={set('topic')} placeholder="e.g. Lawn Care & Maintenance" /></Field>
+      <Field label={t.topicHi}>
         <div style={{ position: 'relative' }}>
           <input
             style={{ ...inputStyle(C), paddingRight: 34 }}
@@ -100,15 +101,15 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
           ) : autoHi ? (
             <><Icon name="check" size={13} color={C.green} /> Auto-translated from English — edit if needed.</>
           ) : (
-            <>Manual. <button type="button" onClick={() => setAutoHi(true)} style={{ background: 'transparent', color: C.maroon, fontWeight: 700, padding: 0 }}>Auto-translate</button></>
+            <>Manual. <button type="button" onClick={() => setAutoHi(true)} style={{ background: 'transparent', color: C.maroon, fontWeight: 700, padding: 0 }}>{t.autoTranslate}</button></>
           )}
         </div>
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Department">
+          <Field label={t.department}>
             <select style={inputStyle(C)} value={form.department} onChange={set('department')}>
-              {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+              {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
             </select>
           </Field>
         </div>
@@ -118,7 +119,7 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
           </Field>
         </div>
       </div>
-      <Field label="Video URL / Embed URL" hint="Paste a YouTube link OR an embed URL (iframe src). YouTube links auto-show a thumbnail; other embeds play inline.">
+      <Field label={t.videoUrl} hint="Paste a YouTube link OR an embed URL (iframe src). YouTube links auto-show a thumbnail; other embeds play inline.">
         <input style={inputStyle(C)} value={form.youtube_url} onChange={set('youtube_url')} placeholder="https://www.youtube.com/embed/…  or  https://…/embed/…" />
       </Field>
       {ytId ? (

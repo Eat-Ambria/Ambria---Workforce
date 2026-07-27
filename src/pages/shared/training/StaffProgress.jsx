@@ -4,7 +4,7 @@ import { nowISO } from '../../../lib/time'
 import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
-import { PROPERTY_MAP, DEPARTMENT_MAP, scopedProperty, scopedDepartment } from '../../../constants/org'
+import { PROPERTY_MAP, propName, DEPARTMENT_MAP, scopedProperty, scopedDepartment, personName, deptName } from '../../../constants/org'
 import { Card, Loader, EmptyState, ProgressBar, Button } from '../../../components/common/UI'
 import Icon from '../../../components/common/Icon'
 
@@ -28,7 +28,7 @@ export default function StaffProgress() {
 
     const propScope = scopedProperty(user)
     const deptScope = scopedDepartment(user)
-    let sq = supabase.from('users').select('id, name, department, property').eq('is_active', true).eq('role', 'e').order('name')
+    let sq = supabase.from('users').select('id, name, name_hi, department, property').eq('is_active', true).eq('role', 'e').order('name')
     if (propScope) sq = sq.eq('property', propScope)
     if (deptScope) sq = sq.eq('department', deptScope)
     const { data: st } = await sq
@@ -114,7 +114,7 @@ export default function StaffProgress() {
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="pin" size={16} color={C.maroon} />
-                <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{PROPERTY_MAP[g.prop]?.name || g.prop}</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{propName(g.prop, lang)}</span>
                 <span style={{ fontSize: 12.5, color: C.tl }}>· {g.list.length} staff · {pct}%</span>
               </span>
               <Icon name="chevronRight" size={16} color={C.tl} style={{ transform: pOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
@@ -138,8 +138,8 @@ export default function StaffProgress() {
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{s.name}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: dept.color }}>{dept.name}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{personName(s, lang)}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: dept.color }}>{deptName(s.department, lang)}</span>
                           </div>
                           <div style={{ marginTop: 6 }}><ProgressBar value={spct} tone={all ? C.green : C.maroon} height={6} /></div>
                         </div>

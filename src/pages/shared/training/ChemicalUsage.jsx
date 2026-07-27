@@ -4,10 +4,11 @@ import { todayISO, fmtDate } from '../../../lib/time'
 import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
-import { PROPERTIES, PROPERTY_MAP, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment } from '../../../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName, unitName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment } from '../../../constants/org'
 import { Card, Loader, EmptyState, Button, Field, inputStyle, SectionTitle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import Icon from '../../../components/common/Icon'
+import { translateToHindi } from '../../../lib/translate'
 import ChemicalGuide from './ChemicalGuide'
 
 const UNITS = ['L', 'ml', 'kg', 'g', 'pcs']
@@ -29,6 +30,7 @@ export default function ChemicalUsage() {
   const [loading, setLoading] = useState(true)
   const [propFilter, setPropFilter] = useState(seeAll ? 'all' : (user?.property || 'all'))
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState(null) // log row open for editing
   const [mode, setMode] = useState('guide') // 'guide' (calculator + product guide) | 'log' (recorded usage)
 
   const load = useCallback(async () => {
@@ -105,14 +107,14 @@ export default function ChemicalUsage() {
             <Card key={p.code}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <Icon name="flask" size={18} color={C.maroon} />
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{propName(p.code, lang)}</span>
               </div>
               {parts.length === 0 ? (
                 <div style={{ fontSize: 13, color: C.tl }}>—</div>
               ) : (
                 parts.map(([u, q]) => (
                   <div key={u} style={{ fontSize: 15, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
-                    {q} <span style={{ fontSize: 12, color: C.tl, fontWeight: 600 }}>{u}</span>
+                    {q} <span style={{ fontSize: 12, color: C.tl, fontWeight: 600 }}>{unitName(u, lang)}</span>
                   </div>
                 ))
               )}
@@ -126,7 +128,7 @@ export default function ChemicalUsage() {
         <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
           <Chip C={C} active={propFilter === 'all'} onClick={() => setPropFilter('all')}>{t.all}</Chip>
           {visibleProps.map((p) => (
-            <Chip key={p.code} C={C} active={propFilter === p.code} onClick={() => setPropFilter(p.code)}>{p.name}</Chip>
+            <Chip key={p.code} C={C} active={propFilter === p.code} onClick={() => setPropFilter(p.code)}>{propName(p.code, lang)}</Chip>
           ))}
         </div>
       )}
@@ -137,20 +139,20 @@ export default function ChemicalUsage() {
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {visible.map((r) => (
-            <Card key={r.id}>
+            <Card key={r.id} onClick={() => setEditing(r)} style={{ cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>
                     {lang === 'hi' && r.chemical_name_hi ? r.chemical_name_hi : r.chemical_name}
                   </div>
                   <div style={{ fontSize: 13, color: C.tl, display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
-                    <Icon name="pin" size={13} /> {r.location || '—'} · {PROPERTY_MAP[r.property]?.name}
+                    <Icon name="pin" size={13} /> {(lang === 'hi' && r.location_hi ? r.location_hi : r.location) || '—'} · {propName(r.property, lang)}
                   </div>
                   <div style={{ fontSize: 12, color: C.tl, marginTop: 2 }}>{fmtDate(r.usage_date)}{r.used_by_name ? ` · ${r.used_by_name}` : ''}</div>
                 </div>
                 <div style={{ textAlign: 'right', whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 800, color: C.maroon, fontVariantNumeric: 'tabular-nums' }}>{r.quantity}</span>
-                  <span style={{ fontSize: 12, color: C.tl, fontWeight: 600 }}>{r.unit}</span>
+                  <span style={{ fontSize: 12, color: C.tl, fontWeight: 600 }}>{unitName(r.unit, lang)}</span>
                 </div>
               </div>
             </Card>
@@ -158,13 +160,15 @@ export default function ChemicalUsage() {
         </div>
       )}
 
-      {adding && (
+      {(adding || editing) && (
         <LogModal
           user={user}
+          record={editing}
+          canDelete={admin || editing?.used_by === user?.id}
           properties={visibleProps}
           defaultProperty={user?.property && user.property !== 'all' ? user.property : (visibleProps[0]?.code || 'pp')}
-          onClose={() => setAdding(false)}
-          onSaved={() => { setAdding(false); load() }}
+          onClose={() => { setAdding(false); setEditing(null) }}
+          onSaved={() => { setAdding(false); setEditing(null); load() }}
         />
       )}
       </>
@@ -182,36 +186,82 @@ function Chip({ children, active, onClick, C }) {
   )
 }
 
-function LogModal({ user, properties, defaultProperty, onClose, onSaved }) {
+function LogModal({ user, record, canDelete, properties, defaultProperty, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const [form, setForm] = useState({
-    property: defaultProperty, chemical_name: '', category: '', brand: '',
-    quantity: '', unit: 'L', location: '', notes: '',
+    property: record?.property || defaultProperty,
+    chemical_name: record?.chemical_name || '',
+    chemical_name_hi: record?.chemical_name_hi || '',
+    category: record?.category || '',
+    brand: record?.brand || '',
+    quantity: record?.quantity ?? '',
+    unit: record?.unit || 'L',
+    location: record?.location || '',
+    location_hi: record?.location_hi || '',
+    notes: record?.notes || '',
+    usage_date: record?.usage_date || todayISO(),
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // auto-fill the Hindi chemical name until the user edits it by hand. Safe
+  // here (unlike people's names) — these are common nouns like "Floor cleaner".
+  const [autoHi, setAutoHi] = useState(!record?.chemical_name_hi)
+  const [translating, setTranslating] = useState(false)
+
+  useEffect(() => {
+    if (!autoHi) return undefined
+    const name = form.chemical_name.trim()
+    if (!name) { setForm((f) => ({ ...f, chemical_name_hi: '' })); return undefined }
+    const id = setTimeout(async () => {
+      setTranslating(true)
+      try {
+        const hiName = await translateToHindi(name)
+        if (hiName) setForm((f) => ({ ...f, chemical_name_hi: hiName }))
+      } catch { /* leave it blank — the user can type it */ }
+      setTranslating(false)
+    }, 600)
+    return () => clearTimeout(id)
+  }, [form.chemical_name, autoHi])
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   async function save() {
     if (!form.chemical_name.trim() || !form.property) { setErr(t.required); return }
     setBusy(true); setErr('')
-    const { error } = await supabase.from('chemical_usage').insert({
+    // fields the user can change; who logged it and when are left alone on edit
+    const payload = {
       property: form.property,
       chemical_name: form.chemical_name.trim(),
+      chemical_name_hi: form.chemical_name_hi.trim() || null,
       category: form.category || null,
       brand: form.brand || null,
       quantity: Number(form.quantity || 0),
       unit: form.unit,
       location: form.location || null,
-      department: user.department || null,
-      used_by: user.id,
-      used_by_name: user.name,
-      usage_date: todayISO(),
+      location_hi: form.location_hi.trim() || null,
       notes: form.notes || null,
-      created_by: user.id,
-    })
+      usage_date: form.usage_date || todayISO(),
+    }
+    const { error } = record
+      ? await supabase.from('chemical_usage').update(payload).eq('id', record.id)
+      : await supabase.from('chemical_usage').insert({
+        ...payload,
+        department: user.department || null,
+        used_by: user.id,
+        used_by_name: user.name,
+        created_by: user.id,
+      })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  async function del() {
+    if (!window.confirm(t.deleteLogConfirm)) return
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('chemical_usage').delete().eq('id', record.id)
     setBusy(false)
     if (error) { setErr(error.message); return }
     onSaved()
@@ -219,21 +269,53 @@ function LogModal({ user, properties, defaultProperty, onClose, onSaved }) {
 
   return (
     <Modal
-      open onClose={onClose} title={t.logUsage}
+      open onClose={onClose} title={record ? t.editLog : t.logUsage}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
+          {record && canDelete && (
+            <Button variant="danger" onClick={del} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
+              <Icon name="trash" size={16} color="#fff" />
+            </Button>
+          )}
           <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button>
         </>
       }
     >
-      <Field label="Property">
+      <Field label={t.properties}>
         <select style={inputStyle(C)} value={form.property} onChange={set('property')} disabled={properties.length <= 1}>
-          {properties.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+          {properties.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
         </select>
       </Field>
       <Field label={t.chemical}>
-        <input style={inputStyle(C)} value={form.chemical_name} onChange={set('chemical_name')} placeholder="e.g. Floor cleaner" />
+        <input style={inputStyle(C)} value={form.chemical_name} onChange={set('chemical_name')} placeholder={t.chemicalEg} />
+      </Field>
+      <Field label={`${t.chemical} (हिंदी)`}>
+        <input
+          style={inputStyle(C)}
+          value={form.chemical_name_hi}
+          onChange={(e) => { setAutoHi(false); set('chemical_name_hi')(e) }}
+          placeholder={autoHi ? 'अपने आप अनुवाद होगा…' : 'जैसे फ़र्श क्लीनर'}
+        />
+        <div style={{ fontSize: 11.5, marginTop: 4, color: C.tl, display: 'flex', alignItems: 'center', gap: 5 }}>
+          {translating ? t.translating : autoHi ? (
+            <><Icon name="check" size={12} color={C.green} /> {t.autoFilledEditable}</>
+          ) : (
+            <button type="button" onClick={() => setAutoHi(true)}
+                    style={{ background: 'transparent', color: C.maroon, fontWeight: 700, padding: 0 }}>
+              {t.autoTranslate}
+            </button>
+          )}
+        </div>
+      </Field>
+      <Field label={t.usageDate} hint={t.usageDateHint}>
+        <input
+          type="date"
+          max={todayISO()}
+          style={inputStyle(C)}
+          value={form.usage_date}
+          onChange={set('usage_date')}
+        />
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
@@ -250,11 +332,14 @@ function LogModal({ user, properties, defaultProperty, onClose, onSaved }) {
         </div>
       </div>
       <Field label={t.location}>
-        <input style={inputStyle(C)} value={form.location} onChange={set('location')} placeholder="e.g. Banquet hall, Lawn, WC" />
+        <input style={inputStyle(C)} value={form.location} onChange={set('location')} placeholder={t.locationEg} />
       </Field>
-      <Field label={`Brand / Category (${t.optional})`}>
-        <input style={{ ...inputStyle(C), marginBottom: 8 }} value={form.brand} onChange={set('brand')} placeholder="Brand e.g. Kleanfix" />
-        <input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder="Category e.g. Floor Care" />
+      <Field label={`${t.location} (हिंदी)`} hint={t.hindiOptionalHint}>
+        <input style={inputStyle(C)} value={form.location_hi} onChange={set('location_hi')} placeholder="जैसे बैंक्वेट हॉल, लॉन, शौचालय" />
+      </Field>
+      <Field label={`${t.brandCategory} (${t.optional})`}>
+        <input style={{ ...inputStyle(C), marginBottom: 8 }} value={form.brand} onChange={set('brand')} placeholder={t.brandEg} />
+        <input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder={t.categoryEg} />
       </Field>
       {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
     </Modal>

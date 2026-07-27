@@ -5,13 +5,17 @@ import { nowISO, fmtDateTime, todayISO, fmtDate } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork } from '../../constants/org'
+import { isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, propName, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import Icon from '../../components/common/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+
+// The Completed tab only shows recent work by default — finished repairs pile
+// up fast and bury the ones people still care about. The rest are one tap away.
+const COMPLETED_DAYS = 7
 
 const PRIOS = { low: 'tl', normal: 'blue', high: 'yellow', urgent: 'red' }
 
@@ -53,6 +57,7 @@ export default function TaskBoard() {
   const [tab, setTab] = useState(location.state?.tab || 'open')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
+  const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
   const [creating, setCreating] = useState(false)
   const [active, setActive] = useState(null)
 
@@ -136,15 +141,33 @@ export default function TaskBoard() {
       : rows.filter((r) => r.assigned_to === user.id)
   }, [rows, memberFilter, admin, scope, user.id])
 
+  // repair rows keep the assignee name from assignment time; swap in the Hindi
+  // name when the UI is Hindi and we know the person
+  const nameOf = useCallback((id, stored) => {
+    const m = members.find((x) => x.id === id)
+    return (m && personName(m, lang)) || stored || ''
+  }, [members, lang])
+
   const today = todayISO()
+  const doneAll = useMemo(
+    () => visibleRows.filter((r) => ['approved', 'completed'].includes(r.status)),
+    [visibleRows]
+  )
+  const doneRecent = useMemo(() => {
+    const cutoff = new Date(Date.now() - COMPLETED_DAYS * 86400000).toISOString()
+    return doneAll.filter((r) => (r.resolved_at || r.created_at || '') >= cutoff)
+  }, [doneAll])
+
   const groups = useMemo(() => ({
     // overdue = past its due date and not yet finished (cross-cuts open/in-progress)
     overdue: visibleRows.filter((r) => r.due_date && r.due_date < today && !['approved', 'completed'].includes(r.status)),
     open: visibleRows.filter((r) => ['open', 'assigned'].includes(r.status)),
     in_progress: visibleRows.filter((r) => r.status === 'in_progress'),
     review: visibleRows.filter((r) => r.status === 'approval_requested'),
-    completed: visibleRows.filter((r) => ['approved', 'completed'].includes(r.status)),
-  }), [visibleRows, today])
+    completed: showAllDone ? doneAll : doneRecent,
+  }), [visibleRows, today, doneAll, doneRecent, showAllDone])
+
+  const hiddenDone = doneAll.length - doneRecent.length
 
   // staff who actually have requests assigned — populate the name filter
   const memberOptions = useMemo(() => {
@@ -233,13 +256,13 @@ export default function TaskBoard() {
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>{r.posted_by_name} · {fmtDateTime(r.created_at)}</div>
                     {r.assigned_to_name && (
                       <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Icon name="user" size={12} /> {r.assigned_to_name}
+                        <Icon name="user" size={12} /> {nameOf(r.assigned_to, r.assigned_to_name)}
                       </div>
                     )}
                     {r.assigned_to_name && (
                       <div style={{ fontSize: 12, color: C.faint, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Icon name="pin" size={12} />
-                        {PROPERTY_MAP[r.property]?.name || r.property}
+                        {propName(r.property, lang)}
                         {r.department ? ` · ${deptName(r.department, lang)}` : ''}
                       </div>
                     )}
@@ -274,6 +297,31 @@ export default function TaskBoard() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {/* older finished repairs are hidden rather than deleted — they still
+          count in Analytics and in each staff member's rating history */}
+      {tab === 'completed' && hiddenDone > 0 && (
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={() => setShowAllDone((v) => !v)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '9px 16px', borderRadius: 999,
+              background: C.card, border: `1px solid ${C.border}`,
+              color: C.tl, fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <Icon name={showAllDone ? 'chevronLeft' : 'refresh'} size={14} color={C.tl} />
+            {showAllDone ? t.showRecentOnly : `${t.showOlder} (${hiddenDone})`}
+          </button>
+          {!showAllDone && (
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 7 }}>
+              {t.completedWindowNote}
+            </div>
+          )}
         </div>
       )}
 
@@ -400,7 +448,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       {superAdmin && (
         <Field label={t.properties || 'Property'}>
           <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
-            {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+            {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
           </select>
         </Field>
       )}
@@ -594,7 +642,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {superAdmin && (
             <Field label={t.properties || 'Property'}>
               <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)}>
-                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
               </select>
             </Field>
           )}
@@ -697,7 +745,7 @@ function AssigneePicker({ C, t, lang, members, who, dept, value, onWho, onDept, 
   // departments that actually have someone of the chosen kind
   const deptOptions = useMemo(() => {
     const codes = [...new Set(pool.map((m) => m.department).filter(Boolean))]
-    return codes.map((code) => ({ code, name: DEPARTMENT_MAP[code]?.name || code }))
+    return codes.map((code) => ({ code, name: deptName(code, lang) }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [pool])
 

@@ -7,7 +7,7 @@ if (!url || !anonKey || anonKey === 'your-anon-public-key-here') {
   // Helpful warning during development
   // eslint-disable-next-line no-console
   console.warn(
-    '[Ambria Ops] Supabase env vars missing. Copy .env.example to .env and set ' +
+    '[Workforce] Supabase env vars missing. Copy .env.example to .env and set ' +
     'VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (Supabase Dashboard -> Settings -> API).'
   )
 }

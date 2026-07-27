@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase'
 import { newId } from '../../lib/id'
 import { todayISO } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
-import { useT } from '../../context/LangContext'
+import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import {
-  ROLES, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, PROPERTY_MAP,
+  ROLES, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, PROPERTY_MAP, propName, deptName, personName,
 } from '../../constants/org'
 import { navForRole, ALWAYS_VISIBLE } from '../../constants/nav'
 import { normalizePhone } from '../../lib/phone'
@@ -20,7 +20,10 @@ const ROLE_OPTIONS = [
   { value: ROLES.ADMIN, label: 'Admin' },
   { value: ROLES.SUPER_ADMIN, label: 'Super Admin' },
 ]
-const ROLE_LABEL = ROLE_OPTIONS.reduce((m, r) => ({ ...m, [r.value]: r.label }), {})
+// role name in the active language
+const roleLabel = (role, t) => ({
+  [ROLES.SUPER_ADMIN]: t.roleSuperAdmin, [ROLES.ADMIN]: t.roleAdmin, [ROLES.EMPLOYEE]: t.roleEmployee,
+}[role] || role)
 const roleTone = (role, C) => (role === ROLES.SUPER_ADMIN ? C.maroon : role === ROLES.ADMIN ? C.indigo : C.blue)
 
 // designation marker that identifies an Admin who is a department head
@@ -32,6 +35,7 @@ const seedAccess = (role) => new Set(navForRole(role).map((i) => i.path))
 export default function Users() {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const { user } = useAuth()
 
   const PAGE_SIZE = 25
@@ -49,9 +53,9 @@ export default function Users() {
   const [editing, setEditing] = useState(null) // user object, or 'new'
 
   // options for the multi-select dropdowns ({ value, label })
-  const deptOptions = useMemo(() => DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })), [])
+  const deptOptions = useMemo(() => DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) })), [lang])
   const propOptions = useMemo(() => PROPERTIES.map((p) => ({ value: p.code, label: p.name })), [])
-  const roleOptions = useMemo(() => ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label })), [])
+  const roleOptions = useMemo(() => ROLE_OPTIONS.map((r) => ({ value: r.value, label: roleLabel(r.value, t) })), [t])
 
   // debounce the search box so we don't hit the DB on every keystroke
   useEffect(() => {
@@ -63,7 +67,7 @@ export default function Users() {
     setListLoading(true)
     let query = supabase
       .from('users')
-      .select('id, username, name, role, property, department, phone, designation, is_active, access', { count: 'exact' })
+      .select('id, username, name, name_hi, role, property, department, phone, designation, is_active, access', { count: 'exact' })
     // filters combine (AND): role, department, property, search
     if (roleSel.length) query = query.in('role', roleSel)
     if (deptSel.length) query = query.in('department', deptSel)
@@ -89,12 +93,23 @@ export default function Users() {
   const changeProp = (v) => { setPropSel(v); setPage(0) }
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  // only offer Clear when something is actually filtering the list
+  const filtered = !!(q || roleSel.length || deptSel.length || propSel.length)
+  function clearFilters() {
+    setQ('')
+    setDebouncedQ('') // apply immediately instead of waiting out the 300ms debounce
+    setRoleSel([])
+    setDeptSel([])
+    setPropSel([])
+    setPage(0)
+  }
+
   if (loading) return <Loader label={t.loading} />
 
   return (
     <div>
       <SectionTitle
-        right={<Button variant="primary" onClick={() => setEditing('new')}><Icon name="plus" size={16} style={{ marginRight: 4 }} />New</Button>}
+        right={<Button variant="primary" onClick={() => setEditing('new')}><Icon name="plus" size={16} style={{ marginRight: 4 }} />{t.newLabel}</Button>}
       >
         {t.userManagement}
       </SectionTitle>
@@ -102,13 +117,28 @@ export default function Users() {
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <input
           style={{ ...inputStyle(C), flex: 2, minWidth: 200 }}
-          placeholder={`${t.search || 'Search'} — name, username`}
+          placeholder={t.searchNameUser}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <MultiSelect C={C} placeholder="All roles" options={roleOptions} selected={roleSel} onChange={changeRole} />
-        <MultiSelect C={C} placeholder="All departments" options={deptOptions} selected={deptSel} onChange={changeDept} />
-        <MultiSelect C={C} placeholder="All properties" options={propOptions} selected={propSel} onChange={changeProp} />
+        <MultiSelect C={C} placeholder={t.allRoles} options={roleOptions} selected={roleSel} onChange={changeRole} />
+        <MultiSelect C={C} placeholder={t.allDepts} options={deptOptions} selected={deptSel} onChange={changeDept} />
+        <MultiSelect C={C} placeholder={t.allProps} options={propOptions} selected={propSel} onChange={changeProp} />
+        {filtered && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            title={t.clearFilters}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '0 14px', height: 42, borderRadius: 10,
+              background: C.card, border: `1px solid ${C.border}`,
+              color: C.tl, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap',
+            }}
+          >
+            <Icon name="close" size={15} color={C.tl} /> {t.clearFilters}
+          </button>
+        )}
       </div>
 
       {listLoading && rows.length === 0 ? (
@@ -124,19 +154,19 @@ export default function Users() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>{u.name}</span>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{personName(u, lang)}</span>
                       <span style={{ fontSize: 12, color: C.faint }}>@{u.username}</span>
                     </div>
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 3 }}>
                       {u.designation ? `${u.designation} · ` : ''}
-                      {DEPARTMENT_MAP[u.department]?.name || u.department || '—'}
+                      {deptName(u.department, lang) || '—'}
                       {' · '}
-                      {PROPERTY_MAP[u.property]?.name || u.property}
+                      {propName(u.property, lang)}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-                    <Badge color={tone} bg={C.cardAlt}>{ROLE_LABEL[u.role] || u.role}</Badge>
-                    {u.is_active === false && <Badge color={C.red} bg={C.rBg}>Inactive</Badge>}
+                    <Badge color={tone} bg={C.cardAlt}>{roleLabel(u.role, t)}</Badge>
+                    {u.is_active === false && <Badge color={C.red} bg={C.rBg}>{t.inactive}</Badge>}
                   </div>
                 </div>
               </Card>
@@ -173,11 +203,13 @@ export default function Users() {
 function UserModal({ record, currentUserId, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const isNew = !record
   const isSelf = !isNew && record.id === currentUserId
 
   const [form, setForm] = useState(() => ({
     name: record?.name || '',
+    name_hi: record?.name_hi || '',
     username: record?.username || '',
     password: '',
     role: record?.role || ROLES.EMPLOYEE,
@@ -289,6 +321,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
 
     const base = {
       name: form.name.trim(),
+      name_hi: form.name_hi.trim() || null,
       username: form.username.trim().toLowerCase(),
       role: form.role,
       property: form.property,
@@ -320,7 +353,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
 
   return (
     <Modal
-      open onClose={onClose} title={isNew ? 'New User' : form.name}
+      open onClose={onClose} title={isNew ? t.newUser : form.name}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
@@ -328,14 +361,24 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
         </>
       }
     >
-      <Field label="Name"><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <Field label={t.fullName}><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
+        </div>
+        <div style={{ flex: 1 }}>
+          {/* typed by hand — machine translation mangles names ("Mali" -> gardener) */}
+          <Field label={`${t.fullName} (हिंदी)`} hint={t.nameHiHint}>
+            <input style={inputStyle(C)} value={form.name_hi} onChange={set('name_hi')} placeholder="जैसे सोनू माली" />
+          </Field>
+        </div>
+      </div>
 
       {/* fix-request history for this staff member */}
       {!isNew && fixStats && fixStats.total > 0 && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>{fixStats.total}</div>
-            <div style={{ fontSize: 12, color: C.tl, fontWeight: 600 }}>Fixes completed</div>
+            <div style={{ fontSize: 12, color: C.tl, fontWeight: 600 }}>{t.fixesCompleted}</div>
           </div>
           <div style={{ flex: 1, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -348,7 +391,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
       )}
 
       <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1 }}><Field label="Username" hint={t.usernameOrPhoneHint || 'Login: username or phone + 4-digit PIN'}><input style={inputStyle(C)} value={form.username} onChange={set('username')} autoCapitalize="none" /></Field></div>
+        <div style={{ flex: 1 }}><Field label={t.username} hint={t.usernameOrPhoneHint || 'Login: username or phone + 4-digit PIN'}><input style={inputStyle(C)} value={form.username} onChange={set('username')} autoCapitalize="none" /></Field></div>
         <div style={{ flex: 1 }}>
           <Field label={t.pinLabel || 'PIN (4 digits)'} hint={isNew ? undefined : (t.pinResetHint || 'Current PIN — edit to reset')}>
             <div style={{ position: 'relative' }}>
@@ -378,17 +421,17 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
 
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Role" hint={deptHead ? 'Set by Department Head' : undefined}>
+          <Field label={t.role} hint={deptHead ? 'Set by Department Head' : undefined}>
             <select style={inputStyle(C)} value={form.role} onChange={changeRole} disabled={isSelf || deptHead}>
-              {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{roleLabel(r.value, t)}</option>)}
             </select>
           </Field>
         </div>
         <div style={{ flex: 1 }}>
           <Field label={t.properties || 'Property'}>
             <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
-              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-              <option value="all">All Properties</option>
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+              <option value="all">{t.allProps}</option>
             </select>
           </Field>
         </div>
@@ -396,14 +439,14 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
 
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Department">
+          <Field label={t.department}>
             <select style={inputStyle(C)} value={form.department} onChange={set('department')}>
               <option value="">—</option>
-              {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+              {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
             </select>
           </Field>
         </div>
-        <div style={{ flex: 1 }}><Field label="Designation"><input style={inputStyle(C)} value={form.designation} onChange={set('designation')} disabled={deptHead} /></Field></div>
+        <div style={{ flex: 1 }}><Field label={t.designation}><input style={inputStyle(C)} value={form.designation} onChange={set('designation')} disabled={deptHead} /></Field></div>
       </div>
 
       {/* elevate a staff member to Department Head → full Admin access */}
@@ -430,9 +473,9 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
       </Field>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1 }}><Field label="Phone"><input style={inputStyle(C)} value={form.phone} onChange={set('phone')} /></Field></div>
+        <div style={{ flex: 1 }}><Field label={t.phone}><input style={inputStyle(C)} value={form.phone} onChange={set('phone')} /></Field></div>
         <div style={{ flex: 1 }}>
-          <Field label="Active">
+          <Field label={t.active}>
             <button
               type="button"
               onClick={() => !isSelf && setForm((f) => ({ ...f, is_active: !f.is_active }))}
@@ -453,7 +496,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
 
       {/* which left-side tabs this user can see */}
       <div style={{ marginTop: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 8 }}>Visible tabs</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 8 }}>{t.visibleTabs}</div>
         <div style={{ display: 'grid', gap: 8 }}>
           {candidateTabs.map((item) => {
             const fixed = ALWAYS_VISIBLE.includes(item.path)

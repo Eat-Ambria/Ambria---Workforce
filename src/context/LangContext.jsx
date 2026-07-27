@@ -1,11 +1,16 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { T } from '../translations'
+import { setDateLocale } from '../lib/time'
 
 const LangContext = createContext(null)
 const STORAGE_KEY = 'ambria_lang'
 
 export function LangProvider({ children }) {
   const [lang, setLang] = useState(() => localStorage.getItem(STORAGE_KEY) || 'en')
+
+  // set during render, not in an effect, so the first render after a language
+  // switch already formats dates in the new script
+  setDateLocale(lang)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, lang)

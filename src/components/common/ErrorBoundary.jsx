@@ -14,7 +14,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     // eslint-disable-next-line no-console
-    console.error('[Ambria Ops] Uncaught error:', error, info)
+    console.error('[Workforce] Uncaught error:', error, info)
   }
 
   render() {

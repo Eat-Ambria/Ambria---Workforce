@@ -13,69 +13,92 @@ const PROP_SPECS = {
   rs: { banquet: 8000, lawn: 5000, washrooms: 4, glass: 8000, label: 'Restro' },
 }
 
+// Units in words, so "L/month" reads "लीटर/माह" rather than staying English.
+const UNIT_HI = { L: 'लीटर', kg: 'किलो', cans: 'कैन' }
+export const unitLabel = (unit, hi) => (hi ? (UNIT_HI[unit] || unit) : unit)
+const perMonth = (hi) => (hi ? 'माह' : 'month')
+
 // Monthly quantity formulas derived from property dimensions.
-function calcQty(spec) {
+function calcQty(spec, hi = false) {
   const { banquet, lawn, washrooms, glass } = spec
   const totalFloor = banquet + (glass > 0 ? glass : 0)
   return [
     {
-      code: 'K2', name: 'Hard Surface Floor Cleaner', area: 'Banquet / Tiles / Corridors',
+      code: 'K2', name: 'Hard Surface Floor Cleaner', nameHi: 'हार्ड सरफ़ेस फ़र्श क्लीनर',
+      area: 'Banquet / Tiles / Corridors', areaHi: 'बैंक्वेट / टाइल / गलियारे',
       qty: ((totalFloor * 0.002 * 2 * 30) / 1000).toFixed(1), unit: 'L',
-      formula: `${totalFloor.toLocaleString()} sqft × 0.002L × 2 washes × 30 days`,
-      note: 'Dilution: 20ml/1L water', color: colors.blue,
+      formula: hi ? `${totalFloor.toLocaleString()} sqft × 0.002 लीटर × 2 बार × 30 दिन`
+        : `${totalFloor.toLocaleString()} sqft × 0.002L × 2 washes × 30 days`,
+      note: 'Dilution: 20ml/1L water', noteHi: 'घोल: 20ml प्रति 1 लीटर पानी', color: colors.blue,
     },
     {
-      code: 'K1', name: 'Bathroom Sanitizer', area: 'Washrooms / Tiles / Tubs',
+      code: 'K1', name: 'Bathroom Sanitizer', nameHi: 'बाथरूम सैनिटाइज़र',
+      area: 'Washrooms / Tiles / Tubs', areaHi: 'वॉशरूम / टाइल / टब',
       qty: (washrooms * 0.5 * 30).toFixed(0), unit: 'L',
-      formula: `${washrooms} washrooms × 0.5L/day × 30 days`,
-      note: 'Dilution: 20–50ml/1L water', color: colors.red,
+      formula: hi ? `${washrooms} वॉशरूम × 0.5 लीटर/दिन × 30 दिन`
+        : `${washrooms} washrooms × 0.5L/day × 30 days`,
+      note: 'Dilution: 20–50ml/1L water', noteHi: 'घोल: 20–50ml प्रति 1 लीटर पानी', color: colors.red,
     },
     {
-      code: 'K6', name: 'Toilet Bowl Cleaner', area: 'Toilet Bowls / Urinals',
+      code: 'K6', name: 'Toilet Bowl Cleaner', nameHi: 'टॉयलेट बाउल क्लीनर',
+      area: 'Toilet Bowls / Urinals', areaHi: 'टॉयलेट बाउल / यूरिनल',
       qty: (washrooms * 0.3 * 30).toFixed(0), unit: 'L',
-      formula: `${washrooms} toilets × 0.3L/day × 30 days`,
-      note: 'Ready-to-use — pour directly', color: colors.red,
+      formula: hi ? `${washrooms} टॉयलेट × 0.3 लीटर/दिन × 30 दिन`
+        : `${washrooms} toilets × 0.3L/day × 30 days`,
+      note: 'Ready-to-use — pour directly', noteHi: 'सीधा उपयोग — सीधे डालें', color: colors.red,
     },
     {
-      code: 'K5', name: 'Air Freshener', area: 'All Washrooms + Banquet',
+      code: 'K5', name: 'Air Freshener', nameHi: 'एयर फ़्रेशनर',
+      area: 'All Washrooms + Banquet', areaHi: 'सभी वॉशरूम + बैंक्वेट',
       qty: Math.ceil(((washrooms + 2) * 30) / 5), unit: 'cans',
-      formula: `${washrooms + 2} areas × 30 days ÷ 5 days/can`,
-      note: 'Spray every 2–3 hours in peak hours', color: colors.accent,
+      formula: hi ? `${washrooms + 2} जगह × 30 दिन ÷ 5 दिन/कैन`
+        : `${washrooms + 2} areas × 30 days ÷ 5 days/can`,
+      note: 'Spray every 2–3 hours in peak hours', noteHi: 'व्यस्त समय में हर 2–3 घंटे स्प्रे करें', color: colors.accent,
     },
     {
-      code: 'K3', name: 'Glass Cleaner', area: 'Glass / Mirrors / Partitions',
+      code: 'K3', name: 'Glass Cleaner', nameHi: 'ग्लास क्लीनर',
+      area: 'Glass / Mirrors / Partitions', areaHi: 'कांच / शीशे / पार्टीशन',
       qty: (((glass || banquet * 0.2) * 0.003 * 4) / 1000).toFixed(1), unit: 'L',
-      formula: `${Math.round(glass || banquet * 0.2).toLocaleString()} sqft × 0.003L × 4 times/month`,
-      note: 'Dilution: 20–50ml/1L water', color: colors.tl,
+      formula: hi ? `${Math.round(glass || banquet * 0.2).toLocaleString()} sqft × 0.003 लीटर × 4 बार/माह`
+        : `${Math.round(glass || banquet * 0.2).toLocaleString()} sqft × 0.003L × 4 times/month`,
+      note: 'Dilution: 20–50ml/1L water', noteHi: 'घोल: 20–50ml प्रति 1 लीटर पानी', color: colors.tl,
     },
     {
-      code: 'K4', name: 'Wood Maintainer', area: 'Furniture / Wooden Floors',
+      code: 'K4', name: 'Wood Maintainer', nameHi: 'वुड मेंटेनर',
+      area: 'Furniture / Wooden Floors', areaHi: 'फ़र्नीचर / लकड़ी के फ़र्श',
       qty: Math.ceil(banquet / 5000), unit: 'L',
-      formula: `${Math.round(banquet / 5000)} L per ${banquet.toLocaleString()} sqft monthly`,
-      note: 'Ready-to-use on wooden surfaces', color: colors.accent,
+      formula: hi ? `${Math.round(banquet / 5000)} लीटर प्रति ${banquet.toLocaleString()} sqft महीना`
+        : `${Math.round(banquet / 5000)} L per ${banquet.toLocaleString()} sqft monthly`,
+      note: 'Ready-to-use on wooden surfaces', noteHi: 'लकड़ी की सतह पर सीधा उपयोग', color: colors.accent,
     },
     {
-      code: 'K7', name: 'Stainless Steel Polish', area: 'Railings / Fixtures / Grills',
-      qty: 2, unit: 'L', formula: '~2L per property per month (standard)',
-      note: 'Ready-to-use on SS surfaces', color: colors.tl,
+      code: 'K7', name: 'Stainless Steel Polish', nameHi: 'स्टेनलेस स्टील पॉलिश',
+      area: 'Railings / Fixtures / Grills', areaHi: 'रेलिंग / फ़िक्सचर / ग्रिल',
+      qty: 2, unit: 'L', formula: hi ? '~2 लीटर प्रति प्रॉपर्टी प्रति माह (मानक)' : '~2L per property per month (standard)',
+      note: 'Ready-to-use on SS surfaces', noteHi: 'स्टील की सतह पर सीधा उपयोग', color: colors.tl,
     },
     {
-      code: 'K101', name: 'Carpet Shampoo', area: 'Carpets / Sofas / Upholstery',
+      code: 'K101', name: 'Carpet Shampoo', nameHi: 'कारपेट शैम्पू',
+      area: 'Carpets / Sofas / Upholstery', areaHi: 'कालीन / सोफ़ा / अपहोल्स्ट्री',
       qty: Math.ceil(((banquet * 0.3 * 0.08) / 1000) * 4), unit: 'L',
-      formula: '30% carpet area × 80ml/sqft × 4/month ÷ 1000',
-      note: 'Dilution: 50–100ml/1L water', color: colors.green,
+      formula: hi ? '30% कालीन क्षेत्र × 80ml/sqft × 4/माह ÷ 1000' : '30% carpet area × 80ml/sqft × 4/month ÷ 1000',
+      note: 'Dilution: 50–100ml/1L water', noteHi: 'घोल: 50–100ml प्रति 1 लीटर पानी', color: colors.green,
     },
     {
-      code: 'NPK 19:19:19', name: 'NPK Fertilizer', area: 'All Lawn & Garden Areas',
+      code: 'NPK 19:19:19', name: 'NPK Fertilizer', nameHi: 'एनपीके खाद',
+      area: 'All Lawn & Garden Areas', areaHi: 'सभी लॉन और बग़ीचे',
       qty: ((lawn / 1000) * 2).toFixed(0), unit: 'kg',
-      formula: `${lawn.toLocaleString()} sqft lawn ÷ 1000 × 2kg/month`,
-      note: 'Monthly balanced feed — dilute 2g/L', color: colors.green,
+      formula: hi ? `${lawn.toLocaleString()} sqft लॉन ÷ 1000 × 2 किलो/माह`
+        : `${lawn.toLocaleString()} sqft lawn ÷ 1000 × 2kg/month`,
+      note: 'Monthly balanced feed — dilute 2g/L', noteHi: 'मासिक संतुलित खुराक — 2g प्रति लीटर', color: colors.green,
     },
     {
-      code: 'Neem Oil', name: 'Neem Oil (Pest Control)', area: 'Lawn / Plants / Trees',
+      code: 'Neem Oil', name: 'Neem Oil (Pest Control)', nameHi: 'नीम तेल (कीट नियंत्रण)',
+      area: 'Lawn / Plants / Trees', areaHi: 'लॉन / पौधे / पेड़',
       qty: ((lawn / 10000) * 0.5).toFixed(1), unit: 'L',
-      formula: `${(lawn / 10000).toFixed(1)} × 0.5L per 10K sqft`,
-      note: 'Mix 5ml/1L water — spray monthly', color: colors.green,
+      formula: hi ? `${(lawn / 10000).toFixed(1)} × 0.5 लीटर प्रति 10K sqft`
+        : `${(lawn / 10000).toFixed(1)} × 0.5L per 10K sqft`,
+      note: 'Mix 5ml/1L water — spray monthly', noteHi: '5ml प्रति 1 लीटर पानी — महीने में एक बार स्प्रे', color: colors.green,
     },
   ]
 }
@@ -197,6 +220,7 @@ const CHEM_DATA = [
 export default function ChemicalGuide({ visibleProps }) {
   const C = useColors()
   const { lang } = useLang()
+  const hi = lang === 'hi'
 
   // property codes the user can view; fall back to all four
   const propKeys = useMemo(() => {
@@ -209,7 +233,7 @@ export default function ChemicalGuide({ visibleProps }) {
   const [openAreas, setOpenAreas] = useState({ 0: true })
 
   const spec = PROP_SPECS[selectedProp] || PROP_SPECS.pp
-  const chemicals = useMemo(() => calcQty(spec), [spec])
+  const chemicals = useMemo(() => calcQty(spec, hi), [spec, hi])
   const totalLitres = chemicals.filter((c) => c.unit === 'L').reduce((s, c) => s + parseFloat(c.qty), 0).toFixed(1)
   const totalKg = chemicals.filter((c) => c.unit === 'kg').reduce((s, c) => s + parseFloat(c.qty), 0).toFixed(0)
 
@@ -284,11 +308,11 @@ export default function ChemicalGuide({ visibleProps }) {
           {/* Monthly totals */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div style={{ background: C.bBg, borderRadius: 14, padding: '14px 16px', border: `1px solid ${C.blue}30` }}>
-              <div style={{ fontSize: 26, fontWeight: 800, color: C.blue, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{totalLitres} L</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: C.blue, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{totalLitres} {unitLabel('L', hi)}</div>
               <div style={{ fontSize: 12, color: C.blue, fontWeight: 600 }}>{lang === 'hi' ? 'कुल तरल केमिकल / माह' : 'Total Liquid Chemicals / Month'}</div>
             </div>
             <div style={{ background: C.gBg, borderRadius: 14, padding: '14px 16px', border: `1px solid ${C.green}30` }}>
-              <div style={{ fontSize: 26, fontWeight: 800, color: C.green, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{totalKg} kg</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: C.green, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{totalKg} {unitLabel('kg', hi)}</div>
               <div style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>{lang === 'hi' ? 'कुल सूखे/ठोस केमिकल / माह' : 'Total Dry / Solid Chemicals / Month'}</div>
             </div>
           </div>
@@ -301,15 +325,15 @@ export default function ChemicalGuide({ visibleProps }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={{ padding: '2px 7px', borderRadius: 5, background: c.color + '20', color: c.color, fontSize: 10.5, fontWeight: 700 }}>{c.code}</span>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{c.name}</span>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{hi && c.nameHi ? c.nameHi : c.name}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: C.tl, marginBottom: 5 }}>{c.area}</div>
+                    <div style={{ fontSize: 12, color: C.tl, marginBottom: 5 }}>{hi && c.areaHi ? c.areaHi : c.area}</div>
                     <div style={{ fontSize: 11.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{c.formula}</div>
-                    <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{c.note}</div>
+                    <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{hi && c.noteHi ? c.noteHi : c.note}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 24, fontWeight: 800, color: c.color, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{c.qty}</div>
-                    <div style={{ fontSize: 11, color: C.tl, fontWeight: 600 }}>{c.unit}/month</div>
+                    <div style={{ fontSize: 11, color: C.tl, fontWeight: 600 }}>{unitLabel(c.unit, hi)}/{perMonth(hi)}</div>
                   </div>
                 </div>
               </Card>

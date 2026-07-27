@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
 import { useColors } from '../../context/ThemeContext'
+import { useT } from '../../context/LangContext'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 
 export default function Modal({ open, onClose, title, children, footer, maxWidth = 480 }) {
   const C = useColors()
+  const t = useT()
   const isMobile = useIsMobile()
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
           <button
             onClick={onClose}
             style={{ background: 'transparent', color: C.tl, fontSize: 22, lineHeight: 1 }}
-            aria-label="Close"
+            aria-label={t.close}
           >
             ×
           </button>

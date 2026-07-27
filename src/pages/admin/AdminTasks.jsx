@@ -8,7 +8,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
@@ -23,6 +23,7 @@ const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
 export default function AdminTasks() {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const { user } = useAuth()
 
   const canSeeAllProps = canSeeAllProperties(user)
@@ -152,6 +153,13 @@ export default function AdminTasks() {
     }
   }, [memberOptions, memberFilter, members])
 
+  // tasks store the assignee's name as it was at assignment time (English).
+  // When the UI is Hindi, prefer that person's Hindi name from the loaded list.
+  const nameOf = useCallback((id, stored) => {
+    const m = members.find((x) => x.id === id)
+    return (m && personName(m, lang)) || stored || '—'
+  }, [members, lang])
+
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
   // task-status tabs only — the Issues view is a separate button (see below)
   const tabs = [
@@ -192,7 +200,7 @@ export default function AdminTasks() {
               aria-label={t.properties}
             >
               <option value="all">{t.properties} — {t.all}</option>
-              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
             </select>
           </div>
         )}
@@ -205,7 +213,7 @@ export default function AdminTasks() {
             aria-label={t.members}
           >
             <option value="all">{t.members} — {t.all}</option>
-            {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
           </select>
         </div>
       </div>
@@ -269,11 +277,11 @@ export default function AdminTasks() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{task.title}</div>
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
-                      {task.assignee_name || '—'}{task.area ? ` · ${task.area}` : ''}
+                      {nameOf(task.assigned_to, task.assignee_name)}{task.area ? ` · ${task.area}` : ''}
                     </div>
                     {canSeeAllProps && (
                       <div style={{ fontSize: 12, color: C.faint, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Icon name="pin" size={12} /> {PROPERTY_MAP[task.property]?.name || task.property}
+                        <Icon name="pin" size={12} /> {propName(task.property, lang)}
                       </div>
                     )}
                     {task.due_date && (
@@ -326,7 +334,7 @@ export default function AdminTasks() {
       )}
 
       {review && (
-        <ReviewModal task={review} user={user} onClose={() => setReview(null)} onSaved={() => { setReview(null); load() }} />
+        <ReviewModal task={review} user={user} assigneeName={nameOf(review.assigned_to, review.assignee_name)} onClose={() => setReview(null)} onSaved={() => { setReview(null); load() }} />
       )}
       {creating && (
         <CreateModal user={user} members={members} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load() }} />
@@ -368,7 +376,7 @@ function PhotoCol({ C, label, photos }) {
   )
 }
 
-function ReviewModal({ task, user, onClose, onSaved }) {
+function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
   const [busy, setBusy] = useState(false)
@@ -490,7 +498,7 @@ function ReviewModal({ task, user, onClose, onSaved }) {
         {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
         {task.category && <Badge>{t[task.category]}</Badge>}
       </div>
-      <div style={{ fontSize: 14, marginBottom: 6 }}>{t.members}: <b>{task.assignee_name || '—'}</b></div>
+      <div style={{ fontSize: 14, marginBottom: 6 }}>{t.members}: <b>{assigneeName || task.assignee_name || '—'}</b></div>
       {task.completion_requested_at && <div style={{ fontSize: 13, color: C.tl, marginBottom: 12 }}>{fmtDateTime(task.completion_requested_at)}</div>}
 
       {/* staff-reported issue text */}
@@ -507,7 +515,7 @@ function ReviewModal({ task, user, onClose, onSaved }) {
       {durMs != null && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 12px', marginBottom: 12 }}>
           <Icon name="clock" size={16} color={C.tl} />
-          <span style={{ fontSize: 13.5 }}>Time taken: <b style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtDur(durMs)}</b></span>
+          <span style={{ fontSize: 13.5 }}>{t.timeTaken}: <b style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtDur(durMs)}</b></span>
         </div>
       )}
 
@@ -516,8 +524,8 @@ function ReviewModal({ task, user, onClose, onSaved }) {
       {/* before / after comparison */}
       {(beforePhotos.length > 0 || photos.length > 0) && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <PhotoCol C={C} label="Before" photos={beforePhotos} />
-          <PhotoCol C={C} label="After" photos={photos} />
+          <PhotoCol C={C} label={t.before} photos={beforePhotos} />
+          <PhotoCol C={C} label={t.after} photos={photos} />
         </div>
       )}
 
@@ -562,7 +570,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
   const deptOptions = useMemo(() => {
     const codes = [...new Set(members.map((m) => m.department).filter(Boolean))]
     return codes
-      .map((code) => ({ code, name: DEPARTMENT_MAP[code]?.name || code }))
+      .map((code) => ({ code, name: deptName(code, lang) }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [members])
 
@@ -622,25 +630,25 @@ function CreateModal({ user, members, onClose, onSaved }) {
         </>
       }
     >
-      <Field label="Title"><input style={inputStyle(C)} value={form.title} onChange={set('title')} /></Field>
-      <Field label={`Description (${t.optional})`}>
+      <Field label={t.title}><input style={inputStyle(C)} value={form.title} onChange={set('title')} /></Field>
+      <Field label={`${t.description} (${t.optional})`}>
         <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.description} onChange={set('description')} />
       </Field>
       <Field label={t.properties || 'Property'}>
         <select style={inputStyle(C)} value={form.property} onChange={set('property')} disabled={!canSeeAllProps}>
-          {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+          {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
         </select>
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Category">
+          <Field label={t.category}>
             <select style={inputStyle(C)} value={form.category} onChange={set('category')}>
               {TASK_CATEGORIES.map((c) => <option key={c} value={c}>{t[c]}</option>)}
             </select>
           </Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label="Priority">
+          <Field label={t.priority}>
             <select style={inputStyle(C)} value={form.priority} onChange={set('priority')}>
               {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
@@ -649,7 +657,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label="Department">
+          <Field label={t.department}>
             <select style={inputStyle(C)} value={dept} onChange={(e) => setDept(e.target.value)}>
               <option value="all">{t.all}</option>
               {deptOptions.map((dpt) => <option key={dpt.code} value={dpt.code}>{dpt.name}</option>)}
@@ -657,7 +665,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
           </Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label="Assign to">
+          <Field label={t.assignTo}>
             <select style={inputStyle(C)} value={form.assigned_to} onChange={set('assigned_to')}>
               <option value="">—</option>
               {assignable.map((m) => (
@@ -673,8 +681,8 @@ function CreateModal({ user, members, onClose, onSaved }) {
         <input type="date" min={todayISO()} style={inputStyle(C)} value={form.due_date} onChange={set('due_date')} />
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1 }}><Field label={`Area (${t.optional})`}><input style={inputStyle(C)} value={form.area} onChange={set('area')} /></Field></div>
-        <div style={{ flex: 1 }}><Field label={`Time (${t.optional})`}><input style={inputStyle(C)} value={form.time_block} onChange={set('time_block')} placeholder="e.g. 9-10 AM" /></Field></div>
+        <div style={{ flex: 1 }}><Field label={`${t.area} (${t.optional})`}><input style={inputStyle(C)} value={form.area} onChange={set('area')} /></Field></div>
+        <div style={{ flex: 1 }}><Field label={`${t.timeBlock} (${t.optional})`}><input style={inputStyle(C)} value={form.time_block} onChange={set('time_block')} placeholder="e.g. 9-10 AM" /></Field></div>
       </div>
       {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
     </Modal>

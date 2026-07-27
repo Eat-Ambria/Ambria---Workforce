@@ -5,7 +5,7 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, TASK_STATUS, PROPERTIES, PROPERTY_MAP } from '../constants/org'
+import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -26,6 +26,7 @@ export default function Dashboard() {
 function AdminDashboard({ user }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const navigate = useNavigate()
   const scopeAll = canSeeAllProperties(user)
 
@@ -153,7 +154,7 @@ function AdminDashboard({ user }) {
   if (loading || !d) return <Loader label={t.loading} />
 
   const task = d.task
-  const scopeLabel = prop === 'all' ? t.all : PROPERTY_MAP[prop]?.name
+  const scopeLabel = prop === 'all' ? t.all : propName(prop, lang)
 
   // navigate to a section, carrying the selected property + optional target tab
   const go = (path, tab) => {
@@ -166,8 +167,8 @@ function AdminDashboard({ user }) {
 
   return (
     <div>
-      <SectionTitle subtitle={scopeAll ? `${t.properties}: ${scopeLabel}` : PROPERTY_MAP[user?.property]?.name}>
-        {t.welcome}, {user?.name}
+      <SectionTitle subtitle={scopeAll ? `${t.properties}: ${scopeLabel}` : propName(user?.property, lang)}>
+        {t.welcome}, {personName(user, lang)}
       </SectionTitle>
 
       {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
@@ -177,7 +178,7 @@ function AdminDashboard({ user }) {
             <Icon name="pin" size={16} color={C.tl} />
             <select style={inputStyle(C)} value={prop} onChange={(e) => setProp(e.target.value)} aria-label={t.properties}>
               <option value="all">{t.properties} — {t.all}</option>
-              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
             </select>
           </div>
         )}
@@ -190,7 +191,7 @@ function AdminDashboard({ user }) {
             aria-label={t.members}
           >
             <option value="all">{t.members} — {t.all}</option>
-            {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
           </select>
         </div>
       </div>
@@ -225,7 +226,7 @@ function AdminDashboard({ user }) {
       {/* section widgets */}
       <div style={widgetGrid}>
         <Widget C={C} icon="taskBoard" title={t.taskBoard} onView={() => go('/task-board')}>
-          <Row C={C} label="Open" value={d.board.open} tone={C.blue} />
+          <Row C={C} label={t.open} value={d.board.open} tone={C.blue} />
           <Row C={C} label={t.inProgress} value={d.board.progress} tone={C.yellow} />
           <Row C={C} label={t.overdue} value={d.board.overdue} tone={C.red} danger={d.board.overdue > 0} />
           <Row C={C} label={t.completed} value={d.board.done} tone={C.green} />
@@ -234,7 +235,7 @@ function AdminDashboard({ user }) {
         <Widget C={C} icon="training" title={t.training} onView={() => navigate('/training')}>
           <Row C={C} label={t.videos} value={d.videos} tone={C.indigo} />
           <Row C={C} label={t.chemicalUsage} value={`${d.chem.entries} logs`} tone={C.cyan} />
-          <Row C={C} label="Chemical used" value={`${d.chem.total}`} tone={C.maroon} />
+          <Row C={C} label={t.chemicalUsed} value={`${d.chem.total}`} tone={C.maroon} />
         </Widget>
 
         <Widget C={C} icon="fire" title={t.fireSafety} onView={() => navigate('/training', { state: { tab: 'fire' } })}>
@@ -252,14 +253,14 @@ function AdminDashboard({ user }) {
         <Widget C={C} icon="vendors" title={t.vendors} onView={() => navigate('/vendors')}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 30, fontWeight: 800, color: C.text }}>{d.vendors}</span>
-            <span style={{ fontSize: 13, color: C.tl }}>active vendors</span>
+            <span style={{ fontSize: 13, color: C.tl }}>{t.activeVendors}</span>
           </div>
         </Widget>
 
-        <Widget C={C} icon="warning" title="Task Priority" onView={() => go('/tasks', 'all')}>
-          <Row C={C} label="High" value={d.task.priority.high} tone={C.red} />
-          <Row C={C} label="Medium" value={d.task.priority.medium} tone={C.yellow} />
-          <Row C={C} label="Low" value={d.task.priority.low} tone={C.green} />
+        <Widget C={C} icon="warning" title={t.taskPriority} onView={() => go('/tasks', 'all')}>
+          <Row C={C} label={t.priorityHigh} value={d.task.priority.high} tone={C.red} />
+          <Row C={C} label={t.priorityMedium} value={d.task.priority.medium} tone={C.yellow} />
+          <Row C={C} label={t.priorityLow} value={d.task.priority.low} tone={C.green} />
         </Widget>
       </div>
     </div>
@@ -355,7 +356,7 @@ function EmployeeDashboard({ user }) {
 
   return (
     <div>
-      <SectionTitle>{t.welcome}, {user?.name}</SectionTitle>
+      <SectionTitle>{t.welcome}, {personName(user, lang)}</SectionTitle>
       <div style={kpiGrid}>
         <Kpi C={C} icon="tasks" tone={C.maroon} value={s.total} label={t.totalTasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
         <Kpi C={C} icon="warning" tone={C.red} border={C.red} value={s.overdue} label={t.overdue} onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />

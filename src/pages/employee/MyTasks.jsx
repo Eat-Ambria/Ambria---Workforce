@@ -392,7 +392,7 @@ function WorkModal({ task, onClose, onSaved, user }) {
         </>
       }
     >
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
         {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
         {task.category && <Badge>{t[task.category]}</Badge>}
@@ -412,47 +412,48 @@ function WorkModal({ task, onClose, onSaved, user }) {
         </div>
       )}
 
-      {task.description && <p style={{ fontSize: 14, color: C.tl, marginBottom: 14, lineHeight: 1.5 }}>{task.description}</p>}
-      {task.area && <p style={{ ...metaLine(C), fontSize: 14, marginBottom: 6 }}><Icon name="pin" size={15} /> {task.area}</p>}
-      {task.time_block && <p style={{ ...metaLine(C), fontSize: 14, marginBottom: 14 }}><Icon name="clock" size={15} /> {task.time_block}</p>}
+      {task.description && <p style={{ fontSize: 14, color: C.tl, marginBottom: 10, lineHeight: 1.45 }}>{task.description}</p>}
+      {task.area && <p style={{ ...metaLine(C), fontSize: 13.5, marginBottom: 4 }}><Icon name="pin" size={15} /> {task.area}</p>}
+      {task.time_block && <p style={{ ...metaLine(C), fontSize: 13.5, marginBottom: 12 }}><Icon name="clock" size={15} /> {task.time_block}</p>}
 
       {/* work timer */}
       {elapsedMs != null && !issueMode && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: isInProgress ? C.bBg : C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
-          <Icon name="clock" size={18} color={isInProgress ? C.blue : C.tl} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: isInProgress ? C.bBg : C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 12px', marginBottom: 12 }}>
+          <Icon name="clock" size={17} color={isInProgress ? C.blue : C.tl} />
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: isInProgress ? C.blue : C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtDur(elapsedMs)}</div>
+            <div style={{ fontSize: 15.5, fontWeight: 800, color: isInProgress ? C.blue : C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtDur(elapsedMs)}</div>
             <div style={{ fontSize: 12, color: C.tl }}>{isInProgress ? (hi ? 'काम जारी है…' : 'Working…') : (hi ? 'कुल समय लगा' : 'Total time taken')}</div>
           </div>
         </div>
       )}
 
-      {/* BEFORE photo — required to start */}
+      {/* Before / after sit side by side so the whole task fits without
+          scrolling; auto-fit drops them back to one column on a narrow phone. */}
       {!issueMode && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
-            {beforeLabel} {isPending && <span style={{ color: C.red }}>*</span>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
+              {beforeLabel} {isPending && <span style={{ color: C.red }}>*</span>}
+            </div>
+            {isPending ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
           </div>
-          {isPending ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
-        </div>
-      )}
 
-      {/* AFTER photo — required to submit for approval */}
-      {(isInProgress || isWaiting || isDone) && !issueMode && (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
-            {afterLabel} {isInProgress && <span style={{ color: C.red }}>*</span>}
-          </div>
-          {isInProgress ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
-
-          {isInProgress && (
-            <div style={{ marginTop: 12 }}>
-              <Field label={`${t.completionNote} (${t.optional})`}>
-                <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={note} onChange={(e) => setNote(e.target.value)} />
-              </Field>
+          {(isInProgress || isWaiting || isDone) && (
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
+                {afterLabel} {isInProgress && <span style={{ color: C.red }}>*</span>}
+              </div>
+              {isInProgress ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
             </div>
           )}
         </div>
+      )}
+
+      {/* the note spans the full width below both columns */}
+      {isInProgress && !issueMode && (
+        <Field label={`${t.completionNote} (${t.optional})`}>
+          <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
       )}
 
       {isWaiting && <Notice C={C} tone={C.yellow} bg={C.yBg} icon="clock" title={t.completionRequested} sub={t.awaitingApprovalMsg} />}

@@ -20,6 +20,7 @@ const Training = lazy(() => import('./pages/shared/Training'))
 const Valet = lazy(() => import('./pages/admin/Valet'))
 const Vendors = lazy(() => import('./pages/admin/Vendors'))
 const Users = lazy(() => import('./pages/admin/Users'))
+const Analytics = lazy(() => import('./pages/admin/Analytics'))
 const Account = lazy(() => import('./pages/Account'))
 
 // redirect to /login when not authenticated
@@ -77,8 +78,9 @@ export default function App() {
         <Route path="/valet" element={<RoleRoute allow={isAdminRole}><Valet /></RoleRoute>} />
         <Route path="/vendors" element={<RoleRoute allow={isAdminRole}><Vendors /></RoleRoute>} />
 
-        {/* super admin only — user management */}
+        {/* super admin only — user management + org-wide performance analytics */}
         <Route path="/users" element={<RoleRoute allow={isSuperAdmin}><Users /></RoleRoute>} />
+        <Route path="/analytics" element={<RoleRoute allow={isSuperAdmin}><Analytics /></RoleRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to={isAuthed ? '/dashboard' : '/login'} replace />} />

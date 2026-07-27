@@ -1,10 +1,11 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useColors } from '../../context/ThemeContext'
-import { useT } from '../../context/LangContext'
+import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { PROPERTY_MAP } from '../../constants/org'
+import { PROPERTY_MAP, propName, personName } from '../../constants/org'
 import NotificationBell from './NotificationBell'
 import Icon from '../common/Icon'
+import BrandMark from '../common/BrandMark'
 
 function initials(name = '') {
   return name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'A'
@@ -13,11 +14,12 @@ function initials(name = '') {
 export default function Header({ showBrand, onMenu }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
-  const prop = PROPERTY_MAP[user?.property]?.name || ''
+  const prop = propName(user?.property, lang) || ''
   const onAccount = location.pathname === '/account'
   // toggle: open My Account, or if already there, close it (go back)
   const toggleAccount = () => (onAccount ? navigate(-1) : navigate('/account'))
@@ -41,16 +43,14 @@ export default function Header({ showBrand, onMenu }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
         {onMenu && (
-          <button onClick={onMenu} aria-label="Menu" style={iconBtn(C)}>
+          <button onClick={onMenu} aria-label={t.menu} style={iconBtn(C)}>
             <Icon name="menu" size={20} />
           </button>
         )}
-        {showBrand && (
-          <div style={brandMark(C)}>A</div>
-        )}
+        {showBrand && <BrandMark size={32} radius={9} />}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
-            {user?.name || t.appName}
+            {personName(user, lang) || t.appName}
           </div>
           {prop && <div style={{ fontSize: 12, color: C.tl }}>{prop}</div>}
         </div>
@@ -69,10 +69,6 @@ export default function Header({ showBrand, onMenu }) {
   )
 }
 
-const brandMark = (C) => ({
-  width: 32, height: 32, borderRadius: 9, background: C.maroon, color: '#fff',
-  display: 'grid', placeItems: 'center', fontWeight: 700, fontFamily: 'Georgia, serif', fontSize: 18,
-})
 
 const iconBtn = (C) => ({
   width: 38, height: 38, borderRadius: 10, background: C.card,

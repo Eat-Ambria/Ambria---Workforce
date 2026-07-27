@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { fmtDate } from '../../../../lib/time'
 import { useColors } from '../../../../context/ThemeContext'
-import { useT } from '../../../../context/LangContext'
-import { scopedProperty, scopedDepartment, DEPARTMENT_MAP } from '../../../../constants/org'
+import { useT, useLang } from '../../../../context/LangContext'
+import { scopedProperty, scopedDepartment, DEPARTMENT_MAP, personName, deptName } from '../../../../constants/org'
 import { Button, Field, inputStyle, Loader } from '../../../../components/common/UI'
 import Modal from '../../../../components/common/Modal'
 import Icon from '../../../../components/common/Icon'
@@ -12,6 +12,7 @@ import Icon from '../../../../components/common/Icon'
 export default function AssignModal({ video, user, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const [staff, setStaff] = useState(null)
   const [assigned, setAssigned] = useState({}) // user_id -> deadline (existing)
   const [picked, setPicked] = useState(new Set())
@@ -22,7 +23,7 @@ export default function AssignModal({ video, user, onClose, onSaved }) {
   const load = useCallback(async () => {
     const propScope = scopedProperty(user)
     const deptScope = scopedDepartment(user)
-    let q = supabase.from('users').select('id, name, department, property').eq('is_active', true).eq('role', 'e').order('name')
+    let q = supabase.from('users').select('id, name, name_hi, department, property').eq('is_active', true).eq('role', 'e').order('name')
     if (propScope) q = q.eq('property', propScope)
     if (deptScope) q = q.eq('department', deptScope)
     const { data: users } = await q
@@ -73,7 +74,7 @@ export default function AssignModal({ video, user, onClose, onSaved }) {
     >
       {staff === null ? <Loader /> : (
         <>
-          <Field label="Deadline for assigned staff" hint="Applies to everyone selected below. Overrides the video's default deadline.">
+          <Field label={t.deadlineForStaff} hint="Applies to everyone selected below. Overrides the video's default deadline.">
             <input type="date" style={inputStyle(C)} value={deadline || ''} onChange={(e) => setDeadline(e.target.value)} />
           </Field>
 
@@ -103,8 +104,8 @@ export default function AssignModal({ video, user, onClose, onSaved }) {
                       {on && <Icon name="check" size={14} color="#fff" />}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{s.name}</div>
-                      {dept && <div style={{ fontSize: 12, color: dept.color, fontWeight: 600 }}>{dept.name}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{personName(s, lang)}</div>
+                      {dept && <div style={{ fontSize: 12, color: dept.color, fontWeight: 600 }}>{deptName(s.department, lang)}</div>}
                     </div>
                     {assigned[s.id] !== undefined && (
                       <span style={{ fontSize: 11, color: C.tl }}>{assigned[s.id] ? fmtDate(assigned[s.id]) : 'assigned'}</span>

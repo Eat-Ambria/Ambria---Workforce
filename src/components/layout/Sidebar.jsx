@@ -3,9 +3,10 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { navForUser } from '../../constants/nav'
-import { ROLES } from '../../constants/org'
+import { ROLES, personName } from '../../constants/org'
 import { useFixRequestCount } from '../../hooks/useFixRequestCount'
 import Icon from '../common/Icon'
+import BrandMark from '../common/BrandMark'
 
 const roleLabels = (t) => ({ [ROLES.SUPER_ADMIN]: t.roleSuperAdmin, [ROLES.ADMIN]: t.roleAdmin, [ROLES.EMPLOYEE]: t.roleEmployee })
 
@@ -34,11 +35,8 @@ export default function Sidebar({ mobile = false, onNavigate }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '2px 8px 22px' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${C.maroon}, ${C.maroonDark})`, color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontFamily: 'Georgia, serif', fontSize: 21 }}>A</div>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: C.text, letterSpacing: '-0.02em' }}>{t.appName}</div>
-          <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>Workforce</div>
-        </div>
+        <BrandMark size={36} radius={10} />
+        <div style={{ fontWeight: 800, fontSize: 16, color: C.text, letterSpacing: '-0.02em' }}>{t.appName}</div>
       </div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -91,7 +89,7 @@ export default function Sidebar({ mobile = false, onNavigate }) {
         </button>
 
         <div style={{ padding: '14px 8px 2px', borderTop: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{user?.name}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{personName(user, lang)}</div>
           <div style={{ fontSize: 12, color: C.faint }}>{roleLabels(t)[user?.role] || ''}</div>
         </div>
       </div>

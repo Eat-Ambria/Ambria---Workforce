@@ -3,10 +3,11 @@ import { supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
-import { PROPERTIES, PROPERTY_MAP } from '../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs } from '../components/common/UI'
 import PhotoCapture from '../components/common/PhotoCapture'
 import Icon from '../components/common/Icon'
+import PoweredBy from '../components/common/PoweredBy'
 
 // PUBLIC, no-login portal (/fix-request). Anyone with the link can:
 //   - SEE all repair requests and their live status / progress
@@ -146,7 +147,7 @@ export default function PublicFixRequest() {
                 aria-label={hi ? 'प्रॉपर्टी' : 'Property'}
               >
                 <option value="all">{hi ? 'सभी प्रॉपर्टी' : 'All properties'}</option>
-                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
               </select>
             </div>
 
@@ -191,7 +192,7 @@ export default function PublicFixRequest() {
           </>
         )}
 
-        <p style={{ textAlign: 'center', color: C.faint, fontSize: 12, margin: '22px 0 4px' }}>Ambria Ops · Workforce Management</p>
+        <PoweredBy style={{ paddingTop: 22, paddingBottom: 4 }} />
       </div>
     </div>
   )
@@ -207,6 +208,7 @@ function StatTile({ C, label, value, tone }) {
 }
 
 function RequestCard({ C, hi, r, isMine }) {
+  const lang = hi ? 'hi' : 'en'
   const s = stat(r.status)
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C[s.tone]}`, borderRadius: 14, padding: 14, boxShadow: C.shadow }}>
@@ -222,7 +224,7 @@ function RequestCard({ C, hi, r, isMine }) {
           </div>
           <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
             <Icon name="pin" size={13} color={C.faint} />
-            {PROPERTY_MAP[r.property]?.name || r.property}
+            {propName(r.property, lang)}
             {r.posted_by_name ? ` · ${r.posted_by_name}` : ''}
             {' · '}{fmtDate(r.created_at)}
           </div>
@@ -246,6 +248,7 @@ function RequestCard({ C, hi, r, isMine }) {
 
 // ---- the Add Request form (name + phone required, phone capped at 10 digits) ----
 function RequestForm({ C, hi, onBack, onSubmitted }) {
+  const lang = hi ? 'hi' : 'en'
   const [form, setForm] = useState({ name: '', phone: '', property: 'pp', location: '', issue: '' })
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
@@ -346,7 +349,11 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'कौन सी जगह?' : 'Which venue?'}</label>
         <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
-          {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{p.name} · {p.area}</option>)}
+          {PROPERTIES.map((p) => (
+            <option key={p.code} value={p.code}>
+              {propName(p.code, lang)} · {hi && p.areaHi ? p.areaHi : p.area}
+            </option>
+          ))}
         </select>
       </div>
 

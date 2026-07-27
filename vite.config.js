@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'Ambria Ops',
-        short_name: 'Ambria Ops',
+        name: 'Workforce',
+        short_name: 'Workforce',
         description: 'Workforce management for Ambria event venues',
         theme_color: '#7B1E2F',
         background_color: '#F5F6F8',
@@ -24,7 +24,9 @@ export default defineConfig({
         icons: [
           { src: 'icons/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icons/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // separate maskable art: Android crops ~10% off every edge to fit its
+          // squircle, so the wordmark is inset further in this one
+          { src: 'icons/pwa-512x512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

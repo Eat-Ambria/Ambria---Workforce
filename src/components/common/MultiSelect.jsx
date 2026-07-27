@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { inputStyle } from './UI'
+import { useT } from '../../context/LangContext'
 import Icon from './Icon'
 
 // Dropdown with a checkbox checklist — pick several values to filter by.
 // options: [{ value, label, sub? }]; selected: array of values.
 // Pass the theme colors as `C`. Set `searchable` to show a search box.
 export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const ref = useRef(null)
@@ -45,7 +47,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: C.shadowLg || C.shadow, padding: 8, maxHeight: 320, overflowY: 'auto' }}>
           {searchable && (
-            <input autoFocus placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(C), marginBottom: 8 }} />
+            <input autoFocus placeholder={t.search} value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(C), marginBottom: 8 }} />
           )}
           {selected.length > 0 && (
             <button type="button" onClick={() => onChange([])} style={{ background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 600, padding: '2px 6px 8px' }}>
@@ -53,7 +55,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
             </button>
           )}
           {list.length === 0 ? (
-            <div style={{ fontSize: 13, color: C.faint, padding: '8px 10px' }}>No match</div>
+            <div style={{ fontSize: 13, color: C.faint, padding: '8px 10px' }}>{t.noMatch}</div>
           ) : (
             list.map((o) => {
               const on = sel.has(o.value)
