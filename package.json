@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Workforce — management PWA for Ambria event venues",
+  "description": "Ambria WorkForce — management PWA for Ambria event venues",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

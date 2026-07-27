@@ -9,9 +9,9 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {}
   } catch (e) {
-    data = { title: 'Workforce', body: event.data ? event.data.text() : '' }
+    data = { title: 'Ambria WorkForce', body: event.data ? event.data.text() : '' }
   }
-  const title = data.title || 'Workforce'
+  const title = data.title || 'Ambria WorkForce'
   const options = {
     body: data.body || '',
     icon: data.icon || ICON,

@@ -55,7 +55,7 @@ function render(n: Record<string, unknown>, lang: string) {
   }
 
   const entry = M[n.type as string]
-  const title = entry ? (hi ? entry[1] : entry[0]) : 'Workforce'
+  const title = entry ? (hi ? entry[1] : entry[0]) : 'Ambria WorkForce'
   const path = entry ? entry[2] : 'dashboard'
   const needsWho = ['task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'quiz_completed'].includes(n.type as string)
   return { title, body: item + (needsWho ? who : ''), url: BASE + path, tag: `${n.type}-${n.entity_id ?? ''}` }
