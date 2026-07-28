@@ -8,7 +8,7 @@ import { rateTone } from './analyticsUtils'
 // --- plain-language headline -------------------------------------------------
 // The one hero figure of the view: same sans as everything else, and
 // proportional figures — tabular digits make a big number look loose.
-export function Headline({ C, lang, totals, periodLabel, scopeLabel }) {
+export function Headline({ C, lang, totals, periodLabel, scopeLabel, onOverdueClick }) {
   const hi = lang === 'hi'
   const tone = rateTone(totals.onTimeRate, C)
   const onTimeCount = Math.round((totals.onTimeRate / 100) * totals.completed)
@@ -28,11 +28,21 @@ export function Headline({ C, lang, totals, periodLabel, scopeLabel }) {
               ? `${scopeLabel} पर ${periodLabel} — ${totals.completed} में से ${onTimeCount} टास्क समय पर मंज़ूर हुए।`
               : `${onTimeCount} of ${totals.completed} approved tasks were on time, ${periodLabel.toLowerCase()} at ${scopeLabel}.`}
             {totals.overdueNow > 0 && (
-              <span style={{ color: C.red, fontWeight: 700 }}>
+              // clickable so the sentence leads straight to the tasks it names
+              <button
+                type="button"
+                onClick={onOverdueClick}
+                style={{
+                  background: 'transparent', padding: 0, font: 'inherit',
+                  color: C.red, fontWeight: 700,
+                  textDecoration: onOverdueClick ? 'underline' : 'none',
+                  textUnderlineOffset: 2, cursor: onOverdueClick ? 'pointer' : 'default',
+                }}
+              >
                 {hi
                   ? ` अभी ${totals.overdueNow} टास्क ओवरड्यू हैं।`
                   : ` ${totals.overdueNow} ${totals.overdueNow === 1 ? 'task is' : 'tasks are'} overdue right now.`}
-              </span>
+              </button>
             )}
           </div>
         </div>

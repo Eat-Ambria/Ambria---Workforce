@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { supabase } from '../../lib/supabase'
+import { todayISO, fmtDate } from '../../lib/time'
+import { statusColors } from '../../constants/status'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
   ROLES, isAdminRole, canSeeAllProperties, scopedDepartment,
-  PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName,
+  PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName, TASK_STATUS,
 } from '../../constants/org'
-import { Card, Loader, EmptyState, SectionTitle, Tabs, ProgressBar, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, SectionTitle, Tabs, ProgressBar, inputStyle } from '../../components/common/UI'
+import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { pct, fmtDur, avgOf, sumBy, rateTone } from './analyticsUtils'
 import { Headline, HeadChart, StatusChip, MetricGuide } from './AnalyticsParts'
@@ -103,6 +106,7 @@ export default function Analytics() {
   const [err, setErr] = useState('')
   const [data, setData] = useState(null)
   const [expanded, setExpanded] = useState(null) // head id whose staff list is open
+  const [taskList, setTaskList] = useState(null)  // 'overdue' | 'open' — drill-down modal
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -455,7 +459,8 @@ export default function Analytics() {
       ) : (
         <>
           <Headline C={C} lang={lang} totals={totals}
-                    periodLabel={periodLabel} scopeLabel={scopeLabel} />
+                    periodLabel={periodLabel} scopeLabel={scopeLabel}
+                    onOverdueClick={totals.overdueNow ? () => setTaskList('overdue') : undefined} />
 
           {/* organisation summary */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
@@ -477,9 +482,11 @@ export default function Analytics() {
                  value={totals.avgRating ? totals.avgRating.toFixed(1) : '—'}
                  label={lang === 'hi' ? 'औसत रेटिंग' : 'Avg work rating'} />
             <Kpi C={C} icon="warning" tone={C.red} value={totals.overdueNow}
-                 label={lang === 'hi' ? 'अभी ओवरड्यू' : 'Overdue now'} />
+                 label={lang === 'hi' ? 'अभी ओवरड्यू' : 'Overdue now'}
+                 onClick={totals.overdueNow ? () => setTaskList('overdue') : undefined} />
             <Kpi C={C} icon="tasks" tone={C.maroon} value={totals.openNow}
-                 label={lang === 'hi' ? 'अभी बाकी' : 'Open now'} />
+                 label={lang === 'hi' ? 'अभी बाकी' : 'Open now'}
+                 onClick={totals.openNow ? () => setTaskList('open') : undefined} />
           </div>
 
           <HeadChart
@@ -547,6 +554,14 @@ export default function Analytics() {
             )
           )}
 
+          {taskList && (
+            <TaskListModal
+              C={C} lang={lang} t={t} mode={taskList}
+              people={selectedHead ? selectedHead.team : scopedStaff}
+              onClose={() => setTaskList(null)}
+            />
+          )}
+
           <MetricGuide C={C} lang={lang} />
 
          
@@ -570,14 +585,15 @@ function deltaPoints(cur, prev) {
 // Stat tile: label, value, and an optional delta against the previous period.
 // `upIsGood` decides the colour — a rise in "avg time" is bad, a rise in
 // "completed" is good — and the arrow always shows the actual direction.
-function Kpi({ C, icon, value, label, tone, delta, upIsGood = false, suffix = '%' }) {
+function Kpi({ C, icon, value, label, tone, delta, upIsGood = false, suffix = '%', onClick }) {
   const show = delta != null && delta !== 0
   const good = delta > 0 ? upIsGood : !upIsGood
   return (
-    <Card style={{ padding: 14 }}>
+    <Card onClick={onClick} style={{ padding: 14, cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Icon name={icon} size={16} color={tone} />
         <span style={{ fontSize: 19, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{value}</span>
+        {onClick && <Icon name="chevronRight" size={14} color={C.faint} style={{ marginLeft: 'auto' }} />}
       </div>
       <div style={{ fontSize: 12, color: C.tl, fontWeight: 600, marginTop: 4 }}>{label}</div>
       {show && (
@@ -703,4 +719,90 @@ function StaffRow({ C, lang, s, compact }) {
   return compact
     ? <div style={{ padding: '6px 2px' }}>{body}</div>
     : <Card style={{ padding: 14 }}>{body}</Card>
+}
+
+// Drill-down behind the "Overdue now" / "Open now" tiles. Those two are live
+// snapshots rather than period figures, so this fetches the actual rows on open
+// instead of reusing the aggregates.
+function TaskListModal({ C, lang, t, mode, people, onClose }) {
+  const hi = lang === 'hi'
+  const overdue = mode === 'overdue'
+  const [rows, setRows] = useState(null)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    const ids = people.map((p) => p.id)
+    if (!ids.length) { setRows([]); return }
+    const today = todayISO()
+    let q = supabase
+      .from('tasks')
+      .select('id, title, title_hi, assigned_to, assignee_name, property, department, due_date, status, priority')
+      .neq('status', TASK_STATUS.COMPLETED)
+      .in('assigned_to', ids)
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(200)
+    if (overdue) q = q.lt('due_date', today)
+    q.then(({ data, error }) => { setErr(error?.message || ''); setRows(data || []) })
+  }, [people, overdue])
+
+  // resolve the assignee's Hindi name from the people list we already hold
+  const nameOf = (r) => {
+    const m = people.find((p) => p.id === r.assigned_to)
+    return (m && personName(m, lang)) || r.assignee_name || '—'
+  }
+  const daysLate = (due) => Math.max(0, Math.round((Date.now() - new Date(due).getTime()) / 86400000))
+
+  return (
+    <Modal
+      open onClose={onClose}
+      title={overdue
+        ? (hi ? 'अभी ओवरड्यू टास्क' : 'Overdue tasks')
+        : (hi ? 'अभी बाकी टास्क' : 'Open tasks')}
+      footer={<Button variant="ghost" onClick={onClose} full>{t.close}</Button>}
+    >
+      {err && <div style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
+      {rows === null ? (
+        <Loader label={t.loading} />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={null} title={t.noData} />
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {rows.map((r) => {
+            const sc = statusColors(r.status, C)
+            return (
+              <div
+                key={r.id}
+                style={{
+                  border: `1px solid ${C.border}`, borderLeft: `3px solid ${overdue ? C.red : sc.color}`,
+                  borderRadius: 10, padding: '9px 11px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
+                      {(hi && r.title_hi) || r.title}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.tl, marginTop: 2 }}>
+                      {nameOf(r)} · {propName(r.property, lang)}
+                      {r.department ? ` · ${deptName(r.department, lang)}` : ''}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: sc.color, background: sc.bg, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {t[sc.key]}
+                  </span>
+                </div>
+                {r.due_date && (
+                  <div style={{ fontSize: 11.5, marginTop: 4, color: overdue ? C.red : C.faint, fontWeight: overdue ? 700 : 500 }}>
+                    {overdue
+                      ? `${hi ? 'ड्यू' : 'Due'} ${fmtDate(r.due_date)} · ${daysLate(r.due_date)} ${hi ? 'दिन देर' : 'days late'}`
+                      : `${t.dueDate}: ${fmtDate(r.due_date)}`}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Modal>
+  )
 }

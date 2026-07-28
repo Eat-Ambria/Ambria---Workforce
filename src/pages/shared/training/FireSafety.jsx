@@ -43,6 +43,7 @@ export default function FireSafety() {
   const [loading, setLoading] = useState(true)
   const [logging, setLogging] = useState(null) // extinguisher being inspected
   const [adding, setAdding] = useState(false)  // add-cylinder modal open
+  const [editing, setEditing] = useState(null) // cylinder open for editing
   const [propSel, setPropSel] = useState([])   // property filter (multi-select)
 
   const load = useCallback(async () => {
@@ -93,11 +94,11 @@ export default function FireSafety() {
         const s = extStatus(e)
         const insp = inspectStatus(e)
         return (
-          <Card key={e.id} style={{ borderLeft: `4px solid ${C[s.color]}` }}>
+          <Card key={e.id} onClick={() => setEditing(e)} style={{ borderLeft: `4px solid ${C[s.color]}`, cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 15 }}>
-                  <Icon name="fire" size={17} color={C.red} /> {e.location}
+                  <Icon name="fire" size={17} color={C.red} /> {(lang === 'hi' && e.location_hi) || e.location}
                 </div>
                 <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
                   {propName(e.property, lang)} · {e.type}{e.capacity ? ` · ${e.capacity}` : ''}{e.quantity > 1 ? ` · ×${e.quantity}` : ''}
@@ -120,10 +121,10 @@ export default function FireSafety() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button variant="soft" onClick={() => setLogging(e)} style={{ padding: '8px 12px', fontSize: 13 }}>
+                <Button variant="soft" onClick={(ev) => { ev.stopPropagation(); setLogging(e) }} style={{ padding: '8px 12px', fontSize: 13 }}>
                   <Icon name="check" size={15} color={C.maroon} style={{ marginRight: 4 }} /> Log inspection
                 </Button>
-                <Button variant="ghost" onClick={() => removeExt(e)} aria-label={t.deleteCylinder} style={{ padding: '8px 12px', fontSize: 13 }}>
+                <Button variant="ghost" onClick={(ev) => { ev.stopPropagation(); removeExt(e) }} aria-label={t.deleteCylinder} style={{ padding: '8px 12px', fontSize: 13 }}>
                   <Icon name="trash" size={15} color={C.red} />
                 </Button>
               </div>
@@ -137,27 +138,32 @@ export default function FireSafety() {
       {logging && (
         <LogModal ext={logging} onClose={() => setLogging(null)} onSaved={() => { setLogging(null); load() }} />
       )}
-      {adding && (
-        <AddModal onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load() }} />
+      {(adding || editing) && (
+        <AddModal
+          record={editing}
+          onClose={() => { setAdding(false); setEditing(null) }}
+          onSaved={() => { setAdding(false); setEditing(null); load() }}
+        />
       )}
     </div>
   )
 }
 
 // Admin registers a new cylinder: property, location, type, size (kg) + expiry.
-function AddModal({ onClose, onSaved }) {
+function AddModal({ record, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
   const [form, setForm] = useState({
-    property: PROPERTIES[0].code,
-    location: '',
-    type: TYPE_OPTIONS[0],
-    capacity: '',
-    quantity: '1',
-    serial_number: '',
-    install_date: '',
-    expiry_date: '',
+    property: record?.property || PROPERTIES[0].code,
+    location: record?.location || '',
+    location_hi: record?.location_hi || '',
+    type: record?.type || TYPE_OPTIONS[0],
+    capacity: record?.capacity || '',
+    quantity: String(record?.quantity ?? '1'),
+    serial_number: record?.serial_number || '',
+    install_date: record?.install_date || '',
+    expiry_date: record?.expiry_date || '',
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -167,17 +173,20 @@ function AddModal({ onClose, onSaved }) {
     if (!form.location.trim()) { setErr('Enter the location'); return }
     if (!form.expiry_date) { setErr('Pick the expiry / next refill date'); return }
     setBusy(true); setErr('')
-    const { error } = await supabase.from('fire_extinguishers').insert({
+    const payload = {
       property: form.property,
       location: form.location.trim(),
+      location_hi: form.location_hi.trim() || null,
       type: form.type,
       capacity: form.capacity.trim() || null,
       quantity: Math.max(1, parseInt(form.quantity, 10) || 1),
       serial_number: form.serial_number.trim() || null,
       install_date: form.install_date || null,
       expiry_date: form.expiry_date,
-      status: 'active',
-    })
+    }
+    const { error } = record
+      ? await supabase.from('fire_extinguishers').update(payload).eq('id', record.id)
+      : await supabase.from('fire_extinguishers').insert({ ...payload, status: 'active' })
     setBusy(false)
     if (error) { setErr(error.message); return }
     onSaved()
@@ -185,7 +194,7 @@ function AddModal({ onClose, onSaved }) {
 
   return (
     <Modal
-      open onClose={onClose} title={t.addCylinder}
+      open onClose={onClose} title={record ? t.editCylinder : t.addCylinder}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
@@ -199,7 +208,11 @@ function AddModal({ onClose, onSaved }) {
         </select>
       </Field>
       <Field label={t.location}>
-        <input style={inputStyle(C)} value={form.location} onChange={set('location')} placeholder="e.g. Main lobby, Kitchen, Gate 2" />
+        <input style={inputStyle(C)} value={form.location} onChange={set('location')} placeholder={t.cylinderLocationEg} />
+      </Field>
+      {/* typed by hand — venue area names ("Emerald Hall") don't survive machine translation */}
+      <Field label={`${t.location} (हिंदी)`} hint={t.hindiOptionalHint}>
+        <input style={inputStyle(C)} value={form.location_hi} onChange={set('location_hi')} placeholder="जैसे मुख्य लॉबी, किचन, गेट 2" />
       </Field>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>

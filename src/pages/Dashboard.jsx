@@ -357,15 +357,32 @@ function EmployeeDashboard({ user }) {
   return (
     <div>
       <SectionTitle>{t.welcome}, {personName(user, lang)}</SectionTitle>
-      <div style={kpiGrid}>
-        <Kpi C={C} icon="tasks" tone={C.maroon} value={s.total} label={t.totalTasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
-        <Kpi C={C} icon="warning" tone={C.red} border={C.red} value={s.overdue} label={t.overdue} onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
-        <Kpi C={C} icon="taskBoard" tone={TR_ORANGE} border={TR_ORANGE} value={s.fixOverdue} label={lang === 'hi' ? 'मरम्मत — समय पार' : 'Overdue Repairs'} onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
-        <Kpi C={C} icon="myTasks" tone={C.yellow} border={C.yellow} value={s.pending} label={t.pending} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.PENDING } })} />
-        <Kpi C={C} icon="refresh" tone={C.blue} value={s.inProgress} label={t.inProgress} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.IN_PROGRESS } })} />
-        <Kpi C={C} icon="clock" tone={C.indigo} value={s.waiting} label={t.completionRequested} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
-        <Kpi C={C} icon="check" tone={C.green} border={C.green} value={s.done} label={t.completed} onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETED } })} />
-      </div>
+      {/* Two blocks instead of seven loose tiles: everything about my tasks in
+          one, and anything late in the other — so "what needs attention" is a
+          single place to look. */}
+      <StatBlock C={C} icon="tasks" tone={C.maroon} title={t.myTasks}
+                 onView={() => navigate('/my-tasks', { state: { status: 'all' } })}>
+        <StatCell C={C} value={s.total} label={t.totalTasks} tone={C.maroon}
+                  onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
+        <StatCell C={C} value={s.pending} label={t.pending} tone={C.yellow}
+                  onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.PENDING } })} />
+        <StatCell C={C} value={s.inProgress} label={t.inProgress} tone={C.blue}
+                  onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.IN_PROGRESS } })} />
+        <StatCell C={C} value={s.waiting} label={t.completionRequested} tone={C.indigo}
+                  onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
+        <StatCell C={C} value={s.done} label={t.completed} tone={C.green}
+                  onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETED } })} />
+      </StatBlock>
+
+      <StatBlock C={C} icon="warning" tone={C.red} title={t.overdue}
+                 hint={s.overdue + s.fixOverdue === 0
+                   ? (lang === 'hi' ? 'कुछ भी बाकी नहीं — शाबाश' : 'Nothing late — all clear')
+                   : undefined}>
+        <StatCell C={C} value={s.overdue} label={t.tasks} tone={C.red}
+                  onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
+        <StatCell C={C} value={s.fixOverdue} label={t.taskBoard} tone={TR_ORANGE}
+                  onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
+      </StatBlock>
 
       {/* Priority tasks assigned by admin — high priority & still open */}
       {s.priorityTasks && s.priorityTasks.length > 0 && (
@@ -557,5 +574,61 @@ function Row({ C, label, value, tone, danger }) {
       </div>
       <span style={{ fontSize: 16, fontWeight: 700, color: danger ? C.red : C.text }}>{value ?? 0}</span>
     </div>
+  )
+}
+
+// A titled block holding several related numbers, so the dashboard reads as
+// "here are my tasks" / "here is what's late" rather than a wall of tiles.
+function StatBlock({ C, icon, tone, title, hint, onView, children }) {
+  return (
+    <Card style={{ padding: 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <Icon name={icon} size={16} color={tone} />
+        </span>
+        <span style={{ fontSize: 14.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
+        {onView && (
+          <button
+            type="button"
+            onClick={onView}
+            style={{ marginLeft: 'auto', background: 'transparent', color: C.tl, display: 'inline-flex', alignItems: 'center', padding: 2 }}
+          >
+            <Icon name="chevronRight" size={16} color={C.faint} />
+          </button>
+        )}
+      </div>
+      {hint ? (
+        <div style={{ fontSize: 13, color: C.green, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="check" size={15} color={C.green} /> {hint}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))', gap: 10 }}>
+          {children}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// One number inside a StatBlock. Zero values stay muted so the eye lands on
+// whatever actually has work in it.
+function StatCell({ C, value, label, tone, onClick }) {
+  const empty = !value
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: empty ? C.cardAlt : tint(tone, 0.08),
+        border: `1px solid ${empty ? C.border : tint(tone, 0.22)}`,
+        borderRadius: 11, padding: '10px 12px', textAlign: 'left',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
+      <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: empty ? C.faint : tone }}>
+        {value ?? 0}
+      </div>
+      <div style={{ fontSize: 11.5, color: C.tl, fontWeight: 600, marginTop: 3 }}>{label}</div>
+    </button>
   )
 }

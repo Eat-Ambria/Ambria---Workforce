@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { supabase } from '../../../lib/supabase'
 import { useColors } from '../../../context/ThemeContext'
-import { useLang } from '../../../context/LangContext'
+import { useLang, useT } from '../../../context/LangContext'
+import { useAuth } from '../../../context/AuthContext'
+import { isAdminRole } from '../../../constants/org'
 import { colors } from '../../../constants/colors'
-import { Card } from '../../../components/common/UI'
+import { Card, Button, Field, inputStyle } from '../../../components/common/UI'
+import Modal from '../../../components/common/Modal'
 import Icon from '../../../components/common/Icon'
 
 // Per-property specs used by the sqft-based calculator.
@@ -218,6 +222,9 @@ const CHEM_DATA = [
 
 // Which property specs this user is allowed to see.
 export default function ChemicalGuide({ visibleProps }) {
+  const t = useT()
+  const { user } = useAuth()
+  const admin = isAdminRole(user?.role)
   const C = useColors()
   const { lang } = useLang()
   const hi = lang === 'hi'
@@ -231,6 +238,37 @@ export default function ChemicalGuide({ visibleProps }) {
   const [view, setView] = useState('calc') // 'calc' | 'guide'
   const [selectedProp, setSelectedProp] = useState(propKeys[0] || 'pp')
   const [openAreas, setOpenAreas] = useState({ 0: true })
+
+  // The guide lives in `chemical_products` so admins can edit it. If that table
+  // isn't there yet (migration not run) we fall back to the built-in list, so
+  // the page never comes up empty.
+  const [products, setProducts] = useState(null) // null = still loading
+  const [editing, setEditing] = useState(null)   // product row | 'new'
+
+  const loadProducts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('chemical_products')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order')
+    setProducts(error || !data?.length ? [] : data)
+  }, [])
+
+  useEffect(() => { loadProducts() }, [loadProducts])
+
+  // group flat rows back into the { area, areaHi, items } shape the UI renders,
+  // preserving sort_order; an empty table means "use the built-in constant"
+  const sections = useMemo(() => {
+    if (!products?.length) return CHEM_DATA
+    const byArea = new Map()
+    products.forEach((r) => {
+      if (!byArea.has(r.area)) byArea.set(r.area, { area: r.area, areaHi: r.area_hi || r.area, items: [] })
+      byArea.get(r.area).items.push({ id: r.id, p: r.name, pHi: r.name_hi, u: r.usage_en, uHi: r.usage_hi, row: r })
+    })
+    return [...byArea.values()]
+  }, [products])
+
+  const editable = !!products?.length // only rows that exist in the table can be edited
 
   const spec = PROP_SPECS[selectedProp] || PROP_SPECS.pp
   const chemicals = useMemo(() => calcQty(spec, hi), [spec, hi])
@@ -344,12 +382,26 @@ export default function ChemicalGuide({ visibleProps }) {
 
       {view === 'guide' && (
         <div>
-          <div style={{ fontSize: 12, color: C.tl, marginBottom: 12 }}>
-            {lang === 'hi'
-              ? 'Kleanfix, Diversey और अन्य ब्रांड · kleanfix.com · +91 98189 98806'
-              : 'Kleanfix, Diversey & other brands · kleanfix.com · +91 98189 98806'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, color: C.tl, flex: 1, minWidth: 200 }}>
+              {lang === 'hi'
+                ? 'Kleanfix, Diversey और अन्य ब्रांड · kleanfix.com · +91 98189 98806'
+                : 'Kleanfix, Diversey & other brands · kleanfix.com · +91 98189 98806'}
+            </div>
+            {admin && editable && (
+              <Button variant="soft" onClick={() => setEditing('new')} style={{ flexShrink: 0 }}>
+                <Icon name="plus" size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                {t.addProduct}
+              </Button>
+            )}
           </div>
-          {CHEM_DATA.map((section, si) => {
+          {admin && products && !editable && (
+            <div style={{ fontSize: 12, color: C.tl, background: C.yBg, border: `1px solid ${C.yellow}33`, borderRadius: 10, padding: '9px 12px', marginBottom: 12 }}>
+              <Icon name="info" size={13} color={C.yellow} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+              {t.guideReadOnly}
+            </div>
+          )}
+          {sections.map((section, si) => {
             const isOpen = openAreas[si] !== false
             const color = AREA_COLORS[si % AREA_COLORS.length]
             return (
@@ -374,16 +426,18 @@ export default function ChemicalGuide({ visibleProps }) {
                   <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
                     {section.items.map((item, ii) => (
                       <div
-                        key={item.p}
+                        key={item.id || item.p}
+                        onClick={admin && editable ? () => setEditing(item.row) : undefined}
                         style={{
                           padding: '10px 14px',
                           borderBottom: ii < section.items.length - 1 ? `1px solid ${C.border}` : 'none',
                           display: 'flex', gap: 10, alignItems: 'flex-start',
+                          cursor: admin && editable ? 'pointer' : 'default',
                         }}
                       >
                         <div style={{ width: 3, alignSelf: 'stretch', background: color, borderRadius: 2, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{item.p}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{(lang === 'hi' && item.pHi) || item.p}</div>
                           <div style={{ fontSize: 12, color: C.tl, marginTop: 2 }}>{lang === 'hi' ? item.uHi : item.u}</div>
                         </div>
                       </div>
@@ -393,8 +447,143 @@ export default function ChemicalGuide({ visibleProps }) {
               </div>
             )
           })}
+
+          {editing && (
+            <ProductModal
+              record={editing === 'new' ? null : editing}
+              sectionList={sections.map((x) => ({ area: x.area, areaHi: x.areaHi }))}
+              onClose={() => setEditing(null)}
+              onSaved={() => { setEditing(null); loadProducts() }}
+            />
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+// Add / edit one product in the guide. Both languages are typed by hand — a
+// product name like "K2 Hard Surface Cleaner (Kleanfix)" is a brand string, and
+// machine translation would mangle it.
+function ProductModal({ record, sectionList, onClose, onSaved }) {
+  const C = useColors()
+  const t = useT()
+  const NEW = '__new__'
+  const known = sectionList.some((x) => x.area === record?.area)
+
+  const [form, setForm] = useState({
+    // an existing product always starts on its own section
+    areaPick: record ? (known ? record.area : NEW) : (sectionList[0]?.area || NEW),
+    area: record?.area || '',
+    area_hi: record?.area_hi || '',
+    name: record?.name || '',
+    name_hi: record?.name_hi || '',
+    usage_en: record?.usage_en || '',
+    usage_hi: record?.usage_hi || '',
+    sort_order: record?.sort_order ?? 999,
+  })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const creatingSection = form.areaPick === NEW
+
+  // choosing an existing section fills its Hindi heading automatically, so every
+  // product in a section keeps the same one
+  function pickSection(e) {
+    const areaPick = e.target.value
+    if (areaPick === NEW) { setForm((f) => ({ ...f, areaPick, area: '', area_hi: '' })); return }
+    const match = sectionList.find((x) => x.area === areaPick)
+    setForm((f) => ({ ...f, areaPick, area: areaPick, area_hi: match?.areaHi || '' }))
+  }
+
+  async function save() {
+    const area = (creatingSection ? form.area : form.areaPick).trim()
+    if (!form.name.trim() || !area) { setErr(t.required); return }
+    setBusy(true); setErr('')
+    const payload = {
+      area,
+      area_hi: form.area_hi.trim() || null,
+      name: form.name.trim(),
+      name_hi: form.name_hi.trim() || null,
+      usage_en: form.usage_en.trim() || null,
+      usage_hi: form.usage_hi.trim() || null,
+      sort_order: Number(form.sort_order) || 999,
+    }
+    const { error } = record
+      ? await supabase.from('chemical_products').update(payload).eq('id', record.id)
+      : await supabase.from('chemical_products').insert(payload)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  // soft delete, so a removed product can be restored from the table
+  async function remove() {
+    if (!window.confirm(t.deleteProductConfirm)) return
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('chemical_products').update({ is_active: false }).eq('id', record.id)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  return (
+    <Modal
+      open onClose={onClose} title={record ? t.editProduct : t.addProduct}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
+          {record && (
+            <Button variant="danger" onClick={remove} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
+              <Icon name="trash" size={16} color="#fff" />
+            </Button>
+          )}
+          <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button>
+        </>
+      )}
+    >
+      <Field label={t.guideArea}>
+        <select style={inputStyle(C)} value={form.areaPick} onChange={pickSection}>
+          {sectionList.map((x) => <option key={x.area} value={x.area}>{x.area}</option>)}
+          <option value={NEW}>+ {t.newSection}</option>
+        </select>
+      </Field>
+
+      {/* only a brand-new section needs its headings typed */}
+      {creatingSection && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <Field label={t.guideArea}>
+              <input style={inputStyle(C)} value={form.area} onChange={set('area')} placeholder="Pest Control" />
+            </Field>
+          </div>
+          <div style={{ flex: 1 }}>
+            <Field label={`${t.guideArea} (हिंदी)`}>
+              <input style={inputStyle(C)} value={form.area_hi} onChange={set('area_hi')} placeholder="कीट नियंत्रण" />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      <Field label={t.productName}>
+        <input style={inputStyle(C)} value={form.name} onChange={set('name')} placeholder="K2 Hard Surface Cleaner (Kleanfix)" />
+      </Field>
+      <Field label={`${t.productName} (हिंदी)`} hint={t.hindiOptionalHint}>
+        <input style={inputStyle(C)} value={form.name_hi} onChange={set('name_hi')} placeholder="K2 हार्ड सरफ़ेस क्लीनर" />
+      </Field>
+
+      <Field label={t.howToUse}>
+        <input style={inputStyle(C)} value={form.usage_en} onChange={set('usage_en')} placeholder="Daily mopping — 20ml per 1L water" />
+      </Field>
+      <Field label={`${t.howToUse} (हिंदी)`} hint={t.hindiOptionalHint}>
+        <input style={inputStyle(C)} value={form.usage_hi} onChange={set('usage_hi')} placeholder="रोज़ पोछा — 20ml प्रति 1L पानी" />
+      </Field>
+
+      <Field label={t.sortOrder} hint={t.sortOrderHint}>
+        <input type="number" style={inputStyle(C)} value={form.sort_order} onChange={set('sort_order')} />
+      </Field>
+
+      {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
+    </Modal>
   )
 }

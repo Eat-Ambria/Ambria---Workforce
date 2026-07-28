@@ -145,7 +145,22 @@ export default function ChemicalUsage() {
                   <div style={{ fontWeight: 700, fontSize: 15 }}>
                     {lang === 'hi' && r.chemical_name_hi ? r.chemical_name_hi : r.chemical_name}
                   </div>
-                  <div style={{ fontSize: 13, color: C.tl, display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                  {/* brand / category, when they were recorded */}
+                  {(r.brand || r.category) && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      {r.brand && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, padding: '2px 8px', borderRadius: 999 }}>
+                          {r.brand}
+                        </span>
+                      )}
+                      {r.category && (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: C.tl, background: C.cardAlt, border: `1px solid ${C.border}`, padding: '2px 8px', borderRadius: 999 }}>
+                          {r.category}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 13, color: C.tl, display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
                     <Icon name="pin" size={13} /> {(lang === 'hi' && r.location_hi ? r.location_hi : r.location) || '—'} · {propName(r.property, lang)}
                   </div>
                   <div style={{ fontSize: 12, color: C.tl, marginTop: 2 }}>{fmtDate(r.usage_date)}{r.used_by_name ? ` · ${r.used_by_name}` : ''}</div>
