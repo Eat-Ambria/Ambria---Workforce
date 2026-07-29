@@ -294,17 +294,6 @@ export default function AdminTasks() {
                   {/* right column: status + fixed-width category badge, vertically centered,
                       so Daily/Weekly/Monthly line up in one straight column across cards */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    {/* shortcut into the delete action — hidden on your own work */}
-                    {task.status === TASK_STATUS.COMPLETED && !isOwnAssignedWork(user, task.assigned_to) && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setReview(task) }}
-                        title={t.delete}
-                        aria-label={t.delete}
-                        style={{ background: 'transparent', color: C.tl, display: 'grid', placeItems: 'center', padding: 2, lineHeight: 0 }}
-                      >
-                        <Icon name="close" size={18} color={C.tl} />
-                      </button>
-                    )}
                     <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
                     {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
                     {task.category && (
