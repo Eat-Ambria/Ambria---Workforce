@@ -21,7 +21,7 @@ const fmt = (s) => {
 //  - resumes from the last position
 const fsSupported = typeof document !== 'undefined' && (document.fullscreenEnabled || document.webkitFullscreenEnabled)
 
-export default function YTPlayer({ videoId, resumeKey, onProgress }) {
+export default function YTPlayer({ videoId, resumeKey, onProgress, unlocked = false }) {
   const C = useColors()
   const t = useT()
   const containerRef = useRef(null)
@@ -30,6 +30,9 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
   const maxRef = useRef(0) // furthest second reached (seek ceiling)
   const onProgressRef = useRef(onProgress)
   onProgressRef.current = onProgress // always call the latest without re-running the effect
+  // read through a ref so flipping it never tears down and rebuilds the player
+  const unlockedRef = useRef(unlocked)
+  unlockedRef.current = unlocked
 
   const [ready, setReady] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -46,8 +49,12 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
     if (!p || !p.getDuration) return
     const d = p.getDuration() || 0
     const c = p.getCurrentTime() || 0
-    if (d && c >= d - 5) { try { localStorage.removeItem(resumeKey) } catch { /* ignore */ } return }
-    try { localStorage.setItem(resumeKey, JSON.stringify({ pos: Math.floor(c), max: Math.floor(maxRef.current) })) } catch { /* ignore */ }
+    // Finished: restart from the beginning next time, but REMEMBER how far this
+    // person got, so a rewatch is freely scrubbable instead of locked again.
+    const pos = (d && c >= d - 5) ? 0 : Math.floor(c)
+    try {
+      localStorage.setItem(resumeKey, JSON.stringify({ pos, max: Math.floor(Math.max(maxRef.current, pos)) }))
+    } catch { /* ignore */ }
   }
 
   useEffect(() => {
@@ -63,9 +70,11 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
         events: {
           onReady: (e) => {
             const saved = readSaved()
-            maxRef.current = saved.max || 0
+            const d0 = e.target.getDuration() || 0
+            // completed videos are fully unlocked; otherwise resume the ceiling
+            maxRef.current = unlockedRef.current ? d0 : (saved.max || 0)
             setMaxW(maxRef.current)
-            setDur(e.target.getDuration() || 0)
+            setDur(d0)
             if (saved.pos && saved.pos > 3) e.target.seekTo(saved.pos, true)
             if (e.target.getPlaybackRate() > MAX_RATE) e.target.setPlaybackRate(MAX_RATE)
             setRate(e.target.getPlaybackRate())
@@ -77,7 +86,11 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
             if (isPlaying) setStarted(true)
             if (e.data === YT.PlayerState.ENDED) {
               onProgressRef.current?.(1) // watched to the end
-              try { localStorage.removeItem(resumeKey) } catch { /* ignore */ }
+              const d = e.target.getDuration() || 0
+              maxRef.current = d
+              setMaxW(d)
+              // keep the full ceiling: the whole video is seekable from now on
+              try { localStorage.setItem(resumeKey, JSON.stringify({ pos: 0, max: Math.floor(d) })) } catch { /* ignore */ }
             }
           },
           onPlaybackRateChange: (e) => {
@@ -95,7 +108,8 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
         const c = p.getCurrentTime() || 0
         const d = p.getDuration() || 0
         if (d) setDur(d)
-        if (c > maxRef.current) { maxRef.current = c; setMaxW(c) } // watching extends the ceiling
+        if (unlockedRef.current && d) { maxRef.current = d; setMaxW(d) }        // no gate once complete
+        else if (c > maxRef.current) { maxRef.current = c; setMaxW(c) }         // watching extends the ceiling
         if (d) onProgressRef.current?.(Math.min(1, maxRef.current / d)) // report furthest-watched fraction
         setCur(c)
         if (p.getPlaybackRate && p.getPlaybackRate() > MAX_RATE) p.setPlaybackRate(MAX_RATE)
@@ -124,7 +138,7 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
     let frac = (clientX - rect.left) / rect.width
     frac = Math.max(0, Math.min(1, frac))
     let target = frac * dur
-    if (target > maxRef.current) target = maxRef.current // can't scrub past what's been watched
+    if (!unlockedRef.current && target > maxRef.current) target = maxRef.current // can't scrub past what's been watched
     p.seekTo(target, true)
     setCur(target)
   }
@@ -200,7 +214,7 @@ export default function YTPlayer({ videoId, resumeKey, onProgress }) {
           onClick={(e) => seekFromEvent(e.clientX, e.currentTarget)}
           onPointerMove={(e) => { if (e.buttons === 1) seekFromEvent(e.clientX, e.currentTarget) }}
           style={{ position: 'relative', flex: 1, height: 8, borderRadius: 999, background: C.border, cursor: 'pointer', touchAction: 'none' }}
-          title="You can rewind within the watched part; skipping ahead is disabled"
+          title={unlocked ? t.seekFreelyHint : t.noSkipHint}
         >
           {/* watched / seekable region */}
           <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${maxFrac}%`, background: C.maroonSoft, borderRadius: 999 }} />

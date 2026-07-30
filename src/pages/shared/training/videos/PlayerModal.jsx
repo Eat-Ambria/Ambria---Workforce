@@ -48,6 +48,9 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
   // enforce watching only on the tracked YouTube player; plain embeds can't be measured
   const isYouTube = !!video.youtube_id
   const videoDone = completed || !isYouTube || watched >= WATCH_PCT
+  // Once the whole video has been seen — this session or a previous one — there
+  // is nothing left to enforce, so let them scrub anywhere.
+  const freeSeek = completed || watched >= WATCH_PCT
 
   async function markWatched() {
     setBusy(true)
@@ -128,7 +131,12 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
       {phase === 'watch' && (
         <>
           {video.youtube_id ? (
-            <YTPlayer videoId={video.youtube_id} resumeKey={resumeKey} onProgress={(f) => setWatched((w) => Math.max(w, f))} />
+            <YTPlayer
+              videoId={video.youtube_id}
+              resumeKey={resumeKey}
+              onProgress={(f) => setWatched((w) => Math.max(w, f))}
+              unlocked={freeSeek}
+            />
           ) : (
             <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
               {embed ? (
@@ -149,7 +157,9 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
           {video.youtube_id && (
             <div style={{ fontSize: 12, color: C.tl, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Icon name="clock" size={13} color={C.tl} />
-              {hi ? 'अधिकतम गति 1.5x · केवल देखे हुए भाग तक आगे-पीछे' : 'Max 1.5× · rewind within the watched part, no skipping ahead'}
+              {freeSeek
+                ? (hi ? 'अधिकतम गति 1.5x · पूरा वीडियो देख लिया — कहीं भी आगे-पीछे करें' : 'Max 1.5× · fully watched, seek anywhere')
+                : (hi ? 'अधिकतम गति 1.5x · केवल देखे हुए भाग तक आगे-पीछे' : 'Max 1.5× · rewind within the watched part, no skipping ahead')}
             </div>
           )}
 
