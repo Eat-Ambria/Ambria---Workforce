@@ -402,8 +402,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   async function save() {
     // validate per-field so the message appears next to the field, not at the bottom
     const fe = {}
-    if (!form.title.trim()) fe.title = t.required
-    if (!form.dept) fe.dept = t.required
+    if (!form.title.trim()) fe.title = `${t.title} ${t.isRequired}`
+    if (!form.dept) fe.dept = `${t.department} ${t.isRequired}`
     if (form.due_date && form.due_date < todayISO()) fe.due_date = t.dueDatePast
     setFieldErr(fe)
     if (Object.keys(fe).length) {
@@ -541,7 +541,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // STEP 1: hand the request to a department. Stays 'open' and unassigned — the
   // trigger notifies that department's head, who then picks the person.
   function routeToDepartment() {
-    if (!deptFilter) { setErr(t.required); return }
+    if (!deptFilter) { setErr(`${t.department} ${t.isRequired}`); return }
     if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
     setStatus('open', {
       department: deptFilter,
@@ -552,8 +552,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   // used for the first assignment AND for admin reassignment later
   function saveAssignment() {
-    if (!deptFilter) { setErr(t.required); return }
-    if (!assignTo) { setErr(t.required); return }
+    if (!deptFilter) { setErr(`${t.department} ${t.isRequired}`); return }
+    if (!assignTo) { setErr(`${t.personName} ${t.isRequired}`); return }
     if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
     const m = members.find((x) => x.id === assignTo)
     const changedAssignee = assignTo !== row.assigned_to

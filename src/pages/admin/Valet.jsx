@@ -524,7 +524,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
   const useAuto = () => { setManual(null); setEditStaff(false) }
 
   async function save() {
-    if (!form.event_date) { setErr(t.required || 'Date is required'); return }
+    if (!form.event_date) { setErr(`${t.dateLabel} ${t.isRequired}`); return }
     // when editing, keeping the booking's original (possibly past) date is allowed
     const dateChanged = !editing || form.event_date !== editing.event_date
     if (dateChanged && form.event_date < minDate) { setErr('Bookings cannot be made for past dates'); return }

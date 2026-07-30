@@ -498,7 +498,8 @@ function ProductModal({ record, sectionList, onClose, onSaved }) {
 
   async function save() {
     const area = (creatingSection ? form.area : form.areaPick).trim()
-    if (!form.name.trim() || !area) { setErr(t.required); return }
+    if (!form.name.trim()) { setErr(`${t.productName} ${t.isRequired}`); return }
+    if (!area) { setErr(`${t.guideArea} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const payload = {
       area,

@@ -54,7 +54,7 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
   const ytId = extractYTId(form.youtube_url)
 
   async function save() {
-    if (!form.topic.trim()) { setErr(t.required); return }
+    if (!form.topic.trim()) { setErr(`${t.topicEn} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const payload = {
       topic: form.topic.trim(),

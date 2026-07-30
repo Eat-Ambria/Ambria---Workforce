@@ -243,7 +243,8 @@ function LogModal({ user, record, canDelete, properties, defaultProperty, onClos
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   async function save() {
-    if (!form.chemical_name.trim() || !form.property) { setErr(t.required); return }
+    if (!form.chemical_name.trim()) { setErr(`${t.chemical} ${t.isRequired}`); return }
+    if (!form.property) { setErr(`${t.propertyLabel} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     // fields the user can change; who logged it and when are left alone on edit
     const payload = {
@@ -297,7 +298,7 @@ function LogModal({ user, record, canDelete, properties, defaultProperty, onClos
         </>
       }
     >
-      <Field label={t.properties}>
+      <Field label={t.propertyLabel}>
         <select style={inputStyle(C)} value={form.property} onChange={set('property')} disabled={properties.length <= 1}>
           {properties.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
         </select>

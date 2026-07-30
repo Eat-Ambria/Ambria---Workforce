@@ -170,8 +170,8 @@ function AddModal({ record, onClose, onSaved }) {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   async function save() {
-    if (!form.location.trim()) { setErr('Enter the location'); return }
-    if (!form.expiry_date) { setErr('Pick the expiry / next refill date'); return }
+    if (!form.location.trim()) { setErr(`${t.location} ${t.isRequired}`); return }
+    if (!form.expiry_date) { setErr(`${t.expiryRefill} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const payload = {
       property: form.property,
@@ -264,7 +264,7 @@ function LogModal({ ext, onClose, onSaved }) {
   const [err, setErr] = useState('')
 
   async function save() {
-    if (!date) { setErr('Pick an inspection date'); return }
+    if (!date) { setErr(`${t.inspectionDate} ${t.isRequired}`); return }
     if (next && next < date) { setErr('Next inspection must be after the inspection date'); return }
     setBusy(true); setErr('')
     const { error } = await supabase

@@ -306,8 +306,8 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
   }
 
   async function save() {
-    if (!form.name.trim()) { setErr(t.required); return }
-    if (!form.username.trim()) { setErr(t.required); return }
+    if (!form.name.trim()) { setErr(`${t.fullName} ${t.isRequired}`); return }
+    if (!form.username.trim()) { setErr(`${t.username} ${t.isRequired}`); return }
     if (!form.password) { setErr(t.pinRule || 'PIN must be exactly 4 digits'); return }
     // enforce a 4-digit PIN whenever it's newly set or changed (existing
     // non-PIN passwords keep working until the admin edits them)

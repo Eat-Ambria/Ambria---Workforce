@@ -621,7 +621,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
   }, [assignable, form.assigned_to])
 
   async function save() {
-    if (!form.title.trim()) { setErr(t.required); return }
+    if (!form.title.trim()) { setErr(`${t.title} ${t.isRequired}`); return }
     if (form.due_date && form.due_date < todayISO()) { setErr(t.dueDatePast); return }
     setBusy(true); setErr('')
     const assignee = members.find((m) => m.id === form.assigned_to)

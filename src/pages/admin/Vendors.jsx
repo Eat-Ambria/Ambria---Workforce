@@ -81,7 +81,9 @@ function AddModal({ user, onClose, onSaved }) {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   async function save() {
-    if (!form.name.trim() || !form.phone.trim() || !form.category.trim()) { setErr(t.required); return }
+    if (!form.name.trim()) { setErr(`${t.fullName} ${t.isRequired}`); return }
+    if (!form.phone.trim()) { setErr(`${t.phone} ${t.isRequired}`); return }
+    if (!form.category.trim()) { setErr(`${t.category} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const { error } = await supabase.from('vendors').insert({
       name: form.name.trim(), company: form.company || null, phone: form.phone.trim(),

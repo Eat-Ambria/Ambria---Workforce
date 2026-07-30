@@ -65,7 +65,7 @@ export default function QuizManager({ video, onClose }) {
   }, [form.question, form.option_a, form.option_b, form.option_c, form.option_d, autoHi, mode])
 
   async function addQuestion() {
-    if (!form.question.trim() || OPTS.some((o) => !form[`option_${o}`].trim())) { setErr(t.required); return }
+    if (!form.question.trim() || OPTS.some((o) => !form[`option_${o}`].trim())) { setErr(`${t.question} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const { error } = await supabase.from('training_quizzes').insert({
       video_id: video.id,
