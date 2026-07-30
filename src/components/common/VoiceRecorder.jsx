@@ -118,7 +118,7 @@ export default function VoiceRecorder({ folder = 'audio', value = '', onChange }
       <div>
         <AudioPlayer src={value} />
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          <button onClick={remove} disabled={busy} style={btn(C, 'transparent', C.red, `${C.red}55`)}>
+          <button type="button" onClick={remove} disabled={busy} style={btn(C, 'transparent', C.red, `${C.red}55`)}>
             <Icon name="trash" size={16} color={C.red} /> {t.deleteRecording || 'Delete'}
           </button>
         </div>
@@ -130,12 +130,12 @@ export default function VoiceRecorder({ folder = 'audio', value = '', onChange }
   return (
     <div>
       {recording ? (
-        <button onClick={stop} style={btn(C, C.red, '#fff')}>
+        <button type="button" onClick={stop} style={btn(C, C.red, '#fff')}>
           <span style={{ width: 9, height: 9, borderRadius: 2, background: '#fff', display: 'inline-block' }} />
           {t.stopRecording || 'Stop'} · <span style={{ fontVariantNumeric: 'tabular-nums' }}>{mmss} / {fmtT(MAX_SECONDS)}</span>
         </button>
       ) : (
-        <button onClick={start} disabled={busy} style={btn(C, C.maroon, '#fff')}>
+        <button type="button" onClick={start} disabled={busy} style={btn(C, C.maroon, '#fff')}>
           {busy ? <Spinner size={16} color="#fff" /> : <Icon name="mic" size={18} color="#fff" />}
           {busy ? (t.uploading || 'Uploading…') : (t.recordVoice || 'Record voice note')}
         </button>

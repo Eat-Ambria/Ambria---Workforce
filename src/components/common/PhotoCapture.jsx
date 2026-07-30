@@ -52,6 +52,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
                 style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }}
               />
               <button
+                type="button"
                 onClick={() => remove(url)}
                 style={{
                   position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
@@ -66,6 +67,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button
+          type="button"
           onClick={() => camRef.current?.click()}
           disabled={busy}
           style={btn(C, C.maroon, '#fff')}
@@ -73,6 +75,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
           {busy ? <Spinner size={16} color="#fff" /> : <Icon name="camera" size={18} color="#fff" />} {t.takePhoto}
         </button>
         <button
+          type="button"
           onClick={() => galRef.current?.click()}
           disabled={busy}
           style={btn(C, 'transparent', C.text, C.border)}
@@ -100,6 +103,12 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
         hidden
         onChange={(e) => handleFiles(e.target.files)}
       />
+
+      {multiple && value.length > 0 && (
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 7 }}>
+          {value.length} {value.length === 1 ? t.photoAdded : t.photosAdded} · {t.addMorePhotos}
+        </div>
+      )}
 
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
     </div>

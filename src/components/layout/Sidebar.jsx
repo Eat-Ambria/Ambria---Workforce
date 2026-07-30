@@ -3,7 +3,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { navForUser } from '../../constants/nav'
-import { ROLES, personName } from '../../constants/org'
+import { ROLES, DEPARTMENT_MAP, deptName, isAdminRole, personName } from '../../constants/org'
 import { useFixRequestCount } from '../../hooks/useFixRequestCount'
 import Icon from '../common/Icon'
 import BrandMark from '../common/BrandMark'
@@ -91,6 +91,19 @@ export default function Sidebar({ mobile = false, onNavigate }) {
         <div style={{ padding: '14px 8px 2px', borderTop: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{personName(user, lang)}</div>
           <div style={{ fontSize: 12, color: C.faint }}>{roleLabels(t)[user?.role] || ''}</div>
+          {/* the team they head — repair requests for this department route to them */}
+          {user?.department && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                background: DEPARTMENT_MAP[user.department]?.color || C.maroon,
+              }} />
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: C.tl }}>
+                {deptName(user.department, lang)}
+                {isAdminRole(user?.role) ? ` · ${t.headLabel}` : ''}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </aside>

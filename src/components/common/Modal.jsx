@@ -62,6 +62,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         >
           <h3 style={{ fontSize: 17, fontWeight: 700, color: C.text }}>{title}</h3>
           <button
+            type="button"
             onClick={onClose}
             style={{ background: 'transparent', color: C.tl, fontSize: 22, lineHeight: 1 }}
             aria-label={t.close}

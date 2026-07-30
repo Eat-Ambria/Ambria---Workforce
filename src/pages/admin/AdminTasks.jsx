@@ -33,7 +33,7 @@ export default function AdminTasks() {
   const presetMember = location.state?.member // staff filter carried from the dashboard
 
   const PAGE_SIZE = 20
-  const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'completed', 'all']
+  const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'issuesDone', 'completed', 'all']
 
   const [members, setMembers] = useState([])
   const [list, setList] = useState([])       // current page of rows for the active tab
@@ -71,6 +71,7 @@ export default function AdminTasks() {
     if (key === 'completed') return q.eq('status', TASK_STATUS.COMPLETED)
     if (key === 'review') return q.eq('status', TASK_STATUS.COMPLETION_REQUESTED)
     if (key === 'issues') return q.in('issue_status', [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING])
+    if (key === 'issuesDone') return q.eq('issue_status', TASK_STATUS.ISSUE_RESOLVED)
     if (key === 'overdue') return q.lt('due_date', today).neq('status', TASK_STATUS.COMPLETED)
     return q // 'all'
   }, [today])
@@ -160,6 +161,8 @@ export default function AdminTasks() {
     return (m && personName(m, lang)) || stored || '—'
   }, [members, lang])
 
+  const issueView = tab === 'issues' || tab === 'issuesDone'
+
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
   // task-status tabs only — the Issues view is a separate button (see below)
   const tabs = [
@@ -246,20 +249,45 @@ export default function AdminTasks() {
         </div>
         <button
           onClick={() => changeTab('issues')}
-          aria-pressed={tab === 'issues'}
+          aria-pressed={issueView}
           style={{
             whiteSpace: 'nowrap', flexShrink: 0,
             display: 'inline-flex', alignItems: 'center', gap: 7,
             padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
-            background: tab === 'issues' ? C.red : C.rBg,
-            color: tab === 'issues' ? '#fff' : C.red,
-            border: `1px solid ${tab === 'issues' ? C.red : 'transparent'}`,
+            background: issueView ? C.red : C.rBg,
+            color: issueView ? '#fff' : C.red,
+            border: `1px solid ${issueView ? C.red : 'transparent'}`,
           }}
         >
-          <Icon name="warning" size={15} color={tab === 'issues' ? '#fff' : C.red} />
+          <Icon name="warning" size={15} color={issueView ? '#fff' : C.red} />
           {t.issues}{counts.issues ? ` (${counts.issues})` : ''}
         </button>
       </div>
+
+      {/* Resolving an issue no longer hides the task — it moves here, and the
+          nightly job clears the flag a day later. */}
+      {issueView && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          {[
+            { key: 'issues', label: `${t.openIssues}${c('issues')}`, tone: C.red },
+            { key: 'issuesDone', label: `${t.issueResolved}${c('issuesDone')}`, tone: C.green },
+          ].map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => changeTab(v.key)}
+              style={{
+                padding: '7px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+                background: tab === v.key ? v.tone : C.card,
+                color: tab === v.key ? '#fff' : C.tl,
+                border: `1px solid ${tab === v.key ? v.tone : C.border}`,
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {listLoading && list.length === 0 ? (
         <Loader label={t.loading} />
@@ -406,7 +434,12 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
     }
   }
   async function del() {
-    if (!window.confirm(t.deleteTaskConfirm || 'Delete this task permanently?')) return
+    // an admin looking at a reported issue can easily read the bin as "clear
+    // this issue" — spell out that it takes the whole task with it
+    const warn = (task.issue_status && task.issue_status !== TASK_STATUS.ISSUE_RESOLVED)
+      ? t.deleteTaskWarnIssue
+      : t.deleteTaskConfirm
+    if (!window.confirm(warn)) return
     setBusy(true); setErr('')
     const voiceUrl = task.rejection_voice_url
     const { error } = await supabase.from('tasks').delete().eq('id', task.id)
@@ -472,7 +505,13 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
               <Button variant="success" onClick={approve} disabled={busy} style={{ flex: 2 }}>{t.approve}</Button>
             </>
           )}
-          {isIssue && !ownWork && <Button variant="primary" onClick={startIssue} disabled={busy} style={{ flex: 2 }}>{t.startWorkingIssue}</Button>}
+          {isIssue && !ownWork && (
+            <>
+              <Button variant="ghost" onClick={startIssue} disabled={busy} style={{ flex: 1 }}>{t.startWorkingIssue}</Button>
+              {/* clears the issue and tells the reporter — the task itself stays */}
+              <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.dismissIssue}</Button>
+            </>
+          )}
           {isIssueWorking && !ownWork && <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>}
           {!ownWork && (
             <Button variant="danger" onClick={del} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
@@ -497,6 +536,9 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
             <Icon name="warning" size={16} /> {t.issue}
           </div>
           <div style={{ fontSize: 14, color: C.text, marginTop: 6 }}>{task.notes}</div>
+          {task.issue_status !== TASK_STATUS.ISSUE_RESOLVED && (
+            <div style={{ fontSize: 11.5, color: C.tl, marginTop: 8 }}>{t.resolveKeepsTask}</div>
+          )}
         </div>
       )}
 

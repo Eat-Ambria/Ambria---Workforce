@@ -61,6 +61,7 @@ export function Button({ children, variant = 'primary', full, disabled, style, .
   const solid = ['primary', 'success', 'danger'].includes(variant)
   return (
     <button
+      type="button"
       disabled={disabled}
       style={{
         background: v.bg,

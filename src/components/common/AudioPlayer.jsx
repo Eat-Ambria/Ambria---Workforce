@@ -53,6 +53,7 @@ export default function AudioPlayer({ src, label }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 12px' }}>
       <audio ref={audioRef} src={src} preload="metadata" />
       <button
+        type="button"
         onClick={toggle}
         aria-label={playing ? 'Pause' : 'Play'}
         style={{ width: 34, height: 34, borderRadius: '50%', background: C.maroon, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
