@@ -5,7 +5,7 @@ import { nowISO, fmtDateTime, todayISO, fmtDate } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { DEPARTMENTS, isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, propName, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName } from '../../constants/org'
+import { DEPARTMENTS, isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, propName, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, isFlaggedPriority } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -51,7 +51,7 @@ export default function TaskBoard() {
   const [rows, setRows] = useState([])
   const [members, setMembers] = useState([]) // staff + admins available for assignment (admin)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState(location.state?.tab || 'open')
+  const [tab, setTab] = useState(location.state?.tab || 'all')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
@@ -121,13 +121,6 @@ export default function TaskBoard() {
     })()
   }, [location.state])
 
-  // admin quick-delete a completed request straight from the list
-  const removeRow = useCallback(async (id) => {
-    if (!window.confirm(t.deleteRequestConfirm || 'Delete this request permanently?')) return
-    await supabase.from('work_board').delete().eq('id', id)
-    load()
-  }, [t, load])
-
   // what the board shows:
   //  - admin: everything in scope, optionally narrowed to one staff member
   //  - staff: either work assigned to them, or requests they raised
@@ -155,14 +148,21 @@ export default function TaskBoard() {
     return doneAll.filter((r) => (r.resolved_at || r.created_at || '') >= cutoff)
   }, [doneAll])
 
-  const groups = useMemo(() => ({
-    // overdue = past its due date and not yet finished (cross-cuts open/in-progress)
-    overdue: visibleRows.filter((r) => r.due_date && r.due_date < today && !['approved', 'completed'].includes(r.status)),
-    open: visibleRows.filter((r) => ['open', 'assigned'].includes(r.status)),
-    in_progress: visibleRows.filter((r) => r.status === 'in_progress'),
-    review: visibleRows.filter((r) => r.status === 'approval_requested'),
-    completed: showAllDone ? doneAll : doneRecent,
-  }), [visibleRows, today, doneAll, doneRecent, showAllDone])
+  const groups = useMemo(() => {
+    // finished repairs older than the window are hidden, not deleted — keep "All"
+    // consistent with the Completed tab instead of resurrecting them here
+    const shown = new Set((showAllDone ? doneAll : doneRecent).map((r) => r.id))
+    const isDone = (r) => ['approved', 'completed'].includes(r.status)
+    return {
+      all: visibleRows.filter((r) => !isDone(r) || shown.has(r.id)),
+      // overdue = past its due date and not yet finished (cross-cuts open/in-progress)
+      overdue: visibleRows.filter((r) => r.due_date && r.due_date < today && !isDone(r)),
+      open: visibleRows.filter((r) => ['open', 'assigned'].includes(r.status)),
+      in_progress: visibleRows.filter((r) => r.status === 'in_progress'),
+      review: visibleRows.filter((r) => r.status === 'approval_requested'),
+      completed: showAllDone ? doneAll : doneRecent,
+    }
+  }, [visibleRows, today, doneAll, doneRecent, showAllDone])
 
   const hiddenDone = doneAll.length - doneRecent.length
 
@@ -177,6 +177,7 @@ export default function TaskBoard() {
   // collapse the status tabs into a dropdown on narrow screens (≤813px)
   const statusCompact = useMediaQuery('(max-width: 813px)')
   const tabs = [
+    { key: 'all', label: `${t.all} (${groups.all.length})` },
     { key: 'overdue', label: `${t.overdue} (${groups.overdue.length})` },
     { key: 'open', label: `${t.open} (${groups.open.length})` },
     { key: 'in_progress', label: `${t.inProgress} (${groups.in_progress.length})` },
@@ -268,27 +269,18 @@ export default function TaskBoard() {
                         <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? '#EA580C' : C.tl} /> {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(r.due_date)}
                       </div>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: pTone }} />
-                      <span style={{ fontSize: 11.5, fontWeight: 700, color: pTone, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{prioLabel(r.priority, t)}</span>
-                    </div>
+                    {isFlaggedPriority(r.priority) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: pTone }} />
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: pTone, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{prioLabel(r.priority, t)}</span>
+                      </div>
+                    )}
                     {r.rating > 0 && (
                       <div style={{ marginTop: 6 }}><Stars value={r.rating} C={C} size={15} /></div>
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexShrink: 0 }}>
                     <Badge color={C[st.tone]} bg={C[st.bg]}>{statusLabel(r.status, t)}</Badge>
-                    {/* quick-delete a finished request — never your own work */}
-                    {admin && ['completed', 'approved'].includes(r.status) && !isOwnAssignedWork(user, r.assigned_to) && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeRow(r.id) }}
-                        title={t.delete}
-                        aria-label={t.delete}
-                        style={{ background: 'transparent', color: C.tl, display: 'grid', placeItems: 'center', padding: 2, lineHeight: 0 }}
-                      >
-                        <Icon name="close" size={18} color={C.tl} />
-                      </button>
-                    )}
                   </div>
                 </div>
               </Card>
@@ -299,7 +291,7 @@ export default function TaskBoard() {
 
       {/* older finished repairs are hidden rather than deleted — they still
           count in Analytics and in each staff member's rating history */}
-      {tab === 'completed' && hiddenDone > 0 && (
+      {['completed', 'all'].includes(tab) && hiddenDone > 0 && (
         <div style={{ textAlign: 'center', marginTop: 14 }}>
           <button
             type="button"
@@ -375,7 +367,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const admin = isAdminRole(user?.role)          // admin + super admin can assign at creation
   const superAdmin = isSuperAdmin(user?.role)    // only super admin picks the property
   const [form, setForm] = useState({
-    title: '', description: '', priority: 'normal', due_date: '',
+    title: '', description: '', priority: '', due_date: '',
     property: user.property && user.property !== 'all' ? user.property : 'pp',
     dept: '',
   })
@@ -387,6 +379,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const titleRef = useRef(null)
   const dueRef = useRef(null)
   const deptRef = useRef(null)
+  const prioRef = useRef(null)
   // update a field and clear its inline error as the user fixes it
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -403,12 +396,16 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     // validate per-field so the message appears next to the field, not at the bottom
     const fe = {}
     if (!form.title.trim()) fe.title = `${t.title} ${t.isRequired}`
+    if (!form.priority) fe.priority = `${t.priority} ${t.isRequired}`
     if (!form.dept) fe.dept = `${t.department} ${t.isRequired}`
     if (form.due_date && form.due_date < todayISO()) fe.due_date = t.dueDatePast
     setFieldErr(fe)
     if (Object.keys(fe).length) {
       // jump the user to the first field that needs fixing
-      const target = fe.title ? titleRef.current : fe.dept ? deptRef.current : fe.due_date ? dueRef.current : null
+      const target = fe.title ? titleRef.current
+        : fe.priority ? prioRef.current
+        : fe.dept ? deptRef.current
+        : fe.due_date ? dueRef.current : null
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       target?.focus?.({ preventScroll: true })
       return
@@ -453,8 +450,9 @@ function PostModal({ user, members = [], onClose, onSaved }) {
           </select>
         </Field>
       )}
-      <Field label={t.priority}>
-        <select style={inputStyle(C)} value={form.priority} onChange={set('priority')}>
+      <Field label={t.priority} required error={fieldErr.priority}>
+        <select ref={prioRef} style={inputStyle(C)} value={form.priority} onChange={set('priority')}>
+          <option value="">{t.selectPriority}</option>
           {PRIO_CHOICES.map((p) => <option key={p} value={p}>{prioLabel(p, t)}</option>)}
         </select>
       </Field>
@@ -622,7 +620,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       )}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Badge color={C[(STATUS_META[s] || STATUS_META.open).tone]} bg={C[(STATUS_META[s] || STATUS_META.open).bg]}>{statusLabel(s, t)}</Badge>
-        <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
+        {isFlaggedPriority(row.priority) && (
+          <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
+        )}
         {row.category && row.category !== 'other' && <Badge>{row.category}</Badge>}
       </div>
 

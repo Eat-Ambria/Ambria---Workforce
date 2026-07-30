@@ -39,19 +39,18 @@ export default function Login() {
   }
 
   const field = { ...inputStyle(C), paddingLeft: 42 }
+  // the card is a touch wider on desktop so the page reads as one column
+  const FORM_MAX = isMobile ? 400 : 440
 
-  const features = hi
-    ? ['हर प्रॉपर्टी के लिए रोल-आधारित एक्सेस', 'असेसमेंट के साथ ट्रेनिंग वीडियो', 'लाइव टास्क बोर्ड और स्टाफ़ प्रगति']
-    : ['Role-based access for every property', 'Training videos with assessments', 'Live task board & staff progress']
-
-  const langToggle = (onDark) => (
+  // always sits on the gradient band now, so it only needs the on-dark styling
+  const langToggle = () => (
     <button
       onClick={toggleLang}
       style={{
-        background: onDark ? 'rgba(255,255,255,0.16)' : C.card,
-        border: `1px solid ${onDark ? 'rgba(255,255,255,0.3)' : C.border}`,
-        color: onDark ? '#fff' : C.tl,
-        borderRadius: 10, padding: '8px 14px', fontSize: 13.5, fontWeight: 600, backdropFilter: onDark ? 'blur(4px)' : undefined,
+        background: 'rgba(255,255,255,0.16)',
+        border: '1px solid rgba(255,255,255,0.3)',
+        color: '#fff',
+        borderRadius: 10, padding: '8px 14px', fontSize: 13.5, fontWeight: 600, backdropFilter: 'blur(4px)',
       }}
     >
       {hi ? 'English' : 'हिंदी'}
@@ -60,9 +59,9 @@ export default function Login() {
 
   // ---- the form itself (reused by both layouts) ----
   const form = (
-    <form onSubmit={onSubmit} style={{ width: '100%', maxWidth: 400 }}>
+    <form onSubmit={onSubmit} style={{ width: '100%', maxWidth: FORM_MAX }}>
       <div style={card(C)}>
-        <div style={{ marginBottom: 18 }}>
+        <div style={{ marginBottom: 16 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em' }}>{hi ? 'वापसी पर स्वागत है' : 'Welcome back'}</h2>
           <p style={{ fontSize: 13.5, color: C.tl, marginTop: 3 }}>{hi ? 'जारी रखने के लिए साइन इन करें' : 'Sign in to your account to continue'}</p>
         </div>
@@ -113,64 +112,32 @@ export default function Login() {
         </button>
       </div>
 
-      <PoweredBy style={{ paddingTop: 18, paddingBottom: 4 }} />
+      <PoweredBy style={{ paddingTop: 14, paddingBottom: 2 }} />
     </form>
   )
 
-  // ---------- MOBILE: brand band on top, form below ----------
-  if (isMobile) {
-    return (
-      <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ background: gradient, color: '#fff', padding: '40px 20px 34px', position: 'relative', textAlign: 'center' }}>
-          <div style={{ position: 'absolute', top: 16, right: 16 }}>{langToggle(true)}</div>
-          {/* the Ambria wordmark sits straight on the gradient (transparent PNG) */}
-          <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
-               style={{ width: 168, display: 'block', margin: '0 auto' }} />
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 22 }}>{t.loginTitle}</h1>
-        </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '24px 20px' }}>
-          <div style={{ width: '100%', maxWidth: 400 }}>{form}</div>
-        </div>
-      </div>
-    )
-  }
-
-  // ---------- DESKTOP: split screen ----------
+  // ---------- ONE LAYOUT: brand band on top, form centred below ----------
+  // No split screen. Desktop is the same stack as mobile, just larger — the
+  // wordmark is a white transparent PNG, so it has to sit on the gradient band
+  // rather than on the light page background where it would be invisible.
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: C.bg }}>
-      {/* left brand panel */}
-      <div style={{ width: '44%', maxWidth: 560, background: gradient, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '56px 60px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: gradient, color: '#fff', padding: isMobile ? '34px 20px 30px' : '38px 24px 34px', position: 'relative', textAlign: 'center', overflow: 'hidden' }}>
         {/* subtle decorative glow */}
-        <div style={{ position: 'absolute', top: -80, right: -80, width: 260, height: 260, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-        <div style={{ position: 'absolute', bottom: -100, left: -60, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-        <div style={{ position: 'relative' }}>
-          <div style={{ width: 210 }}>
-            <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
-                 style={{ width: 210, display: 'block' }} />
-            <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 26, textAlign: 'center' }}>
-              {t.loginTitle}
-            </h1>
-          </div>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', marginTop: 10, maxWidth: 360, lineHeight: 1.55 }}>
-            {hi ? 'Ambria के वेन्यू के लिए वर्कफोर्स मैनेजमेंट — टास्क, ट्रेनिंग और टीम, सब एक जगह।' : "Workforce management for Ambria's venues — tasks, training, and teams in one place."}
-          </p>
-          <div style={{ marginTop: 34, display: 'grid', gap: 14 }}>
-            {features.map((f) => (
-              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14.5, color: 'rgba(255,255,255,0.92)' }}>
-                <span style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(255,255,255,0.16)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                  <Icon name="check" size={15} color="#fff" />
-                </span>
-                {f}
-              </div>
-            ))}
-          </div>
+        <div style={{ position: 'absolute', top: -110, right: -60, width: 260, height: 260, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', bottom: -140, left: -40, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+        <div style={{ position: 'absolute', top: isMobile ? 16 : 22, right: isMobile ? 16 : 26 }}>{langToggle()}</div>
+        {/* the wordmark with "Admin" centred beneath it, as one lockup */}
+        <div style={{ position: 'relative', width: isMobile ? 156 : 196, margin: '0 auto' }}>
+          <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
+               style={{ width: '100%', display: 'block' }} />
+          <h1 style={{ fontSize: isMobile ? 22 : 27, fontWeight: 800, letterSpacing: '-0.02em', marginTop: isMobile ? 18 : 18 }}>
+            {t.loginTitle}
+          </h1>
         </div>
       </div>
-
-      {/* right form panel */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', position: 'relative', overflowY: 'auto' }}>
-        <div style={{ position: 'absolute', top: 24, right: 28 }}>{langToggle(false)}</div>
-        {form}
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: isMobile ? '22px 20px' : '28px 24px' }}>
+        <div style={{ width: '100%', maxWidth: FORM_MAX }}>{form}</div>
       </div>
     </div>
   )

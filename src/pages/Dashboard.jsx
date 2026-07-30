@@ -5,7 +5,7 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -84,10 +84,20 @@ function AdminDashboard({ user }) {
     const myFixesQ = supabase.from('work_board').select('*', { count: 'exact', head: true })
       .eq('assigned_to', user.id).neq('status', 'approved').neq('status', 'completed')
 
+    // Daily tasks carry no due date, so the due_date query below can't see
+    // them. Past the cutoff hour, an unfinished one is late as well. The or()
+    // keeps a daily task with a genuinely past due date from being counted twice.
+    const dailyLateQ = dailyOverdueActive()
+      ? taskBase().eq('category', 'daily')
+          .neq('status', TASK_STATUS.COMPLETED)
+          .neq('status', TASK_STATUS.COMPLETION_REQUESTED)
+          .or(`due_date.is.null,due_date.gte.${today}`)
+      : Promise.resolve({ count: 0 })
+
     const [
       total, pending, inProgress, waiting, done, overdue, pHigh, pMed, pLow,
       bOpen, bProg, bDone, vendors, videos, fireR, chemR, boardOverdue,
-      myTasks, myFixes,
+      myTasks, myFixes, dailyLate,
     ] = await Promise.all([
       taskBase(),
       taskBase().eq('status', TASK_STATUS.PENDING),
@@ -109,6 +119,7 @@ function AdminDashboard({ user }) {
       boardBase().lt('due_date', today).neq('status', 'approved').neq('status', 'completed'),
       myTasksQ,
       myFixesQ,
+      dailyLateQ,
     ])
 
     const cnt = (r) => r.count || 0
@@ -125,7 +136,7 @@ function AdminDashboard({ user }) {
     setD({
       task: {
         total: cnt(total), pending: cnt(pending), inProgress: cnt(inProgress),
-        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue),
+        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue) + cnt(dailyLate),
         priority: { high: cnt(pHigh), medium: cnt(pMed), low: cnt(pLow) },
       },
       board: { open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue) },
@@ -339,6 +350,7 @@ function EmployeeDashboard({ user }) {
         waiting: c((r) => r.status === TASK_STATUS.COMPLETION_REQUESTED),
         done: c((r) => r.status === TASK_STATUS.COMPLETED),
         overdue: c((r) => isTaskOverdue(r, today)),
+        dailyLate: c((r) => r.category === 'daily' && isTaskOverdue(r, today)),
         fixOverdue,
         priorityTasks,
         fixRequests,
@@ -377,7 +389,11 @@ function EmployeeDashboard({ user }) {
       <StatBlock C={C} icon="warning" tone={C.red} title={t.overdue}
                  hint={s.overdue + s.fixOverdue === 0
                    ? (lang === 'hi' ? 'कुछ भी बाकी नहीं — शाबाश' : 'Nothing late — all clear')
-                   : undefined}>
+                   : s.dailyLate > 0
+                     // explain the cutoff, otherwise a task with no due date
+                     // appearing here at 6 PM looks like a bug
+                     ? t.dailyLateAfter.replace('{h}', dailyOverdueLabel())
+                     : undefined}>
         <StatCell C={C} value={s.overdue} label={t.tasks} tone={C.red}
                   onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
         <StatCell C={C} value={s.fixOverdue} label={t.taskBoard} tone={TR_ORANGE}
@@ -455,9 +471,11 @@ function EmployeeDashboard({ user }) {
                     </div>
                     {/* priority badge pinned to the right, next to the chevron */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: pTone, background: tint(pTone, 0.12), padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
-                        {t[FIX_PRIO_LABEL[fix.priority]] || fix.priority}
-                      </span>
+                      {isFlaggedPriority(fix.priority) && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: pTone, background: tint(pTone, 0.12), padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+                          {t[FIX_PRIO_LABEL[fix.priority]] || fix.priority}
+                        </span>
+                      )}
                       <Icon name="chevronRight" size={16} color={C.faint} />
                     </div>
                   </div>

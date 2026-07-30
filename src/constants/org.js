@@ -145,8 +145,37 @@ export const TASK_STATUS = {
 
 export const PRIORITIES = ['low', 'medium', 'high']
 
+// A priority label only earns its space when it changes what someone does.
+// 'normal' is the default on every request, so badging it says nothing and
+// buries the ones that matter. Only high and urgent are labelled.
+export const isFlaggedPriority = (p) => p === 'high' || p === 'urgent'
+
+// A daily task carries no due date — it is simply "for today" — so its lateness
+// cannot come from due_date. It is late once the working day is nearly over and
+// the work still isn't done; the 06:00 reset clears the flag next morning.
+// Move the cutoff by changing this hour (device clock, i.e. IST for our staff).
+export const DAILY_OVERDUE_HOUR = 18
+
+// has today's cutoff passed?
+export const dailyOverdueActive = (now = new Date()) => now.getHours() >= DAILY_OVERDUE_HOUR
+
+// "6 PM" — for the caption, derived from the hour above so the two can't drift
+export function dailyOverdueLabel() {
+  const h12 = DAILY_OVERDUE_HOUR % 12 || 12
+  return `${h12} ${DAILY_OVERDUE_HOUR >= 12 ? 'PM' : 'AM'}`
+}
+
 // A task is overdue when it has a due date in the past and isn't completed yet.
-// Tasks without a due_date are never overdue. `today` is an ISO date (YYYY-MM-DD).
-export function isTaskOverdue(task, today) {
-  return !!task?.due_date && task.due_date < today && task.status !== TASK_STATUS.COMPLETED
+// Dated tasks without a due_date are never overdue; DAILY tasks are the
+// exception and go by the cutoff hour instead. `today` is an ISO date.
+export function isTaskOverdue(task, today, now = new Date()) {
+  if (!task || task.status === TASK_STATUS.COMPLETED) return false
+  if (task.category === 'daily') {
+    // already sent for approval = the staff member did their part on time
+    return task.status !== TASK_STATUS.COMPLETION_REQUESTED
+      && !!dailyOverdueActive(now)
+      // a daily task given an explicit past due date is handled by the rule below
+      && !(task.due_date && task.due_date < today)
+  }
+  return !!task.due_date && task.due_date < today
 }

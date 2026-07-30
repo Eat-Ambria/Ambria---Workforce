@@ -166,12 +166,12 @@ export default function AdminTasks() {
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
   // task-status tabs only — the Issues view is a separate button (see below)
   const tabs = [
+    { key: 'all', label: `${t.all} (${counts.all || 0})` },
     { key: 'overdue', label: `${t.overdue}${c('overdue')}` },
     { key: 'pending', label: `${t.pending}${c('pending')}` },
     { key: 'inprogress', label: `${t.inProgress}${c('inprogress')}` },
     { key: 'completed', label: `${t.completed}${c('completed')}` },
     { key: 'review', label: `${t.reviewQueue}${c('review')}` },
-    { key: 'all', label: `${t.all} (${counts.all || 0})` },
   ]
 
   if (loading) return <Loader label={t.loading} />
@@ -565,7 +565,7 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
           <Field label={t.rejectionNote}>
             <textarea rows={3} style={{ ...inputStyle(C), resize: 'vertical' }} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} autoFocus />
           </Field>
-          <Field label={t.voiceNote}>
+          <Field label={`${t.voiceNote} (${t.optional})`}>
             <VoiceRecorder folder="task-voice" value={rejectVoice} onChange={setRejectVoice} />
           </Field>
         </>

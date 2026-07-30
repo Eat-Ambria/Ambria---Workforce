@@ -15,6 +15,10 @@ import Icon from '../../components/common/Icon'
 
 const AUTO_REFRESH_MS = 30000
 const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
+// empty-state wording per category chip, so "nothing here" says WHAT is missing
+const EMPTY_KEY = {
+  all: 'noTaskYet', daily: 'noDailyTaskYet', weekly: 'noWeeklyTaskYet', monthly: 'noMonthlyTaskYet',
+}
 
 const metaLine = (C) => ({ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: C.tl, marginTop: 2 })
 
@@ -134,6 +138,12 @@ export default function MyTasks() {
     return rows
   }, [tasks, cat, status, issueStatus, today])
 
+  // Nothing to show: say whether this category is genuinely empty or whether a
+  // status filter is hiding rows that do exist in it.
+  const hiddenByFilter = (status !== 'all' || issueStatus !== 'all')
+    && (cat === 'all' ? tasks : tasks.filter((x) => x.category === cat)).length > 0
+  const emptyTitle = hiddenByFilter ? t.noTaskForFilter : (t[EMPTY_KEY[cat]] || t.noData)
+
   // normal task-lifecycle statuses (left dropdown)
   const statusChips = [
     { key: 'all', label: t.all },
@@ -206,7 +216,7 @@ export default function MyTasks() {
       {loading ? (
         <Loader label={t.loading} />
       ) : sorted.length === 0 ? (
-        <EmptyState icon={null} title={t.noData} />
+        <EmptyState icon={null} title={emptyTitle} hint={hiddenByFilter ? t.tryClearFilters : undefined} />
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {sorted.map((task) => (

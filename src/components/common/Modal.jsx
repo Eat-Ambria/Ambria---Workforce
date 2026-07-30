@@ -71,7 +71,9 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
           </button>
         </div>
 
-        <div className="no-scrollbar" style={{ padding: 18, overflowY: 'auto', flex: 1 }}>
+        {/* scrollbar left visible on purpose: tall forms (repair request, new
+            user) overflow, and a hidden bar makes them look truncated */}
+        <div className="modal-scroll" style={{ padding: 18, overflowY: 'auto', flex: 1, overscrollBehavior: 'contain' }}>
           {children}
         </div>
 
