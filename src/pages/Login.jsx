@@ -126,7 +126,7 @@ export default function Login() {
           {/* the Ambria wordmark sits straight on the gradient (transparent PNG) */}
           <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
                style={{ width: 168, display: 'block', margin: '0 auto' }} />
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 22 }}>{t.appName}</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 22 }}>{t.loginTitle}</h1>
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '24px 20px' }}>
           <div style={{ width: '100%', maxWidth: 400 }}>{form}</div>
@@ -144,9 +144,13 @@ export default function Login() {
         <div style={{ position: 'absolute', top: -80, right: -80, width: 260, height: 260, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
         <div style={{ position: 'absolute', bottom: -100, left: -60, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
         <div style={{ position: 'relative' }}>
-          <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
-               style={{ width: 210, display: 'block' }} />
-          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 26 }}>{t.appName}</h1>
+          <div style={{ width: 210 }}>
+            <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"
+                 style={{ width: 210, display: 'block' }} />
+            <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 26, textAlign: 'center' }}>
+              {t.loginTitle}
+            </h1>
+          </div>
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', marginTop: 10, maxWidth: 360, lineHeight: 1.55 }}>
             {hi ? 'Ambria के वेन्यू के लिए वर्कफोर्स मैनेजमेंट — टास्क, ट्रेनिंग और टीम, सब एक जगह।' : "Workforce management for Ambria's venues — tasks, training, and teams in one place."}
           </p>

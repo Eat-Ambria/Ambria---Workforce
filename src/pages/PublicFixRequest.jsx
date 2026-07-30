@@ -115,7 +115,12 @@ export default function PublicFixRequest() {
       {/* brand header band */}
       <div style={{ width: '100%', background: gradient, color: '#fff', padding: '30px 20px 26px', position: 'relative', textAlign: 'center' }}>
         <div style={{ position: 'absolute', top: 16, right: 16 }}>{langToggle}</div>
-        <div style={{ width: 50, height: 50, margin: '0 auto', borderRadius: 15, background: '#fff', color: C.maroon, display: 'grid', placeItems: 'center', fontSize: 26, fontWeight: 700, fontFamily: 'Georgia, serif', boxShadow: C.shadowLg }}>A</div>
+        {/* the wordmark sits straight on the gradient (transparent PNG) */}
+        <img
+          src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`}
+          alt="Ambria"
+          style={{ width: 150, display: 'block', margin: '0 auto' }}
+        />
         <h1 style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 10 }}>
           {hi ? 'मरम्मत अनुरोध' : 'Repair Requests'}
         </h1>
