@@ -8,6 +8,7 @@ import { Card, Loader, EmptyState, Badge, Button, Field, inputStyle } from '../.
 import Modal from '../../../components/common/Modal'
 import MultiSelect from '../../../components/common/MultiSelect'
 import Icon from '../../../components/common/Icon'
+import { useConfirm } from '../../../components/common/ConfirmDialog'
 
 const DAY = 86400000
 const daysUntil = (d) => Math.ceil((new Date(d) - new Date(todayISO())) / DAY)
@@ -36,6 +37,7 @@ function inspectStatus(e) {
 }
 
 export default function FireSafety() {
+  const confirm = useConfirm()
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -56,10 +58,13 @@ export default function FireSafety() {
 
   // permanently remove a cylinder from the register
   const removeExt = useCallback(async (e) => {
-    if (!window.confirm(`Delete this cylinder — ${e.location}${e.capacity ? ` (${e.capacity})` : ''}? This cannot be undone.`)) return
+    if (!(await confirm({
+      message: t.deleteCylinderConfirm,
+      detail: `${e.location}${e.capacity ? ` · ${e.capacity}` : ''}`,
+    }))) return
     await supabase.from('fire_extinguishers').delete().eq('id', e.id)
     load()
-  }, [load])
+  }, [load, confirm, t])
 
   // only show properties that actually have extinguishers, as filter options
   const propOptions = useMemo(() => {

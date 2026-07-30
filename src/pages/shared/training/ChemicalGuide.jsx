@@ -8,6 +8,7 @@ import { colors } from '../../../constants/colors'
 import { Card, Button, Field, inputStyle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import Icon from '../../../components/common/Icon'
+import { useConfirm } from '../../../components/common/ConfirmDialog'
 
 // Per-property specs used by the sqft-based calculator.
 const PROP_SPECS = {
@@ -466,6 +467,7 @@ export default function ChemicalGuide({ visibleProps }) {
 // product name like "K2 Hard Surface Cleaner (Kleanfix)" is a brand string, and
 // machine translation would mangle it.
 function ProductModal({ record, sectionList, onClose, onSaved }) {
+  const confirm = useConfirm()
   const C = useColors()
   const t = useT()
   const NEW = '__new__'
@@ -520,7 +522,7 @@ function ProductModal({ record, sectionList, onClose, onSaved }) {
 
   // soft delete, so a removed product can be restored from the table
   async function remove() {
-    if (!window.confirm(t.deleteProductConfirm)) return
+    if (!(await confirm({ message: t.deleteProductConfirm, confirmLabel: t.remove }))) return
     setBusy(true); setErr('')
     const { error } = await supabase.from('chemical_products').update({ is_active: false }).eq('id', record.id)
     setBusy(false)

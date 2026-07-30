@@ -7,6 +7,7 @@ import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { LangProvider } from './context/LangContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { ConfirmProvider } from './components/common/ConfirmDialog.jsx'
 import './index.css'
 
 // Register service worker — auto-updates in background, prompts nothing
@@ -22,7 +23,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ThemeProvider>
           <LangProvider>
             <AuthProvider>
-              <App />
+              <ConfirmProvider>
+                <App />
+              </ConfirmProvider>
             </AuthProvider>
           </LangProvider>
         </ThemeProvider>

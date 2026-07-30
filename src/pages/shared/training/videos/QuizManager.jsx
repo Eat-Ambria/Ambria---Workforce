@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { transliterateToHindi, translateToHindi } from '../../../../lib/translate'
 import { useColors } from '../../../../context/ThemeContext'
@@ -28,6 +28,7 @@ export default function QuizManager({ video, onClose }) {
   const [mode, setMode] = useState('translit')   // 'translit' = Hinglish→Hindi (sound), 'translate' = English→Hindi (meaning)
   const [translating, setTranslating] = useState(false)
   const [tErr, setTErr] = useState(false)
+  const [adding, setAdding] = useState(true)   // is the question form open?
 
   const setEn = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const setHi = (k) => (e) => { setForm((f) => ({ ...f, [k]: e.target.value })); setAutoHi(false) }
@@ -36,6 +37,13 @@ export default function QuizManager({ video, onClose }) {
     const { data } = await supabase.from('training_quizzes').select('*').eq('video_id', video.id).order('id')
     setQuestions(data || [])
   }, [video.id])
+  // a video that already has questions opens on the list, not on a blank form
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (questions === null || openedRef.current) return
+    openedRef.current = true
+    setAdding(questions.length === 0)
+  }, [questions])
   useEffect(() => { load() }, [load])
 
   // debounced English -> Hindi for question + all four options
@@ -64,7 +72,12 @@ export default function QuizManager({ video, onClose }) {
     return () => { clearTimeout(id); ctrl.abort() }
   }, [form.question, form.option_a, form.option_b, form.option_c, form.option_d, autoHi, mode])
 
-  async function addQuestion() {
+  function startAdding() {
+    setForm(BLANK); setAutoHi(true); setTErr(false); setErr('')
+    setAdding(true)
+  }
+
+  async function submitQuestion() {
     if (!form.question.trim() || OPTS.some((o) => !form[`option_${o}`].trim())) { setErr(`${t.question} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const { error } = await supabase.from('training_quizzes').insert({
@@ -80,6 +93,7 @@ export default function QuizManager({ video, onClose }) {
     setBusy(false)
     if (error) { setErr(error.message); return }
     setForm(BLANK); setAutoHi(true); setTErr(false)
+    setAdding(false)          // show it in the list; "Add question" starts the next
     load()
   }
 
@@ -89,13 +103,31 @@ export default function QuizManager({ video, onClose }) {
   }
 
   return (
-    <Modal open onClose={onClose} title={`Assessment — ${video.topic}`} footer={<Button variant="ghost" onClick={onClose} full>{t.close}</Button>}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`${t.assessment} — ${video.topic}`}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
+          {adding ? (
+            <Button variant="primary" onClick={submitQuestion} disabled={busy} style={{ flex: 2 }}>
+              {busy ? <Spinner size={16} color="#fff" /> : null} {t.submit}
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={startAdding} style={{ flex: 2 }}>
+              <Icon name="plus" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.addQuestion}
+            </Button>
+          )}
+        </>
+      )}
+    >
       {questions === null ? <Loader /> : (
         <>
           {/* previous questions */}
           {questions.length > 0 ? (
             <div style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.tl }}>{questions.length} question{questions.length > 1 ? 's' : ''} so far</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.tl }}>{questions.length} {questions.length > 1 ? t.questions : t.question}</div>
               {questions.map((q, i) => (
                 <div key={q.id} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -117,10 +149,11 @@ export default function QuizManager({ video, onClose }) {
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: 13, color: C.tl, marginBottom: 16 }}>No questions yet. Add the first one below.</div>
+            <div style={{ fontSize: 13, color: C.tl, marginBottom: 16 }}>{t.noQuestionsYet}</div>
           )}
 
-          {/* add a new question */}
+          {/* add a new question — footer Submit saves it */}
+          {adding && (
           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{t.addQuestion}</div>
@@ -179,11 +212,9 @@ export default function QuizManager({ video, onClose }) {
               </Field>
             </div>
 
-            {err && <div style={{ color: C.red, fontSize: 13, marginBottom: 8 }}>{err}</div>}
-            <Button variant="primary" onClick={addQuestion} disabled={busy} full>
-              <Icon name="plus" size={16} color="#fff" style={{ marginRight: 4 }} /> Add Question
-            </Button>
+            {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
           </div>
+          )}
         </>
       )}
     </Modal>

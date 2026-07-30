@@ -14,6 +14,7 @@ import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
+import { useConfirm } from '../../components/common/ConfirmDialog'
 import VoiceRecorder from '../../components/common/VoiceRecorder'
 import { deleteStorageFile } from '../../lib/storage'
 import { translateToHindi } from '../../lib/translate'
@@ -394,6 +395,7 @@ function PhotoCol({ C, label, photos }) {
 }
 
 function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
+  const confirm = useConfirm()
   const C = useColors()
   const t = useT()
   const [busy, setBusy] = useState(false)
@@ -439,7 +441,7 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
     const warn = (task.issue_status && task.issue_status !== TASK_STATUS.ISSUE_RESOLVED)
       ? t.deleteTaskWarnIssue
       : t.deleteTaskConfirm
-    if (!window.confirm(warn)) return
+    if (!(await confirm({ message: warn, confirmLabel: t.delete }))) return
     setBusy(true); setErr('')
     const voiceUrl = task.rejection_voice_url
     const { error } = await supabase.from('tasks').delete().eq('id', task.id)

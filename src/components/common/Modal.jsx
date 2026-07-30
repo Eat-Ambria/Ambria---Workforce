@@ -1,21 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+
+// Modals can stack — a confirm dialog opens on top of the form that raised it.
+// A shared stack keeps the two from fighting: only the topmost closes on Escape,
+// and the body scroll lock is released by the last one to unmount, not the first.
+const stack = []
 
 export default function Modal({ open, onClose, title, children, footer, maxWidth = 480 }) {
   const C = useColors()
   const t = useT()
   const isMobile = useIsMobile()
 
+  const idRef = useRef({})
   useEffect(() => {
     if (!open) return
-    const onKey = (e) => e.key === 'Escape' && onClose?.()
+    const me = idRef.current
+    stack.push(me)
+    // ignore Escape unless this is the frontmost modal
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      if (stack[stack.length - 1] !== me) return
+      onClose?.()
+    }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
+      const i = stack.indexOf(me)
+      if (i > -1) stack.splice(i, 1)
+      if (stack.length === 0) document.body.style.overflow = ''
     }
   }, [open, onClose])
 
@@ -32,7 +47,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         display: 'flex',
         alignItems: isMobile ? 'flex-end' : 'center',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: 1000 + stack.length,
         padding: isMobile ? 0 : 20,
       }}
     >

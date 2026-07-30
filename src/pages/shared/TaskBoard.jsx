@@ -13,6 +13,7 @@ import PhotoCapture from '../../components/common/PhotoCapture'
 import AudioPlayer from '../../components/common/AudioPlayer'
 import VoiceRecorder from '../../components/common/VoiceRecorder'
 import Icon from '../../components/common/Icon'
+import { useConfirm } from '../../components/common/ConfirmDialog'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 // The Completed tab only shows recent work by default — finished repairs pile
@@ -474,6 +475,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
 }
 
 function DetailModal({ row, user, admin, members, onClose, onSaved }) {
+  const confirm = useConfirm()
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -528,7 +530,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   // admins can permanently delete a completed request to clear it out
   async function del() {
-    if (!window.confirm(t.deleteRequestConfirm || 'Delete this request permanently?')) return
+    if (!(await confirm({ message: t.deleteRequestConfirm }))) return
     setBusy(true); setErr('')
     const { error } = await supabase.from('work_board').delete().eq('id', row.id)
     setBusy(false)

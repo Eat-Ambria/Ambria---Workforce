@@ -8,6 +8,7 @@ import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
 import { isAdminRole, DEPARTMENTS, DEPARTMENT_MAP, scopedDepartment, deptName } from '../../../constants/org'
 import { Card, Loader, EmptyState, ProgressBar, Button } from '../../../components/common/UI'
+import { useConfirm } from '../../../components/common/ConfirmDialog'
 import Icon from '../../../components/common/Icon'
 import PlayerModal from './videos/PlayerModal'
 import VideoForm from './videos/VideoForm'
@@ -36,6 +37,7 @@ function deadlineChip(deadline, done, C, lang) {
 }
 
 export default function Videos() {
+  const confirm = useConfirm()
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -159,7 +161,7 @@ export default function Videos() {
   )
 
   async function deleteVideo(v) {
-    if (!window.confirm(`Remove "${v.topic}" from training? Staff will no longer see it.`)) return
+    if (!(await confirm({ message: t.deleteVideoConfirm, detail: v.topic, confirmLabel: t.remove }))) return
     await supabase.from('training_videos').update({ is_active: false }).eq('id', v.id)
     load()
   }

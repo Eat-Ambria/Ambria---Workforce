@@ -8,6 +8,7 @@ import { PROPERTIES, PROPERTY_MAP, propName, unitName, isAdminRole, canSeeAllPro
 import { Card, Loader, EmptyState, Button, Field, inputStyle, SectionTitle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import Icon from '../../../components/common/Icon'
+import { useConfirm } from '../../../components/common/ConfirmDialog'
 import { translateToHindi } from '../../../lib/translate'
 import ChemicalGuide from './ChemicalGuide'
 
@@ -202,6 +203,7 @@ function Chip({ children, active, onClick, C }) {
 }
 
 function LogModal({ user, record, canDelete, properties, defaultProperty, onClose, onSaved }) {
+  const confirm = useConfirm()
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -275,7 +277,7 @@ function LogModal({ user, record, canDelete, properties, defaultProperty, onClos
   }
 
   async function del() {
-    if (!window.confirm(t.deleteLogConfirm)) return
+    if (!(await confirm({ message: t.deleteLogConfirm }))) return
     setBusy(true); setErr('')
     const { error } = await supabase.from('chemical_usage').delete().eq('id', record.id)
     setBusy(false)

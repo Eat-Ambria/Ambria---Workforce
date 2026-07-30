@@ -9,6 +9,7 @@ import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMa
 import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, inputStyle, Spinner } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
+import { useConfirm } from '../../components/common/ConfirmDialog'
 import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE } from '../../lib/lms'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -265,6 +266,7 @@ export default function Valet() {
 
 /* ------------------------------- day view ------------------------------- */
 function DayModal({ C, t, date, list, lmsList = [], lmsError = '', scopeAll, matrix, visibleProps, monthBookings, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
 
   // one booking per property per day: only offer "New Booking" while at least
@@ -274,7 +276,7 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', scopeAll, mat
   const isPast = date < todayISO() // past dates: view/delete only, no new bookings
 
   async function del(id) {
-    if (!window.confirm(t.deleteBookingConfirm)) return
+    if (!(await confirm({ message: t.deleteBookingConfirm }))) return
     setBusy(true)
     await supabase.from('valet_bookings').delete().eq('id', id)
     setBusy(false)
@@ -754,15 +756,17 @@ function exportBookingsPdf(sections) {
     </body></html>`
 
   const w = window.open('', '_blank')
-  if (!w) { window.alert('Please allow pop-ups to export the PDF.'); return }
+  if (!w) return false   // caller shows the in-app notice
   w.document.write(html)
   w.document.close()
   w.focus()
   setTimeout(() => w.print(), 400)
+  return true
 }
 
 /* --------------------- all valet bookings (list view) --------------------- */
 function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
+  const confirm = useConfirm()
   const [rows, setRows] = useState(null)
   const [propFilter, setPropFilter] = useState('all')
 
@@ -781,7 +785,7 @@ function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
   )
 
   async function del(id) {
-    if (!window.confirm(t.deleteBookingConfirm)) return
+    if (!(await confirm({ message: t.deleteBookingConfirm }))) return
     await supabase.from('valet_bookings').delete().eq('id', id)
     load()
   }
@@ -832,7 +836,9 @@ function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
       byDate[b.event_date].push(b)
     })
     const sections = days.slice(0, 7).map((d) => ({ date: d, items: byDate[d] }))
-    if (sections.length) exportBookingsPdf(sections)
+    if (sections.length && !exportBookingsPdf(sections)) {
+      confirm({ message: t.popupBlocked, danger: false, hideCancel: true, confirmLabel: t.ok })
+    }
   }
 
   return (
