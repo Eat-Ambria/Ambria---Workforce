@@ -6,6 +6,7 @@ import { useLang } from '../context/LangContext'
 import { PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs } from '../components/common/UI'
 import PhotoCapture from '../components/common/PhotoCapture'
+import VoiceRecorder from '../components/common/VoiceRecorder'
 import Icon from '../components/common/Icon'
 import PoweredBy from '../components/common/PoweredBy'
 
@@ -251,6 +252,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   const lang = hi ? 'hi' : 'en'
   const [form, setForm] = useState({ name: '', phone: '', property: 'pp', location: '', issue: '' })
   const [photos, setPhotos] = useState([])
+  const [voice, setVoice] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
@@ -259,7 +261,8 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   // phone: keep digits only, never longer than 10
   const setPhone = (e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))
 
-  const canSubmit = !!form.name.trim() && form.phone.length === 10 && !!form.issue.trim() && !busy
+  // a voice note counts as describing the problem, so typing is not required
+  const canSubmit = !!form.name.trim() && form.phone.length === 10 && (!!form.issue.trim() || !!voice) && !busy
 
   async function onSubmit(e) {
     e.preventDefault()
@@ -287,6 +290,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       posted_by_name: `${form.name.trim()} · ${hi ? 'बाहरी' : 'External'}`,
       priority: 'normal',
       photos,
+      voice_url: voice || null,
       status: 'open',
     }).select('id').single()
 
@@ -368,6 +372,11 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'समस्या बताएँ' : 'Describe the issue'} <span style={{ color: C.red }}>*</span></label>
         <textarea rows={4} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.issue} onChange={set('issue')} placeholder={hi ? 'क्या ठीक करना है?' : 'What needs to be fixed?'} />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={fieldLabel}>{hi ? 'या बोलकर बताएँ (वैकल्पिक)' : 'Or record it instead (optional)'}</label>
+        <VoiceRecorder folder="work-voice" value={voice} onChange={setVoice} />
       </div>
 
       <div style={{ marginBottom: 18 }}>

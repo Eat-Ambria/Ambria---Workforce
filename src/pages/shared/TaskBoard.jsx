@@ -10,6 +10,8 @@ import { assigneesQuery } from '../../lib/assignees'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
+import AudioPlayer from '../../components/common/AudioPlayer'
+import VoiceRecorder from '../../components/common/VoiceRecorder'
 import Icon from '../../components/common/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 
@@ -378,6 +380,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     dept: '',
   })
   const [photos, setPhotos] = useState([])
+  const [voice, setVoice] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [fieldErr, setFieldErr] = useState({}) // per-field validation shown inline
@@ -427,6 +430,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       assigned_to: null,
       assigned_to_name: null,
       photos,
+      voice_url: voice || null,
       status: 'open',
     })
     setBusy(false)
@@ -439,6 +443,9 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       footer={<><Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button><Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.submit}</Button></>}>
       <Field label={t.title} required error={fieldErr.title}><input ref={titleRef} style={inputStyle(C)} value={form.title} onChange={set('title')} /></Field>
       <Field label={`${t.description} (${t.optional})`}><textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.description} onChange={set('description')} /></Field>
+      <Field label={`${t.voiceNote} (${t.optional})`} hint={t.voiceInsteadHint}>
+        <VoiceRecorder folder="work-voice" value={voice} onChange={setVoice} />
+      </Field>
       {superAdmin && (
         <Field label={t.properties || 'Property'}>
           <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
@@ -620,6 +627,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       </div>
 
       {row.description && <p style={{ fontSize: 14, color: C.tl, marginBottom: 12 }}>{row.description}</p>}
+      {row.voice_url && (
+        <div style={{ marginBottom: 12 }}>
+          <AudioPlayer src={row.voice_url} label={t.voiceNote} />
+        </div>
+      )}
       <div style={{ fontSize: 13, color: C.tl, marginBottom: 12 }}>{row.posted_by_name} · {fmtDateTime(row.created_at)}</div>
 
       {postedPhotos.length > 0 && (
