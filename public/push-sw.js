@@ -11,7 +11,7 @@ self.addEventListener('push', (event) => {
   } catch (e) {
     data = { title: 'Ambria WorkForce', body: event.data ? event.data.text() : '' }
   }
-  const title = data.title || 'Ambria WorkForce'
+  const title = data.title || 'Ambria Admin'
   const options = {
     body: data.body || '',
     icon: data.icon || ICON,
