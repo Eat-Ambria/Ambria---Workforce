@@ -5,6 +5,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
+import { typedPhone } from '../../lib/phone'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
 import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, inputStyle, Spinner } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -242,7 +243,7 @@ export default function Valet() {
         <DayModal
           C={C} t={t} date={selectedDate} scopeAll={scopeAll} matrix={matrix}
           list={byDate[selectedDate] || []}
-          lmsList={lmsByDate[selectedDate] || []} lmsError={lmsError}
+          lmsList={lmsByDate[selectedDate] || []} lmsError={lmsError} lmsCount={lms.length}
           visibleProps={visibleProps} monthBookings={bookings}
           onClose={() => setSelectedDate(null)}
           onAdd={() => openCreate(selectedDate)}
@@ -265,7 +266,8 @@ export default function Valet() {
 }
 
 /* ------------------------------- day view ------------------------------- */
-function DayModal({ C, t, date, list, lmsList = [], lmsError = '', scopeAll, matrix, visibleProps, monthBookings, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
+function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, scopeAll, matrix, visibleProps, monthBookings, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
+  const { lang } = useLang()
   const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
 
@@ -308,13 +310,13 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', scopeAll, mat
       )}
 
       {/* confirmed venue events + contract details from the LMS for this date */}
-      <LmsVenuePanel C={C} t={t} date={date} list={lmsList} error={lmsError} isPast={isPast} onCreateFrom={onCreateFrom} />
+      <LmsVenuePanel C={C} t={t} date={date} list={lmsList} error={lmsError} isPast={isPast} loadedCount={lmsCount} onCreateFrom={onCreateFrom} />
     </Modal>
   )
 }
 
 /* ---- LMS confirmed venue events + contract details for one date ---- */
-function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, onCreateFrom }) {
+function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, loadedCount, onCreateFrom }) {
   // build a valet-booking prefill from an LMS venue event
   const prefillFrom = (c) => ({
     property: PROP_BY_LMS_VENUE[Number(c.venueId)] || undefined,
@@ -337,7 +339,14 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, onCr
           {error}. Make sure the <b>lms-proxy</b> function is deployed.
         </div>
       ) : list.length === 0 ? (
-        <div style={{ fontSize: 13, color: C.tl }}>No confirmed venue events (LMS) on this date.</div>
+        <div>
+          <div style={{ fontSize: 13, color: C.tl }}>{t.noLmsEvents}</div>
+          {typeof loadedCount === 'number' && loadedCount > 0 && (
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5, lineHeight: 1.45 }}>
+              {t.lmsLoadedNote.replace('{n}', loadedCount)}
+            </div>
+          )}
+        </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {list.map((c) => (
@@ -532,7 +541,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
     if (dateChanged && form.event_date < minDate) { setErr('Bookings cannot be made for past dates'); return }
     if (form.event_date > maxDate) { setErr('Bookings can only be made up to one year ahead'); return }
     if (overGuestLimit(form.guests)) { setErr(t.guestLimitExceeded); return }
-    if (!/^\d{10}$/.test(form.phone)) { setErr('Enter a valid 10-digit phone number'); return }
+    if (!/^\d{10}$/.test(form.phone)) { setErr(t.phoneRule); return }
     setBusy(true); setErr('')
 
     // one booking per property per day (ignore the booking being edited)
@@ -635,8 +644,8 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
           maxLength={10}
           style={inputStyle(C)}
           value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-          placeholder="10-digit number"
+          onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))}
+          placeholder={t.phonePlaceholder}
         />
       </Field>
 
@@ -705,7 +714,7 @@ const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 
 // Build a printable page of the given date-grouped bookings and open the browser
 // print dialog (user picks "Save as PDF"). No external library needed.
-function exportBookingsPdf(sections) {
+function exportBookingsPdf(sections, lang) {
   const genDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const body = sections.map((sec) => {
     const rows = sec.items.map((b) => `
@@ -749,7 +758,7 @@ function exportBookingsPdf(sections) {
         <button class="print" onclick="window.print()">Print / Save PDF</button>
       </div>
       <div class="head">
-        <h1>Workforce — Valet Bookings</h1>
+        <h1>Ambria Admin — Valet Bookings</h1>
         <p>Next ${sections.length} booking day(s) from today · Generated ${escapeHtml(genDate)}</p>
       </div>
       ${body}
@@ -836,7 +845,7 @@ function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
       byDate[b.event_date].push(b)
     })
     const sections = days.slice(0, 7).map((d) => ({ date: d, items: byDate[d] }))
-    if (sections.length && !exportBookingsPdf(sections)) {
+    if (sections.length && !exportBookingsPdf(sections, lang)) {
       confirm({ message: t.popupBlocked, danger: false, hideCancel: true, confirmLabel: t.ok })
     }
   }

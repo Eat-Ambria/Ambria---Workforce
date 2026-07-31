@@ -11,6 +11,18 @@ export function normalizePhone(raw) {
   return d
 }
 
+// Keep a phone box numeric while it is being typed. Letters and punctuation are
+// dropped outright; a pasted +91 / 0-prefixed number collapses to the 10-digit
+// local number rather than being truncated into a different number.
+export function typedPhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '').slice(0, 12)
+  if (d.length > 10) d = normalizePhone(d)
+  return d.slice(0, 10)
+}
+
+// A phone is only usable as a login identifier at full length.
+export const isValidPhone = (raw) => normalizePhone(raw).length === 10
+
 // True when a typed identifier is "phone-ish" enough to try as a phone login
 // (so short numeric usernames / PINs aren't mistaken for phone numbers).
 export function looksLikePhone(raw) {

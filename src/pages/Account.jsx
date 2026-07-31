@@ -5,7 +5,7 @@ import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
 import { ROLES, PROPERTY_MAP, propName, personName } from '../constants/org'
-import { normalizePhone } from '../lib/phone'
+import { normalizePhone, typedPhone, isValidPhone } from '../lib/phone'
 import { Card, Button, SectionTitle, Field, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
 
@@ -52,6 +52,8 @@ export default function Account() {
     // build only the fields that actually changed (phone stored normalized)
     const patch = {}
     if (phoneChanged) patch.phone = normPhone || null
+
+    if (phone.trim() && !isValidPhone(phone)) { setErr(t.phoneRule); return }
 
     if (pin || pin2) {
       if (!isPin(pin)) { setErr(t.pinRule || 'PIN must be exactly 4 digits'); return }
@@ -134,8 +136,16 @@ export default function Account() {
         <div style={{ borderTop: `1px solid ${C.border}`, margin: '16px 0 14px' }} />
 
         <Field label={t.phoneLoginLabel || 'Phone (you can log in with this)'}>
-          <input style={inputStyle(C)} value={phone} inputMode="tel" autoComplete="tel"
-            onChange={(e) => { setPhone(e.target.value); setOk(false) }} />
+          <input
+            style={inputStyle(C)}
+            value={phone}
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            autoComplete="tel"
+            placeholder={t.phonePlaceholder}
+            onChange={(e) => { setPhone(typedPhone(e.target.value)); setOk(false) }}
+          />
         </Field>
 
         <div style={{ fontSize: 13, fontWeight: 700, color: C.tl, margin: '6px 0 8px' }}>{t.changePin || 'Change PIN'}</div>

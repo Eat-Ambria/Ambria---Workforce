@@ -9,7 +9,7 @@ import {
   ROLES, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, PROPERTY_MAP, propName, deptName, personName,
 } from '../../constants/org'
 import { navForRole, ALWAYS_VISIBLE } from '../../constants/nav'
-import { normalizePhone } from '../../lib/phone'
+import { normalizePhone, typedPhone, isValidPhone } from '../../lib/phone'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import MultiSelect from '../../components/common/MultiSelect'
@@ -308,6 +308,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
   async function save() {
     if (!form.name.trim()) { setErr(`${t.fullName} ${t.isRequired}`); return }
     if (!form.username.trim()) { setErr(`${t.username} ${t.isRequired}`); return }
+    if (form.phone.trim() && !isValidPhone(form.phone)) { setErr(t.phoneRule); return }
     if (!form.password) { setErr(t.pinRule || 'PIN must be exactly 4 digits'); return }
     // enforce a 4-digit PIN whenever it's newly set or changed (existing
     // non-PIN passwords keep working until the admin edits them)
@@ -473,7 +474,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
       </Field>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1 }}><Field label={t.phone}><input style={inputStyle(C)} value={form.phone} onChange={set('phone')} /></Field></div>
+        <div style={{ flex: 1 }}><Field label={t.phone} hint={t.phoneRule}><input style={inputStyle(C)} value={form.phone} type="tel" inputMode="numeric" maxLength={10} placeholder={t.phonePlaceholder} onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))} /></Field></div>
         <div style={{ flex: 1 }}>
           <Field label={t.active}>
             <button

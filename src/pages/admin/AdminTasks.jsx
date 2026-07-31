@@ -471,6 +471,15 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
     // issue lifecycle is independent of task status — only touch issue_status
     if (await update({ issue_status: TASK_STATUS.ISSUE_WORKING })) { await notifyEmployee('issue_working'); onSaved() }
   }
+  // Bin on an issue = remove the issue, keep the task. Used when an issue was
+  // raised by mistake or no longer applies: it clears the flag and the reported
+  // text outright, so it shows in neither Open nor Resolved. The task's own
+  // status is left alone — the two tracks are independent by design.
+  async function clearIssue() {
+    if (!(await confirm({ message: t.removeIssueConfirm, confirmLabel: t.remove }))) return
+    if (await update({ issue_status: null, notes: null, resolved_at: null })) onSaved()
+  }
+
   async function resolveIssue() {
     // resolving the issue returns the task to Pending so the employee can carry
     // on. resolved_at lets the scheduled cleanup clear the issue one day later.
@@ -482,6 +491,8 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
   const isIssue = task.issue_status === TASK_STATUS.ISSUE
   const isIssueWorking = task.issue_status === TASK_STATUS.ISSUE_WORKING
   const isIssueState = isIssue || isIssueWorking || task.issue_status === TASK_STATUS.ISSUE_RESOLVED
+  // while an issue is open the task cannot be deleted — resolve it first
+  const hasOpenIssue = isIssue || isIssueWorking
   // this task is on my own plate: I'm its assignee, not its admin. Approving,
   // sending back, closing the issue and deleting are another admin's call — I
   // do the actual work over in My Tasks. Untouched for everyone else's tasks.
@@ -515,7 +526,14 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
             </>
           )}
           {isIssueWorking && !ownWork && <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>}
-          {!ownWork && (
+          {/* while an issue is open the bin clears the issue; the task is never
+              deleted from here. Once resolved, the bin deletes the task again. */}
+          {!ownWork && hasOpenIssue && (
+            <Button variant="danger" onClick={clearIssue} disabled={busy} title={t.removeIssue} aria-label={t.removeIssue} style={{ flexShrink: 0 }}>
+              <Icon name="trash" size={16} color="#fff" />
+            </Button>
+          )}
+          {!ownWork && !hasOpenIssue && (
             <Button variant="danger" onClick={del} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
               <Icon name="trash" size={16} color="#fff" />
             </Button>
@@ -539,7 +557,9 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
           </div>
           <div style={{ fontSize: 14, color: C.text, marginTop: 6 }}>{task.notes}</div>
           {task.issue_status !== TASK_STATUS.ISSUE_RESOLVED && (
-            <div style={{ fontSize: 11.5, color: C.tl, marginTop: 8 }}>{t.resolveKeepsTask}</div>
+            <div style={{ fontSize: 11.5, color: C.tl, marginTop: 8, lineHeight: 1.5 }}>
+              {t.resolveKeepsTask}<br />{t.cannotDeleteWithIssue}
+            </div>
           )}
         </div>
       )}

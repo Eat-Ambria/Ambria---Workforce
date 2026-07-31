@@ -26,9 +26,12 @@ const FUNCTION_TYPES = {
 }
 const fnType = (v) => (v == null || v === '' ? undefined : (FUNCTION_TYPES[Number(v)] || String(v)))
 
-// call the LMS via the edge-function proxy
-async function lmsCall(path, body = {}) {
-  const { data, error } = await supabase.functions.invoke('lms-proxy', { body: { path, body } })
+// call the LMS via the edge-function proxy.
+// fanout=true asks the proxy to query as every CRM user and merge the results —
+// the endpoint caps each user at their own 10 newest contracts, so this is the
+// only way to see the full diary (see the comment in supabase/functions/lms-proxy).
+async function lmsCall(path, body = {}, fanout = false) {
+  const { data, error } = await supabase.functions.invoke('lms-proxy', { body: { path, body, fanout } })
   if (error) throw new Error(error.message || 'LMS request failed')
   if (data && data.error) throw new Error(data.error)
   return data
@@ -116,7 +119,12 @@ export async function lmsVenueEvents(body = {}) {
 }
 
 // venue contracts — CONFIRMED events with venue/date/time/pax/amount.
-export async function lmsVenueContracts(body = {}) {
-  const res = await lmsCall('/api/v1/processerp_api/get_venue_contract_information_list', body)
-  return asArray(res).map(normContract).filter((c) => !c.cancelled)
+// Merged across CRM users by default; pass { fanout: false } for the raw
+// single-user call (10 rows) when debugging.
+export async function lmsVenueContracts(body = {}, { fanout = true } = {}) {
+  const res = await lmsCall('/api/v1/processerp_api/get_venue_contract_information_list', body, fanout)
+  return asArray(res)
+    .map(normContract)
+    .filter((c) => !c.cancelled)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 }

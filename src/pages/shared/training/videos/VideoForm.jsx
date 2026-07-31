@@ -55,6 +55,7 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
 
   async function save() {
     if (!form.topic.trim()) { setErr(`${t.topicEn} ${t.isRequired}`); return }
+    if (!form.youtube_url.trim()) { setErr(`${t.videoUrl} ${t.isRequired}`); return }
     setBusy(true); setErr('')
     const payload = {
       topic: form.topic.trim(),
@@ -82,7 +83,7 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
         </>
       }
     >
-      <Field label={t.topicEn}><input style={inputStyle(C)} value={form.topic} onChange={set('topic')} placeholder="e.g. Lawn Care & Maintenance" /></Field>
+      <Field label={t.topicEn} required><input style={inputStyle(C)} value={form.topic} onChange={set('topic')} placeholder="e.g. Lawn Care & Maintenance" /></Field>
       <Field label={t.topicHi}>
         <div style={{ position: 'relative' }}>
           <input
@@ -114,12 +115,12 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
           </Field>
         </div>
         <div style={{ flex: 1 }}>
-          <Field label={`Deadline (${t.optional})`}>
+          <Field label={`${t.deadline} (${t.optional})`}>
             <input type="date" style={inputStyle(C)} value={form.deadline || ''} onChange={set('deadline')} />
           </Field>
         </div>
       </div>
-      <Field label={t.videoUrl} hint="Paste a YouTube link OR an embed URL (iframe src). YouTube links auto-show a thumbnail; other embeds play inline.">
+      <Field label={t.videoUrl} required hint="Paste a YouTube link OR an embed URL (iframe src). YouTube links auto-show a thumbnail; other embeds play inline.">
         <input style={inputStyle(C)} value={form.youtube_url} onChange={set('youtube_url')} placeholder="https://www.youtube.com/embed/…  or  https://…/embed/…" />
       </Field>
       {ytId ? (

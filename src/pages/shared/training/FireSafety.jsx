@@ -3,7 +3,8 @@ import { supabase } from '../../../lib/supabase'
 import { todayISO, fmtDate } from '../../../lib/time'
 import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
-import { PROPERTY_MAP, propName, PROPERTIES } from '../../../constants/org'
+import { useAuth } from '../../../context/AuthContext'
+import { PROPERTY_MAP, propName, PROPERTIES, scopedProperty } from '../../../constants/org'
 import { Card, Loader, EmptyState, Badge, Button, Field, inputStyle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import MultiSelect from '../../../components/common/MultiSelect'
@@ -47,12 +48,18 @@ export default function FireSafety() {
   const [adding, setAdding] = useState(false)  // add-cylinder modal open
   const [editing, setEditing] = useState(null) // cylinder open for editing
   const [propSel, setPropSel] = useState([])   // property filter (multi-select)
+  const { user } = useAuth()
+  const propScope = scopedProperty(user)       // null = may see every venue
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('fire_extinguishers').select('*').order('expiry_date')
+    let q = supabase.from('fire_extinguishers').select('*').order('expiry_date')
+    // null for the Super Admin and the named all-venue admins; everyone else is
+    // pinned to their own venue
+    if (propScope) q = q.eq('property', propScope)
+    const { data } = await q
     setRows(data || [])
     setLoading(false)
-  }, [])
+  }, [propScope])
 
   useEffect(() => { load() }, [load])
 
@@ -83,11 +90,13 @@ export default function FireSafety() {
     <div>
       {/* property filter + add cylinder */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ width: 260, maxWidth: '100%' }}>
-          <MultiSelect C={C} placeholder={t.properties || 'All properties'} options={propOptions} selected={propSel} onChange={setPropSel} />
-        </div>
+        {!propScope && (
+          <div style={{ width: 260, maxWidth: '100%' }}>
+            <MultiSelect C={C} placeholder={t.properties || 'All properties'} options={propOptions} selected={propSel} onChange={setPropSel} />
+          </div>
+        )}
         <Button variant="primary" onClick={() => setAdding(true)} style={{ marginLeft: 'auto' }}>
-          <Icon name="plus" size={16} color="#fff" style={{ marginRight: 4 }} /> Add cylinder
+          <Icon name="plus" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.addCylinder}
         </Button>
       </div>
 
@@ -146,6 +155,7 @@ export default function FireSafety() {
       {(adding || editing) && (
         <AddModal
           record={editing}
+          propScope={propScope}
           onClose={() => { setAdding(false); setEditing(null) }}
           onSaved={() => { setAdding(false); setEditing(null); load() }}
         />
@@ -155,12 +165,12 @@ export default function FireSafety() {
 }
 
 // Admin registers a new cylinder: property, location, type, size (kg) + expiry.
-function AddModal({ record, onClose, onSaved }) {
+function AddModal({ record, propScope, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
   const [form, setForm] = useState({
-    property: record?.property || PROPERTIES[0].code,
+    property: record?.property || propScope || PROPERTIES[0].code,
     location: record?.location || '',
     location_hi: record?.location_hi || '',
     type: record?.type || TYPE_OPTIONS[0],
@@ -207,11 +217,20 @@ function AddModal({ record, onClose, onSaved }) {
         </>
       }
     >
-      <Field label={t.properties}>
-        <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
-          {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
-        </select>
-      </Field>
+      {/* a venue-locked admin has exactly one choice — show it, don't offer it */}
+      {propScope ? (
+        <Field label={t.propertyLabel}>
+          <div style={{ ...inputStyle(C), display: 'flex', alignItems: 'center', color: C.tl, background: C.cardAlt }}>
+            {propName(propScope, lang)}
+          </div>
+        </Field>
+      ) : (
+        <Field label={t.propertyLabel}>
+          <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
+            {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+          </select>
+        </Field>
+      )}
       <Field label={t.location}>
         <input style={inputStyle(C)} value={form.location} onChange={set('location')} placeholder={t.cylinderLocationEg} />
       </Field>

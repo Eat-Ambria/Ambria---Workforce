@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { useColors } from '../../../context/ThemeContext'
 import { useLang, useT } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
-import { isAdminRole } from '../../../constants/org'
+import { isAdminRole, propName } from '../../../constants/org'
 import { colors } from '../../../constants/colors'
 import { Card, Button, Field, inputStyle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
@@ -239,6 +239,8 @@ export default function ChemicalGuide({ visibleProps }) {
   const [view, setView] = useState('calc') // 'calc' | 'guide'
   const [selectedProp, setSelectedProp] = useState(propKeys[0] || 'pp')
   const [openAreas, setOpenAreas] = useState({ 0: true })
+  // staff are tied to one venue — there is no choice to offer them
+  const onlyProp = propKeys.length <= 1
 
   // The guide lives in `chemical_products` so admins can edit it. If that table
   // isn't there yet (migration not run) we fall back to the built-in list, so
@@ -308,26 +310,29 @@ export default function ChemicalGuide({ visibleProps }) {
           {/* Property selector + specs */}
           <Card style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>
-              <Icon name="pin" size={16} color={C.maroon} /> {lang === 'hi' ? 'प्रॉपर्टी चुनें' : 'Select Property'}
+              <Icon name="pin" size={16} color={C.maroon} />
+              {onlyProp ? propName(selectedProp, lang) : (lang === 'hi' ? 'प्रॉपर्टी चुनें' : 'Select Property')}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(propKeys.length, 4)}, 1fr)`, gap: 8, marginBottom: 12 }}>
-              {propKeys.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setSelectedProp(k)}
-                  style={{
-                    padding: '14px 8px', borderRadius: 12, cursor: 'pointer',
-                    border: `2px solid ${selectedProp === k ? C.maroon : C.border}`,
-                    background: selectedProp === k ? C.maroonSoft : C.card,
-                    color: selectedProp === k ? C.maroon : C.text,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                  }}
-                >
-                  <Icon name="flask" size={20} color={selectedProp === k ? C.maroon : C.tl} />
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>{PROP_SPECS[k].label}</span>
-                </button>
-              ))}
-            </div>
+            {!onlyProp && (
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(propKeys.length, 4)}, 1fr)`, gap: 8, marginBottom: 12 }}>
+                {propKeys.map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => setSelectedProp(k)}
+                    style={{
+                      padding: '14px 8px', borderRadius: 12, cursor: 'pointer',
+                      border: `2px solid ${selectedProp === k ? C.maroon : C.border}`,
+                      background: selectedProp === k ? C.maroonSoft : C.card,
+                      color: selectedProp === k ? C.maroon : C.text,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <Icon name="flask" size={20} color={selectedProp === k ? C.maroon : C.tl} />
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{propName(k, lang)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
               {[

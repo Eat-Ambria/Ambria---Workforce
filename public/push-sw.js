@@ -9,7 +9,7 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {}
   } catch (e) {
-    data = { title: 'Ambria WorkForce', body: event.data ? event.data.text() : '' }
+    data = { title: 'Ambria Admin', body: event.data ? event.data.text() : '' }
   }
   const title = data.title || 'Ambria Admin'
   const options = {

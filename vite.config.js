@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'Ambria WorkForce',
-        short_name: 'Ambria WorkForce',
-        description: 'Ambria WorkForce — task, training and team management for Ambria event venues',
+        name: 'Ambria Admin',
+        short_name: 'Ambria Admin',
+        description: 'Ambria Admin — task, training and team management for Ambria event venues',
         theme_color: '#7B1E2F',
         background_color: '#F5F6F8',
         display: 'standalone',
