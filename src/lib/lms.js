@@ -32,7 +32,7 @@ export const LMS_ALL_VENUES = 20
 // Yellow and magenta sit under 3:1 on white, so the dots carry a neutral ring to
 // stay visible, and the legend above the grid names every venue — identity is
 // never left to colour alone.
-export const VENUE_COLORS = { pp: '#2a78d6', ex: '#e87ba4', mk: '#008300', rs: '#eda100' }
+export const VENUE_COLORS = { pp: '#2a78d6', ex: '#e87ba4', mk: '#008300', rs: '#eda100', jp: '#4a3aa7' }
 
 // keeps a faint dot (yellow, magenta) legible against a white cell
 export const VENUE_DOT_RING = 'rgba(16,24,40,0.22)'

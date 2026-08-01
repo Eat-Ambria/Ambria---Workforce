@@ -17,7 +17,8 @@ const AUTO_REFRESH_MS = 30000
 const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
 // empty-state wording per category chip, so "nothing here" says WHAT is missing
 const EMPTY_KEY = {
-  all: 'noTaskYet', daily: 'noDailyTaskYet', weekly: 'noWeeklyTaskYet', monthly: 'noMonthlyTaskYet',
+  all: 'noTaskYet', daily: 'noDailyTaskYet', alternate: 'noAlternateTaskYet',
+  weekly: 'noWeeklyTaskYet', monthly: 'noMonthlyTaskYet',
 }
 
 const metaLine = (C) => ({ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: C.tl, marginTop: 2 })

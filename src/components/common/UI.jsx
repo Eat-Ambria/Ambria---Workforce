@@ -201,3 +201,33 @@ export function SectionTitle({ children, subtitle, right }) {
     </div>
   )
 }
+
+// A pill toggle for a filter row — used wherever a desktop screen has the room
+// to show every choice instead of hiding them in a dropdown.
+// `dot` paints a small colour disc before the label (venue colours on the valet
+// calendar), so the filter and the marks it filters read as one system.
+export function FilterChip({ children, active, onClick, dot, dotRing }) {
+  const C = useColors()
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7,
+        padding: '9px 16px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap',
+        border: `1.5px solid ${active ? C.maroon : C.border}`,
+        background: active ? C.maroon : C.card,
+        color: active ? '#fff' : C.tl,
+      }}
+    >
+      {dot && (
+        <span style={{
+          width: 9, height: 9, borderRadius: '50%', background: dot, flexShrink: 0,
+          boxShadow: active ? '0 0 0 1px rgba(255,255,255,0.65)' : (dotRing ? `inset 0 0 0 1px ${dotRing}` : 'none'),
+        }} />
+      )}
+      {children}
+    </button>
+  )
+}

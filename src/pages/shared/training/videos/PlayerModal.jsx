@@ -15,7 +15,7 @@ const OPTS = ['a', 'b', 'c', 'd']
 
 // Staff flow: watch the video -> take the assessment -> must score >= 60% to
 // complete. Below 60% they are sent back to rewatch before trying again.
-export default function PlayerModal({ video, user, completed, onClose, onCompleted }) {
+export default function PlayerModal({ video, user, completed, preview = false, onClose, onCompleted }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -47,10 +47,10 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
   const needed = qCount ? Math.ceil(qCount * PASS_PCT) : 0
   // enforce watching only on the tracked YouTube player; plain embeds can't be measured
   const isYouTube = !!video.youtube_id
-  const videoDone = completed || !isYouTube || watched >= WATCH_PCT
+  const videoDone = preview || completed || !isYouTube || watched >= WATCH_PCT
   // Once the whole video has been seen — this session or a previous one — there
   // is nothing left to enforce, so let them scrub anywhere.
-  const freeSeek = completed || watched >= WATCH_PCT
+  const freeSeek = preview || completed || watched >= WATCH_PCT
 
   async function markWatched() {
     setBusy(true)
@@ -97,7 +97,9 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
   // ---- footer per phase ----
   let footer
   if (phase === 'watch') {
-    footer = completed ? (
+    footer = preview ? (
+      <Button variant="ghost" onClick={onClose} full>{t.close}</Button>
+    ) : completed ? (
       <Button variant="ghost" onClick={onClose} full>{t.close}</Button>
     ) : qCount === null ? (
       <Button variant="ghost" disabled full>…</Button>
@@ -126,7 +128,7 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
   }
 
   return (
-    <Modal open onClose={onClose} title={title} footer={footer}>
+    <Modal open onClose={onClose} title={preview ? `${t.preview} — ${title}` : title} footer={footer}>
       {/* ---------- WATCH ---------- */}
       {phase === 'watch' && (
         <>
@@ -163,7 +165,12 @@ export default function PlayerModal({ video, user, completed, onClose, onComplet
             </div>
           )}
 
-          {completed ? (
+          {preview ? (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 14, padding: '10px 12px', background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, color: C.tl }}>
+              <Icon name="eye" size={16} color={C.tl} />
+              <span>{t.previewNote}</span>
+            </div>
+          ) : completed ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.green, fontWeight: 700, marginTop: 14 }}>
               <Icon name="check" size={18} /> {hi ? 'यह वीडियो पूरा हो चुका है' : 'This video is complete'}
             </div>

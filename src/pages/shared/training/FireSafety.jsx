@@ -5,11 +5,12 @@ import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
 import { PROPERTY_MAP, propName, PROPERTIES, scopedProperty } from '../../../constants/org'
-import { Card, Loader, EmptyState, Badge, Button, Field, inputStyle } from '../../../components/common/UI'
+import { Card, Loader, EmptyState, Badge, Button, Field, FilterChip, inputStyle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import MultiSelect from '../../../components/common/MultiSelect'
 import Icon from '../../../components/common/Icon'
 import { useConfirm } from '../../../components/common/ConfirmDialog'
+import { useMediaQuery } from '../../../hooks/useMediaQuery'
 
 const DAY = 86400000
 const daysUntil = (d) => Math.ceil((new Date(d) - new Date(todayISO())) / DAY)
@@ -50,6 +51,9 @@ export default function FireSafety() {
   const [propSel, setPropSel] = useState([])   // property filter (multi-select)
   const { user } = useAuth()
   const propScope = scopedProperty(user)       // null = may see every venue
+  // desktop has the room to show every venue at once; a dropdown there hides
+  // the choices behind a click for no reason
+  const wide = useMediaQuery('(min-width: 900px)')
 
   const load = useCallback(async () => {
     let q = supabase.from('fire_extinguishers').select('*').order('expiry_date')
@@ -90,11 +94,27 @@ export default function FireSafety() {
     <div>
       {/* property filter + add cylinder */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        {!propScope && (
+        {!propScope && (wide ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <FilterChip active={propSel.length === 0} onClick={() => setPropSel([])}>{t.all}</FilterChip>
+            {propOptions.map((o) => {
+              const on = propSel.includes(o.value)
+              return (
+                <FilterChip
+                  key={o.value}
+                  active={on}
+                  onClick={() => setPropSel((prev) => (on ? prev.filter((v) => v !== o.value) : [...prev, o.value]))}
+                >
+                  {propName(o.value, lang)}
+                </FilterChip>
+              )
+            })}
+          </div>
+        ) : (
           <div style={{ width: 260, maxWidth: '100%' }}>
             <MultiSelect C={C} placeholder={t.properties || 'All properties'} options={propOptions} selected={propSel} onChange={setPropSel} />
           </div>
-        )}
+        ))}
         <Button variant="primary" onClick={() => setAdding(true)} style={{ marginLeft: 'auto' }}>
           <Icon name="plus" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.addCylinder}
         </Button>

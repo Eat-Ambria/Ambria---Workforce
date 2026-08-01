@@ -7,10 +7,11 @@ import { useAuth } from '../../context/AuthContext'
 import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
 import { typedPhone } from '../../lib/phone'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
-import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, inputStyle, Spinner } from '../../components/common/UI'
+import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, Spinner } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE, LMS_ALL_VENUES, VENUE_COLORS, VENUE_DOT_RING } from '../../lib/lms'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -40,6 +41,9 @@ export default function Valet() {
   const scopeAll = canSeeAllProperties(user)
   const visibleProps = scopeAll ? PROPERTIES : PROPERTIES.filter((p) => p.code === user?.property)
   const defaultProp = user?.property && user.property !== 'all' ? user.property : (visibleProps[0]?.code || 'pp')
+
+  // desktop shows every venue at once; the dropdown is kept for narrow screens
+  const wide = useMediaQuery('(min-width: 900px)')
 
   const [view, setView] = useState('calendar')
   const today = todayISO()
@@ -164,8 +168,25 @@ export default function Valet() {
         <BookingsList C={C} t={t} lang={lang} user={user} scopeAll={scopeAll} reloadSignal={bump} onEdit={openEdit} />
       ) : (
         <>
-          {/* property filter — dropdown, only for admins who oversee all properties */}
-          {scopeAll && (
+          {/* property filter — only for admins who oversee all properties */}
+          {scopeAll && (wide ? (
+            // each chip carries the venue's own dot colour, so the filter reads
+            // as the same language as the dots on the grid below it
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+              <FilterChip active={propFilter === 'all'} onClick={() => setPropFilter('all')}>{t.all}</FilterChip>
+              {PROPERTIES.map((p) => (
+                <FilterChip
+                  key={p.code}
+                  dot={VENUE_COLORS[p.code]}
+                  dotRing={VENUE_DOT_RING}
+                  active={propFilter === p.code}
+                  onClick={() => setPropFilter(p.code)}
+                >
+                  {propName(p.code, lang)}
+                </FilterChip>
+              ))}
+            </div>
+          ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, maxWidth: 320 }}>
               <Icon name="pin" size={16} color={C.tl} />
               <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
@@ -173,7 +194,7 @@ export default function Valet() {
                 {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
               </select>
             </div>
-          )}
+          ))}
 
           {/* month navigator */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -200,9 +221,11 @@ export default function Valet() {
           {/* which colour is which venue — dots alone would be a guessing game */}
           {!lmsLoading && Object.keys(lmsByDate).length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', marginBottom: 10, padding: '2px 2px 0' }}>
-              {visibleProps.map((pr) => (
+              {/* only venues that have their own colour — a venue the CRM does not
+                  know (no LMS id) would otherwise borrow another venue's hue */}
+              {visibleProps.filter((pr) => VENUE_COLORS[pr.code]).map((pr) => (
                 <span key={pr.code} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.tl }}>
-                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: VENUE_COLORS[pr.code] || C.blue, boxShadow: `inset 0 0 0 1px ${VENUE_DOT_RING}`, flexShrink: 0 }} />
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: VENUE_COLORS[pr.code], boxShadow: `inset 0 0 0 1px ${VENUE_DOT_RING}`, flexShrink: 0 }} />
                   {propName(pr.code, lang)}
                 </span>
               ))}

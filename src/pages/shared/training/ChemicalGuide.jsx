@@ -16,6 +16,9 @@ const PROP_SPECS = {
   ex: { banquet: 20500, lawn: 35000, washrooms: 10, glass: 20500, label: 'Exotica' },
   mk: { banquet: 26000, lawn: 27000, washrooms: 8, glass: 10000, label: 'Manaktala' },
   rs: { banquet: 8000, lawn: 5000, washrooms: 4, glass: 8000, label: 'Restro' },
+  // TODO: real dimensions for Janakpuri — these are placeholders, so the
+  // chemical quantities it calculates are indicative only
+  jp: { banquet: 10000, lawn: 10000, washrooms: 5, glass: 0, label: 'Janakpuri' },
 }
 
 // Units in words, so "L/month" reads "लीटर/माह" rather than staying English.
@@ -23,7 +26,52 @@ const UNIT_HI = { L: 'लीटर', kg: 'किलो', cans: 'कैन' }
 export const unitLabel = (unit, hi) => (hi ? (UNIT_HI[unit] || unit) : unit)
 const perMonth = (hi) => (hi ? 'माह' : 'month')
 
+
+// ---------------------------------------------------------------------------
+// Data-driven version of calcQty. One row of chemical_formulas describes any
+// product:  qty = (base × share + offset) × rate × freq × days ÷ divisor
+// The formula LINE under each card is generated from the same numbers, so it
+// can never drift out of step with the figure above it — which is exactly what
+// would happen if the text stayed hard-coded and an admin edited a rate.
+// ---------------------------------------------------------------------------
+const BASE_VALUE = {
+  floor: (sp) => sp.banquet + (sp.glass > 0 ? sp.glass : 0),
+  banquet: (sp) => sp.banquet,
+  lawn: (sp) => sp.lawn,
+  washrooms: (sp) => sp.washrooms,
+  glass: (sp) => sp.glass,
+  fixed: () => 1,
+}
+const BASE_LABEL = { floor: 'sqft', banquet: 'sqft', lawn: 'sqft', glass: 'sqft', washrooms: '', fixed: '' }
+
+function rowQty(f, spec) {
+  const n = (v, d = 0) => (v == null || v === '' ? d : Number(v))
+  let base = (BASE_VALUE[f.base] || BASE_VALUE.banquet)(spec)
+  // a venue with no glass still needs glass cleaner for its mirrors
+  if (f.base === 'glass' && !base && n(f.glass_fallback_pct) > 0) base = spec.banquet * n(f.glass_fallback_pct)
+  if (f.base === 'fixed') return { qty: n(f.rate).toFixed(n(f.decimals)), baseValue: null }
+  const raw = (base * n(f.share, 1) + n(f.offset_val)) * n(f.rate, 1) * n(f.freq, 1) * n(f.days, 1) / (n(f.divisor, 1) || 1)
+  const val = f.round_up ? Math.ceil(raw) : raw
+  return { qty: Number(val).toFixed(n(f.decimals)), baseValue: base }
+}
+
+// "14,000 sqft × 0.002 × 2 × 30 ÷ 1000" — only the parts that actually apply
+function rowFormula(f, spec, hi) {
+  const n = (v, d = 0) => (v == null || v === '' ? d : Number(v))
+  if (f.base === 'fixed') return hi ? `${n(f.rate)} प्रति प्रॉपर्टी प्रति माह` : `${n(f.rate)} per property per month`
+  const { baseValue } = rowQty(f, spec)
+  const parts = [`${Math.round(baseValue).toLocaleString()}${BASE_LABEL[f.base] ? ' ' + BASE_LABEL[f.base] : ''}`]
+  if (n(f.share, 1) !== 1) parts.push(`× ${n(f.share, 1)}`)
+  if (n(f.offset_val)) parts.push(`+ ${n(f.offset_val)}`)
+  if (n(f.rate, 1) !== 1) parts.push(`× ${n(f.rate, 1)}`)
+  if (n(f.freq, 1) !== 1) parts.push(`× ${n(f.freq, 1)}`)
+  if (n(f.days, 1) !== 1) parts.push(`× ${n(f.days, 1)} ${hi ? 'दिन' : 'days'}`)
+  if (n(f.divisor, 1) !== 1) parts.push(`÷ ${n(f.divisor, 1)}`)
+  return parts.join(' ')
+}
+
 // Monthly quantity formulas derived from property dimensions.
+// Built-in fallback for when chemical_formulas has not been seeded yet.
 function calcQty(spec, hi = false) {
   const { banquet, lawn, washrooms, glass } = spec
   const totalFloor = banquet + (glass > 0 ? glass : 0)
@@ -236,6 +284,34 @@ export default function ChemicalGuide({ visibleProps }) {
     return codes.filter((c) => PROP_SPECS[c])
   }, [visibleProps])
 
+  // Venue dimensions live in `chemical_specs` so an admin can correct them.
+  // Missing table or missing row -> the built-in PROP_SPECS still apply.
+  const [specs, setSpecs] = useState(PROP_SPECS)
+  const [editingSpec, setEditingSpec] = useState(false)
+  const loadSpecs = useCallback(async () => {
+    const { data } = await supabase.from('chemical_specs').select('*')
+    if (!data?.length) return
+    const merged = { ...PROP_SPECS }
+    data.forEach((r) => {
+      merged[r.property] = {
+        ...(PROP_SPECS[r.property] || {}),
+        banquet: r.banquet, lawn: r.lawn, washrooms: r.washrooms, glass: r.glass,
+        label: PROP_SPECS[r.property]?.label || r.property,
+      }
+    })
+    setSpecs(merged)
+  }, [])
+  useEffect(() => { loadSpecs() }, [loadSpecs])
+
+  // Editable formulas. Absent table (migration not run) -> built-in calcQty.
+  const [formulas, setFormulas] = useState(null)
+  const [editingFormula, setEditingFormula] = useState(null)
+  const loadFormulas = useCallback(async () => {
+    const { data } = await supabase.from('chemical_formulas').select('*').eq('is_active', true).order('sort_order')
+    setFormulas(data?.length ? data : null)
+  }, [])
+  useEffect(() => { loadFormulas() }, [loadFormulas])
+
   const [view, setView] = useState('calc') // 'calc' | 'guide'
   const [selectedProp, setSelectedProp] = useState(propKeys[0] || 'pp')
   const [openAreas, setOpenAreas] = useState({ 0: true })
@@ -273,8 +349,21 @@ export default function ChemicalGuide({ visibleProps }) {
 
   const editable = !!products?.length // only rows that exist in the table can be edited
 
-  const spec = PROP_SPECS[selectedProp] || PROP_SPECS.pp
-  const chemicals = useMemo(() => calcQty(spec, hi), [spec, hi])
+  const spec = specs[selectedProp] || PROP_SPECS[selectedProp] || PROP_SPECS.pp
+  const chemicals = useMemo(() => {
+    if (!formulas) return calcQty(spec, hi)
+    return formulas.map((f, i) => ({
+      row: f,
+      code: f.code,
+      name: f.name, nameHi: f.name_hi,
+      area: f.area, areaHi: f.area_hi,
+      note: f.note, noteHi: f.note_hi,
+      unit: f.unit,
+      qty: rowQty(f, spec).qty,
+      formula: rowFormula(f, spec, hi),
+      color: AREA_COLORS[i % AREA_COLORS.length],
+    }))
+  }, [formulas, spec, hi])
   const totalLitres = chemicals.filter((c) => c.unit === 'L').reduce((s, c) => s + parseFloat(c.qty), 0).toFixed(1)
   const totalKg = chemicals.filter((c) => c.unit === 'kg').reduce((s, c) => s + parseFloat(c.qty), 0).toFixed(0)
 
@@ -312,6 +401,16 @@ export default function ChemicalGuide({ visibleProps }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>
               <Icon name="pin" size={16} color={C.maroon} />
               {onlyProp ? propName(selectedProp, lang) : (lang === 'hi' ? 'प्रॉपर्टी चुनें' : 'Select Property')}
+              {admin && (
+                <button
+                  type="button"
+                  onClick={() => setEditingSpec(true)}
+                  title={t.editDimensions}
+                  style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'transparent', color: C.tl, fontSize: 12.5, fontWeight: 600, padding: 0 }}
+                >
+                  <Icon name="edit" size={14} color={C.tl} /> {t.edit}
+                </button>
+              )}
             </div>
             {!onlyProp && (
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(propKeys.length, 4)}, 1fr)`, gap: 8, marginBottom: 12 }}>
@@ -364,7 +463,11 @@ export default function ChemicalGuide({ visibleProps }) {
           {/* Chemical breakdown */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
             {chemicals.map((c) => (
-              <Card key={c.code + c.name} style={{ padding: 0, overflow: 'hidden', borderLeft: `4px solid ${c.color}` }}>
+              <Card
+                key={c.code + c.name}
+                onClick={admin && c.row ? () => setEditingFormula(c.row) : undefined}
+                style={{ padding: 0, overflow: 'hidden', borderLeft: `4px solid ${c.color}`, cursor: admin && c.row ? 'pointer' : 'default' }}
+              >
                 <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -384,6 +487,25 @@ export default function ChemicalGuide({ visibleProps }) {
             ))}
           </div>
         </div>
+      )}
+
+      {editingFormula && (
+        <FormulaModal
+          row={editingFormula}
+          spec={spec}
+          onClose={() => setEditingFormula(null)}
+          onSaved={() => { setEditingFormula(null); loadFormulas() }}
+        />
+      )}
+
+      {editingSpec && (
+        <SpecModal
+          code={selectedProp}
+          spec={spec}
+          user={user}
+          onClose={() => setEditingSpec(false)}
+          onSaved={() => { setEditingSpec(false); loadSpecs() }}
+        />
       )}
 
       {view === 'guide' && (
@@ -592,6 +714,210 @@ function ProductModal({ record, sectionList, onClose, onSaved }) {
       </Field>
 
       {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
+    </Modal>
+  )
+}
+
+// Admin: correct a venue's dimensions. These drive every quantity on the
+// calculator, so the modal states that rather than leaving it to be discovered.
+function SpecModal({ code, spec, user, onClose, onSaved }) {
+  const C = useColors()
+  const t = useT()
+  const { lang } = useLang()
+  const [form, setForm] = useState({
+    banquet: String(spec.banquet ?? 0),
+    lawn: String(spec.lawn ?? 0),
+    washrooms: String(spec.washrooms ?? 0),
+    glass: String(spec.glass ?? 0),
+  })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const num = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value.replace(/\D/g, '') }))
+
+  async function save() {
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('chemical_specs').upsert({
+      property: code,
+      banquet: Number(form.banquet) || 0,
+      lawn: Number(form.lawn) || 0,
+      washrooms: Number(form.washrooms) || 0,
+      glass: Number(form.glass) || 0,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id || null,
+    }, { onConflict: 'property' })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  const FIELDS = [
+    { k: 'banquet', label: lang === 'hi' ? 'बैंक्वेट (sqft)' : 'Banquet (sqft)' },
+    { k: 'lawn', label: lang === 'hi' ? 'लॉन (sqft)' : 'Lawn (sqft)' },
+    { k: 'washrooms', label: lang === 'hi' ? 'वॉशरूम (संख्या)' : 'Washrooms (count)' },
+    { k: 'glass', label: lang === 'hi' ? 'ग्लास/हॉल (sqft)' : 'Glass / Hall (sqft)' },
+  ]
+
+  return (
+    <Modal
+      open onClose={onClose} title={`${t.editDimensions} — ${propName(code, lang)}`}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
+          <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button>
+        </>
+      )}
+    >
+      <div style={{ fontSize: 12.5, color: C.tl, marginBottom: 12, lineHeight: 1.5 }}>{t.dimensionsHint}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {FIELDS.map((f) => (
+          <Field key={f.k} label={f.label}>
+            <input style={inputStyle(C)} value={form[f.k]} inputMode="numeric" onChange={num(f.k)} />
+          </Field>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, color: C.faint, marginTop: 4 }}>{t.glassZeroHint}</div>
+      {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
+    </Modal>
+  )
+}
+
+// Admin: edit one calculator product — its labels and the numbers behind it.
+// The live result is shown as you type, because a rate like 0.002 means nothing
+// on its own; what matters is the litres it produces for this venue.
+function FormulaModal({ row, spec, onClose, onSaved }) {
+  const C = useColors()
+  const t = useT()
+  const confirm = useConfirm()
+  const { lang } = useLang()
+  const hi = lang === 'hi'
+  const [form, setForm] = useState({ ...row })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const setNum = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value.replace(/[^\d.]/g, '') }))
+
+  const preview = rowQty(form, spec)
+
+  async function save() {
+    if (!String(form.name || '').trim()) { setErr(`${t.productName} ${t.isRequired}`); return }
+    setBusy(true); setErr('')
+    const num = (v, d = 0) => (v === '' || v == null ? d : Number(v))
+    const { error } = await supabase.from('chemical_formulas').update({
+      name: String(form.name).trim(),
+      name_hi: String(form.name_hi || '').trim() || null,
+      area: String(form.area || '').trim() || null,
+      area_hi: String(form.area_hi || '').trim() || null,
+      note: String(form.note || '').trim() || null,
+      note_hi: String(form.note_hi || '').trim() || null,
+      unit: form.unit || 'L',
+      base: form.base || 'banquet',
+      share: num(form.share, 1),
+      offset_val: num(form.offset_val),
+      rate: num(form.rate, 1),
+      freq: num(form.freq, 1),
+      days: num(form.days, 1),
+      divisor: num(form.divisor, 1) || 1,
+      round_up: !!form.round_up,
+      decimals: num(form.decimals),
+      glass_fallback_pct: num(form.glass_fallback_pct),
+      updated_at: new Date().toISOString(),
+    }).eq('code', row.code)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  async function remove() {
+    if (!(await confirm({ message: t.deleteChemicalConfirm, detail: `${row.code} · ${row.name}`, confirmLabel: t.remove }))) return
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('chemical_formulas')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('code', row.code)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  const NUMS = [
+    { k: 'rate', label: hi ? 'दर (प्रति यूनिट)' : 'Rate (per unit)' },
+    { k: 'freq', label: hi ? 'बार' : 'Times' },
+    { k: 'days', label: hi ? 'दिन' : 'Days' },
+    { k: 'divisor', label: hi ? 'भाग' : 'Divide by' },
+    { k: 'share', label: hi ? 'हिस्सा (0–1)' : 'Share (0–1)' },
+    { k: 'offset_val', label: hi ? 'जोड़ें' : 'Add' },
+  ]
+
+  return (
+    <Modal
+      open onClose={onClose} maxWidth={560}
+      title={`${t.edit} — ${row.code}`}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
+          <Button variant="danger" onClick={remove} disabled={busy} title={t.delete} aria-label={t.delete} style={{ flexShrink: 0 }}>
+            <Icon name="trash" size={16} color="#fff" />
+          </Button>
+          <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button>
+        </>
+      )}
+    >
+      {/* live result — the number the venue will actually see */}
+      <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+          {preview.qty} {unitLabel(form.unit, hi)}<span style={{ fontSize: 12, fontWeight: 600, color: C.tl }}>/{hi ? 'माह' : 'month'}</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 3 }}>{rowFormula(form, spec, hi)}</div>
+      </div>
+
+      <Field label={t.productName}><input style={inputStyle(C)} value={form.name || ''} onChange={set('name')} /></Field>
+      <Field label={`${t.productName} (हिंदी)`}><input style={inputStyle(C)} value={form.name_hi || ''} onChange={set('name_hi')} /></Field>
+      <Field label={t.guideArea}><input style={inputStyle(C)} value={form.area || ''} onChange={set('area')} /></Field>
+      <Field label={`${t.guideArea} (हिंदी)`}><input style={inputStyle(C)} value={form.area_hi || ''} onChange={set('area_hi')} /></Field>
+      <Field label={t.howToUse}><input style={inputStyle(C)} value={form.note || ''} onChange={set('note')} /></Field>
+      <Field label={`${t.howToUse} (हिंदी)`}><input style={inputStyle(C)} value={form.note_hi || ''} onChange={set('note_hi')} /></Field>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <Field label={hi ? 'किस माप पर' : 'Scales with'}>
+            <select style={inputStyle(C)} value={form.base} onChange={set('base')}>
+              <option value="floor">{hi ? 'बैंक्वेट + ग्लास' : 'Banquet + Glass'}</option>
+              <option value="banquet">{hi ? 'बैंक्वेट' : 'Banquet'}</option>
+              <option value="lawn">{hi ? 'लॉन' : 'Lawn'}</option>
+              <option value="washrooms">{hi ? 'वॉशरूम' : 'Washrooms'}</option>
+              <option value="glass">{hi ? 'ग्लास/हॉल' : 'Glass / Hall'}</option>
+              <option value="fixed">{hi ? 'तय मात्रा' : 'Fixed amount'}</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ flex: 1 }}>
+          <Field label={hi ? 'यूनिट' : 'Unit'}>
+            <select style={inputStyle(C)} value={form.unit} onChange={set('unit')}>
+              {['L', 'kg', 'cans'].map((u) => <option key={u} value={u}>{unitLabel(u, hi)}</option>)}
+            </select>
+          </Field>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        {NUMS.map((f) => (
+          <Field key={f.k} label={f.label}>
+            <input style={inputStyle(C)} inputMode="decimal" value={form[f.k] ?? ''} onChange={setNum(f.k)} />
+          </Field>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: C.tl }}>
+          <input type="checkbox" checked={!!form.round_up} onChange={(e) => setForm((f) => ({ ...f, round_up: e.target.checked }))} />
+          {hi ? 'ऊपर पूर्णांक करें' : 'Round up to a whole unit'}
+        </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: C.tl }}>
+          {hi ? 'दशमलव' : 'Decimals'}
+          <input style={{ ...inputStyle(C), width: 62, padding: '6px 8px' }} inputMode="numeric" value={form.decimals ?? 0} onChange={setNum('decimals')} />
+        </label>
+      </div>
+
+      {err && <div style={{ color: C.red, fontSize: 13, marginTop: 10 }}>{err}</div>}
     </Modal>
   )
 }

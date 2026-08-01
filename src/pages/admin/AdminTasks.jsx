@@ -352,10 +352,23 @@ export default function AdminTasks() {
       )}
 
       {review && (
-        <ReviewModal task={review} user={user} assigneeName={nameOf(review.assigned_to, review.assignee_name)} onClose={() => setReview(null)} onSaved={() => { setReview(null); load() }} />
+        <ReviewModal
+          task={review}
+          user={user}
+          assigneeName={nameOf(review.assigned_to, review.assignee_name)}
+          onEdit={(tk) => { setReview(null); setCreating(tk) }}
+          onClose={() => setReview(null)}
+          onSaved={() => { setReview(null); load() }}
+        />
       )}
       {creating && (
-        <CreateModal user={user} members={members} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load() }} />
+        <CreateModal
+          user={user}
+          members={members}
+          record={creating === true ? null : creating}
+          onClose={() => setCreating(false)}
+          onSaved={() => { setCreating(false); load() }}
+        />
       )}
     </div>
   )
@@ -394,7 +407,7 @@ function PhotoCol({ C, label, photos }) {
   )
 }
 
-function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
+function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
   const confirm = useConfirm()
   const C = useColors()
   const t = useT()
@@ -528,6 +541,11 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
           {isIssueWorking && !ownWork && <Button variant="success" onClick={resolveIssue} disabled={busy} style={{ flex: 2 }}>{t.markResolved}</Button>}
           {/* while an issue is open the bin clears the issue; the task is never
               deleted from here. Once resolved, the bin deletes the task again. */}
+          {!ownWork && (
+            <Button variant="ghost" onClick={() => onEdit?.(task)} disabled={busy} style={{ flexShrink: 0 }}>
+              <Icon name="edit" size={15} color={C.text} style={{ marginRight: 4 }} />{t.edit}
+            </Button>
+          )}
           {!ownWork && hasOpenIssue && (
             <Button variant="danger" onClick={clearIssue} disabled={busy} title={t.removeIssue} aria-label={t.removeIssue} style={{ flexShrink: 0 }}>
               <Icon name="trash" size={16} color="#fff" />
@@ -605,16 +623,25 @@ function ReviewModal({ task, user, assigneeName, onClose, onSaved }) {
   )
 }
 
-function CreateModal({ user, members, onClose, onSaved }) {
+function CreateModal({ user, members, record, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
   const canSeeAllProps = canSeeAllProperties(user)
+  const editing = !!record
   const [form, setForm] = useState({
-    title: '', description: '', category: 'daily', priority: 'medium', area: '', time_block: '', assigned_to: '', due_date: '',
-    property: canSeeAllProps ? 'pp' : (user.property && user.property !== 'all' ? user.property : 'pp'),
+    title: record?.title || '',
+    description: record?.description || '',
+    category: record?.category || 'daily',
+    priority: record?.priority || 'medium',
+    area: record?.area || '',
+    time_block: record?.time_block || '',
+    assigned_to: record?.assigned_to || '',
+    due_date: record?.due_date || '',
+    property: record?.property || (canSeeAllProps ? 'pp' : (user.property && user.property !== 'all' ? user.property : 'pp')),
   })
   const [dept, setDept] = useState('all') // narrow the assign list by department
+  const [extraProps, setExtraProps] = useState([]) // create the same task at these venues too
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -635,6 +662,9 @@ function CreateModal({ user, members, onClose, onSaved }) {
     return list
   }, [members, dept, form.property])
 
+  // the primary venue can't also be an extra
+  useEffect(() => { setExtraProps((prev) => prev.filter((c) => c !== form.property)) }, [form.property])
+
   // if the current pick no longer matches the property/department filters, clear it
   useEffect(() => {
     if (form.assigned_to && !assignable.some((m) => m.id === form.assigned_to)) {
@@ -647,13 +677,42 @@ function CreateModal({ user, members, onClose, onSaved }) {
     if (form.due_date && form.due_date < todayISO()) { setErr(t.dueDatePast); return }
     setBusy(true); setErr('')
     const assignee = members.find((m) => m.id === form.assigned_to)
-    const id = newId('t_')
     // auto-translate the title to Hindi so staff on the Hindi UI see it (best-effort)
     let title_hi = null
     try { title_hi = await translateToHindi(form.title.trim()) } catch { /* leave null — falls back to English */ }
-    const { error } = await supabase.from('tasks').insert({
-      id,
-      property: form.property || assignee?.property || (user.property !== 'all' ? user.property : 'pp'),
+
+    if (editing) {
+      // Re-translate only when the title actually changed, so a hand-corrected
+      // Hindi title isn't silently overwritten by the machine translation.
+      const patch = {
+        property: form.property,
+        category: form.category,
+        title: form.title.trim(),
+        description: form.description || null,
+        area: form.area || null,
+        time_block: form.time_block || null,
+        priority: form.priority,
+        due_date: form.due_date || null,
+        assigned_to: form.assigned_to || null,
+        assignee_name: assignee?.name || null,
+      }
+      if (form.title.trim() !== record.title) patch.title_hi = title_hi
+      if (assignee?.department) patch.department = assignee.department
+      const { error: upErr } = await supabase.from('tasks').update(patch).eq('id', record.id)
+      setBusy(false)
+      if (upErr) { setErr(upErr.message); return }
+      onSaved()
+      return
+    }
+
+    // One row per chosen venue. The extras carry no assignee: the person picked
+    // here belongs to one venue, and silently making them responsible at three
+    // others would be wrong. Those rows land unassigned for the venue's own
+    // admin to hand out.
+    const targets = extraProps.length ? [form.property, ...extraProps] : [form.property]
+    const rows = targets.map((prop, i) => ({
+      id: newId('t_'),
+      property: prop || assignee?.property || (user.property !== 'all' ? user.property : 'pp'),
       department: assignee?.department || user.department || 'k',
       category: form.category,
       title: form.title.trim(),
@@ -663,11 +722,12 @@ function CreateModal({ user, members, onClose, onSaved }) {
       time_block: form.time_block || null,
       priority: form.priority,
       due_date: form.due_date || null,
-      assigned_to: form.assigned_to || null,
-      assignee_name: assignee?.name || null,
+      assigned_to: i === 0 ? (form.assigned_to || null) : null,
+      assignee_name: i === 0 ? (assignee?.name || null) : null,
       status: TASK_STATUS.PENDING,
       task_date: todayISO(),
-    })
+    }))
+    const { error } = await supabase.from('tasks').insert(rows)
     setBusy(false)
     if (error) { setErr(error.message); return }
     onSaved()
@@ -675,7 +735,7 @@ function CreateModal({ user, members, onClose, onSaved }) {
 
   return (
     <Modal
-      open onClose={onClose} title={t.tasks}
+      open onClose={onClose} title={editing ? `${t.edit} — ${record.title}` : t.tasks}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
@@ -692,6 +752,32 @@ function CreateModal({ user, members, onClose, onSaved }) {
           {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
         </select>
       </Field>
+      {canSeeAllProps && !editing && (
+        <Field label={`${t.addToProperties} (${t.optional})`} hint={extraProps.length ? t.createdInProperties.replace('{n}', extraProps.length + 1) : t.sameTaskOtherProps}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {PROPERTIES.filter((p) => p.code !== form.property).map((p) => {
+              const on = extraProps.includes(p.code)
+              return (
+                <button
+                  key={p.code}
+                  type="button"
+                  onClick={() => setExtraProps((prev) => (on ? prev.filter((c) => c !== p.code) : [...prev, p.code]))}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '7px 12px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+                    border: `1.5px solid ${on ? C.maroon : C.border}`,
+                    background: on ? C.maroonSoft : C.card,
+                    color: on ? C.maroon : C.tl,
+                  }}
+                >
+                  {on && <Icon name="check" size={13} color={C.maroon} />}
+                  {propName(p.code, lang)}
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+      )}
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
           <Field label={t.category}>

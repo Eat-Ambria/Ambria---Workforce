@@ -5,6 +5,8 @@ export const PROPERTIES = [
   { code: 'ex', name: 'Exotica', nameHi: 'एक्सोटिका', area: 'Dwarka', areaHi: 'द्वारका', acreage: '4 Acres' },
   { code: 'mk', name: 'Manaktala', nameHi: 'मनकतला', area: 'Kapashera', areaHi: 'कापसहेड़ा', acreage: '3 Acres' },
   { code: 'rs', name: 'Restro', nameHi: 'रेस्ट्रो', area: 'Palam Vihar', areaHi: 'पालम विहार', acreage: '0.75 Acre' },
+  // TODO: confirm the area / acreage for Janakpuri — placeholders for now
+  { code: 'jp', name: 'Janakpuri', nameHi: 'जनकपुरी', area: 'Janakpuri', areaHi: 'जनकपुरी', acreage: '—' },
 ]
 
 // property lookup incl. "all" (Vicky, Sandeep, Super Admin)
@@ -132,7 +134,10 @@ export const isOwnAssignedWork = (user, assignedTo) =>
   !!assignedTo && assignedTo === user?.id && !isSuperAdmin(user?.role)
 
 // Task categories & statuses (My Tasks workflow)
-export const TASK_CATEGORIES = ['daily', 'weekly', 'monthly']
+// 'alternate' = every other day. Unlike the others it has no fixed weekday or
+// date to key off, so the nightly reset works from the task's own last date:
+// it comes back two days after it was last set, giving a day-on/day-off rhythm.
+export const TASK_CATEGORIES = ['daily', 'alternate', 'weekly', 'monthly']
 export const TASK_STATUS = {
   PENDING: 'pending',
   IN_PROGRESS: 'in_progress',

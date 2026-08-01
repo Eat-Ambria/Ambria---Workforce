@@ -53,6 +53,18 @@ export const VALET_MATRIX = {
       { max: 200, values: [1, 5, 1] },
     ],
   },
+  // Janakpuri — starting point copied from Restro. Edit the tiers in the app
+  // (Valet -> Staffing Calculator) once the real numbers are known; the saved
+  // matrix in valet_matrix overrides this.
+  jp: {
+    name: 'Janakpuri',
+    roles: ['Key Man', 'Driver', 'Guard'],
+    tiers: [
+      { max: 100, values: [1, 3, 0] },
+      { max: 150, values: [1, 4, 0] },
+      { max: 200, values: [1, 5, 1] },
+    ],
+  },
 }
 
 // Hard cap on guest count for staffing/bookings.

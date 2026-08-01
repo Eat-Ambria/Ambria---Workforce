@@ -26,9 +26,12 @@ function daysLeft(deadline) {
 }
 
 // Returns the deadline chip {text,color,bg} for a video, or null.
-function deadlineChip(deadline, done, C, lang) {
+function deadlineChip(deadline, done, C, lang, admin = false) {
   if (done) return { text: lang === 'hi' ? 'पूरा' : 'Completed', color: C.green, bg: C.gBg }
   if (!deadline) return null
+  // admin view: the video's default deadline, stated neutrally — an admin is not
+  // the one being trained, so "overdue" would be about nobody
+  if (admin) return { text: `${lang === 'hi' ? 'नियत' : 'Due'} ${fmtDate(deadline)}`, color: C.tl, bg: C.cardAlt }
   const d = daysLeft(deadline)
   if (d < 0) return { text: lang === 'hi' ? `${-d} दिन देर` : `Overdue ${-d}d`, color: C.red, bg: C.rBg }
   if (d === 0) return { text: lang === 'hi' ? 'आज तक' : 'Due today', color: C.red, bg: C.rBg }
@@ -233,14 +236,14 @@ export default function Videos() {
             const dept = DEPARTMENT_MAP[v.department] || {}
             const thumb = ytThumb(v.youtube_id)
             const hasVideo = !!v.youtube_id || !!(v.youtube_url && v.youtube_url.trim()) // youtube or embed url
-            const chip = deadlineChip(admin ? v.deadline : deadlines[v.id], done, C, lang)
+            const chip = deadlineChip(admin ? v.deadline : deadlines[v.id], done, C, lang, admin)
             const qCount = quizCounts[v.id] || 0
             const res = results[v.id]
             return (
               <Card key={v.id} style={{ padding: 0, overflow: 'hidden', border: `1px solid ${done ? C.green : C.border}` }}>
                 {/* thumbnail / placeholder */}
                 <button
-                  onClick={() => (admin ? setEditing(v) : setPlaying(v))}
+                  onClick={() => setPlaying(v)}
                   style={{ display: 'block', width: '100%', position: 'relative', paddingTop: '56.25%', background: thumb ? '#111' : `linear-gradient(135deg, ${dept.color || C.maroon}22, ${dept.color || C.maroon}08)` }}
                 >
                   {thumb ? (
@@ -312,6 +315,9 @@ export default function Videos() {
         <PlayerModal
           video={playing}
           user={user}
+          // admins are reviewing the material, not being trained on it: no
+          // watch-gate, no assessment, nothing written to their progress
+          preview={admin}
           completed={!!progress[String(playing.id)]}
           onClose={() => setPlaying(null)}
           onCompleted={(opt) => { if (!opt?.silent) setPlaying(null); load() }}

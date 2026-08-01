@@ -7,8 +7,9 @@ import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
 import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
-import { Card, Loader, SectionTitle, inputStyle } from '../components/common/UI'
+import { Card, Loader, SectionTitle, FilterChip, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 function tint(hex, alpha = 0.1) {
   const h = hex.replace('#', '')
@@ -29,6 +30,8 @@ function AdminDashboard({ user }) {
   const { lang } = useLang()
   const navigate = useNavigate()
   const scopeAll = canSeeAllProperties(user)
+  // desktop has room for every venue; the dropdown stays for narrow screens
+  const wide = useMediaQuery('(min-width: 900px)')
 
   const [loading, setLoading] = useState(true)
   const [d, setD] = useState(null)          // aggregated stats (server counts)
@@ -184,7 +187,16 @@ function AdminDashboard({ user }) {
 
       {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-        {scopeAll && (
+        {scopeAll && (wide ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <FilterChip active={prop === 'all'} onClick={() => setProp('all')}>{t.all}</FilterChip>
+            {PROPERTIES.map((p) => (
+              <FilterChip key={p.code} active={prop === p.code} onClick={() => setProp(p.code)}>
+                {propName(p.code, lang)}
+              </FilterChip>
+            ))}
+          </div>
+        ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
             <Icon name="pin" size={16} color={C.tl} />
             <select style={inputStyle(C)} value={prop} onChange={(e) => setProp(e.target.value)} aria-label={t.properties}>
@@ -192,7 +204,7 @@ function AdminDashboard({ user }) {
               {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
             </select>
           </div>
-        )}
+        ))}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
           <Icon name="user" size={16} color={C.tl} />
           <select
@@ -224,22 +236,31 @@ function AdminDashboard({ user }) {
         </div>
       )}
 
-      {/* KPI row */}
-      <div style={kpiGrid}>
-        <Kpi C={C} icon="tasks" tone={C.maroon} value={task.total} label={t.totalTasks} onClick={() => go('/tasks', 'all')} />
-        <Kpi C={C} icon="warning" tone={C.red} border={C.red} value={task.overdue} label={t.overdue} onClick={() => go('/tasks', 'overdue')} />
-        <Kpi C={C} icon="myTasks" tone={C.yellow} border={C.yellow} value={task.pending} label={t.pending} onClick={() => go('/tasks', 'pending')} />
-        <Kpi C={C} icon="refresh" tone={C.blue} value={task.inProgress} label={t.inProgress} onClick={() => go('/tasks', 'inprogress')} />
-        <Kpi C={C} icon="clock" tone={C.indigo} value={task.waiting} label={t.reviewQueue} onClick={() => go('/tasks', 'review')} />
-        <Kpi C={C} icon="check" tone={C.green} border={C.green} value={task.done} label={t.completed} onClick={() => go('/tasks', 'completed')} />
-      </div>
+      {/* Tasks — every task figure in one block */}
+      <StatBlock C={C} icon="tasks" tone={C.maroon} title={t.tasks} onView={() => go('/tasks', 'all')}>
+        <StatCell C={C} value={task.total} label={t.totalTasks} tone={C.maroon} onClick={() => go('/tasks', 'all')} />
+        <StatCell C={C} value={task.pending} label={t.pending} tone={C.yellow} onClick={() => go('/tasks', 'pending')} />
+        <StatCell C={C} value={task.inProgress} label={t.inProgress} tone={C.blue} onClick={() => go('/tasks', 'inprogress')} />
+        <StatCell C={C} value={task.waiting} label={t.reviewQueue} tone={C.indigo} onClick={() => go('/tasks', 'review')} />
+        <StatCell C={C} value={task.done} label={t.completed} tone={C.green} onClick={() => go('/tasks', 'completed')} />
+      </StatBlock>
+
+      {/* Overdue — tasks and repairs together, because both are late work */}
+      <StatBlock
+        C={C} icon="warning" tone={C.red} title={t.overdue}
+        hint={task.overdue + d.board.overdue === 0
+          ? (lang === 'hi' ? 'कुछ भी बाकी नहीं — शाबाश' : 'Nothing late — all clear')
+          : undefined}
+      >
+        <StatCell C={C} value={task.overdue} label={t.tasks} tone={C.red} onClick={() => go('/tasks', 'overdue')} />
+        <StatCell C={C} value={d.board.overdue} label={t.taskBoard} tone={TR_ORANGE} onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
+      </StatBlock>
 
       {/* section widgets */}
       <div style={widgetGrid}>
         <Widget C={C} icon="taskBoard" title={t.taskBoard} onView={() => go('/task-board')}>
           <Row C={C} label={t.open} value={d.board.open} tone={C.blue} />
           <Row C={C} label={t.inProgress} value={d.board.progress} tone={C.yellow} />
-          <Row C={C} label={t.overdue} value={d.board.overdue} tone={C.red} danger={d.board.overdue > 0} />
           <Row C={C} label={t.completed} value={d.board.done} tone={C.green} />
         </Widget>
 
@@ -516,22 +537,6 @@ const FIX_STATUS_LABEL = { assigned: 'pending', in_progress: 'inProgress', appro
 const kpiGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }
 const widgetGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }
 
-function Kpi({ C, icon, value, label, tone, border, onClick }) {
-  return (
-    <Card onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default', padding: 18, ...(border ? { border: `2px solid ${border}` } : {}) }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: tint(tone, 0.1), display: 'grid', placeItems: 'center' }}>
-          <Icon name={icon} size={22} color={tone} />
-        </div>
-        {onClick && <Icon name="chevronRight" size={16} color={C.faint} />}
-      </div>
-      <div style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1.15, marginTop: 14, letterSpacing: '-0.02em' }}>{value ?? 0}</div>
-      <div style={{ fontSize: 13, color: C.tl, fontWeight: 600, marginTop: 2 }}>{label}</div>
-    </Card>
-  )
-}
-
-// pill in the admin's "assigned to me" strip: "My Tasks · 3 →"
 function MineChip({ C, label, value, onClick }) {
   return (
     <button
