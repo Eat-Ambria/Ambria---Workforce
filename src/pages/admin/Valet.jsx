@@ -87,11 +87,13 @@ export default function Valet() {
   // scoped to the venues this admin can see + the active property filter.
   const [lms, setLms] = useState([])
   const [lmsError, setLmsError] = useState('')
+  const [lmsLoading, setLmsLoading] = useState(true)
   useEffect(() => {
     let alive = true
     lmsVenueContracts()
       .then((rows) => { if (alive) setLms(rows) })
       .catch((e) => { if (alive) setLmsError(e.message || 'Could not reach LMS') })
+      .finally(() => { if (alive) setLmsLoading(false) })
     return () => { alive = false }
   }, [])
 
@@ -184,8 +186,19 @@ export default function Valet() {
             </button>
           </div>
 
+          {/* one strip, three states: loading -> legend, or the failure */}
+          {lmsLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '2px 2px 0', fontSize: 12.5, color: C.tl }}>
+              <Spinner size={14} /> {t.loadingEvents}
+            </div>
+          ) : lmsError ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '2px 2px 0', fontSize: 12.5, color: C.red }}>
+              <Icon name="warning" size={14} color={C.red} /> {t.eventsLoadFailed}
+            </div>
+          ) : null}
+
           {/* which colour is which venue — dots alone would be a guessing game */}
-          {Object.keys(lmsByDate).length > 0 && (
+          {!lmsLoading && Object.keys(lmsByDate).length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', marginBottom: 10, padding: '2px 2px 0' }}>
               {visibleProps.map((pr) => (
                 <span key={pr.code} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.tl }}>
