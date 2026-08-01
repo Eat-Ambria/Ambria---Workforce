@@ -11,7 +11,7 @@ import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, inp
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
-import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE } from '../../lib/lms'
+import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE, LMS_ALL_VENUES, VENUE_COLORS, VENUE_DOT_RING } from '../../lib/lms'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const WEEKDAYS_HI = ['र', 'सो', 'मं', 'बु', 'गु', 'शु', 'श']
@@ -106,7 +106,9 @@ export default function Valet() {
       const iso = lmsDateToIso(c.date)
       if (!iso) return
       const vid = Number(c.venueId)
-      if (vid && allowedVenues.size && !allowedVenues.has(vid)) return // other venue
+      // venue 20 = the CRM's "All Venues" catch-all; it belongs to every property
+      // rather than none, so it must survive the property filter (LMS_API_Mapping.md)
+      if (vid && vid !== LMS_ALL_VENUES && allowedVenues.size && !allowedVenues.has(vid)) return // other venue
       if (!vid && propFilter !== 'all') return                        // unknown venue, hide when filtered
       ;(m[iso] ||= []).push(c)
     })
@@ -182,6 +184,18 @@ export default function Valet() {
             </button>
           </div>
 
+          {/* which colour is which venue — dots alone would be a guessing game */}
+          {Object.keys(lmsByDate).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', marginBottom: 10, padding: '2px 2px 0' }}>
+              {visibleProps.map((pr) => (
+                <span key={pr.code} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.tl }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: VENUE_COLORS[pr.code] || C.blue, boxShadow: `inset 0 0 0 1px ${VENUE_DOT_RING}`, flexShrink: 0 }} />
+                  {propName(pr.code, lang)}
+                </span>
+              ))}
+            </div>
+          )}
+
           {loading ? (
             <Loader label={t.loading} />
           ) : (
@@ -198,7 +212,17 @@ export default function Valet() {
                   if (d == null) return <div key={i} />
                   const iso = ymd(month.y, month.m, d)
                   const list = byDate[iso] || []
-                  const lmsCount = (lmsByDate[iso] || []).length
+                  const dayEvents = lmsByDate[iso] || []
+                  const lmsCount = dayEvents.length
+                  // one dot per VENUE, not per event — four venues at most, in a
+                  // fixed order so a venue keeps its position from day to day
+                  const venueCounts = visibleProps
+                    .map((pr) => ({
+                      code: pr.code,
+                      name: propName(pr.code, lang),
+                      n: dayEvents.filter((e) => PROP_BY_LMS_VENUE[Number(e.venueId)] === pr.code).length,
+                    }))
+                    .filter((v) => v.n > 0)
                   const isToday = iso === today
                   const isPast = iso < today // past dates can't be booked...
                   const hasItems = list.length > 0 || lmsCount > 0
@@ -223,12 +247,27 @@ export default function Valet() {
                           {list.length}
                         </span>
                       )}
-                      {/* blue dot = confirmed venue events from LMS on this date */}
+                      {/* one dot per venue with an event on this date */}
                       {lmsCount > 0 && (
                         <span
-                          title={`${lmsCount} venue event(s)`}
-                          style={{ position: 'absolute', top: 5, right: 5, width: 8, height: 8, borderRadius: '50%', background: C.blue }}
-                        />
+                          title={venueCounts.length
+                            ? venueCounts.map((v) => `${v.name} · ${v.n}`).join(', ')
+                            : `${lmsCount} venue event(s)`}
+                          style={{ position: 'absolute', top: 5, right: 5, display: 'flex', gap: 2 }}
+                        >
+                          {(venueCounts.length ? venueCounts : [{ code: null, n: lmsCount }]).map((v, vi) => (
+                            <span
+                              key={v.code || vi}
+                              style={{
+                                width: 8, height: 8, borderRadius: '50%',
+                                background: VENUE_COLORS[v.code] || C.tl,
+                                // inner ring keeps a pale hue visible on white;
+                                // outer white ring keeps touching dots countable
+                                boxShadow: `inset 0 0 0 1px ${VENUE_DOT_RING}, 0 0 0 1px ${C.card}`,
+                              }}
+                            />
+                          ))}
+                        </span>
                       )}
                     </button>
                   )

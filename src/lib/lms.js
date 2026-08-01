@@ -13,6 +13,29 @@ import { supabase } from './supabase'
 // internal property code <-> LMS venue id (from LMS_API_Mapping.md "Venue Map")
 export const LMS_VENUE_BY_PROP = { pp: 3, ex: 19, mk: 6, rs: 16 }
 export const PROP_BY_LMS_VENUE = { 3: 'pp', 19: 'ex', 6: 'mk', 16: 'rs' }
+// The CRM's catch-all venue. An event filed against it applies to every
+// property, so it must not be filtered out as "some other venue".
+// (18 = TENDER PROGRAM is internal and deliberately not mapped.)
+export const LMS_ALL_VENUES = 20
+
+// One hue per venue for the calendar dots — blue / magenta / green / yellow.
+//
+// A calendar can show all four venues on the same day, so every PAIR has to be
+// separable, not just neighbours in a legend. Of the 70 four-hue combinations in
+// the data-viz palette this scored best on both measures the validator reports:
+// worst pair 19.6 to the naked eye and 13.0 under colour-blind simulation.
+//
+// Do not substitute brand colours here. The obvious picks fail hard: blue+violet
+// are 0.4 apart under deuteranopia (identical), and green+amber are 6.8 under
+// protanopia. Re-run scripts/validate_palette.js --pairs all before changing one.
+//
+// Yellow and magenta sit under 3:1 on white, so the dots carry a neutral ring to
+// stay visible, and the legend above the grid names every venue — identity is
+// never left to colour alone.
+export const VENUE_COLORS = { pp: '#2a78d6', ex: '#e87ba4', mk: '#008300', rs: '#eda100' }
+
+// keeps a faint dot (yellow, magenta) legible against a white cell
+export const VENUE_DOT_RING = 'rgba(16,24,40,0.22)'
 
 // LMS function-type id -> readable name
 const FUNCTION_TYPES = {
@@ -27,11 +50,11 @@ const FUNCTION_TYPES = {
 const fnType = (v) => (v == null || v === '' ? undefined : (FUNCTION_TYPES[Number(v)] || String(v)))
 
 // call the LMS via the edge-function proxy.
-// fanout=true asks the proxy to query as every CRM user and merge the results —
-// the endpoint caps each user at their own 10 newest contracts, so this is the
-// only way to see the full diary (see the comment in supabase/functions/lms-proxy).
-async function lmsCall(path, body = {}, fanout = false) {
-  const { data, error } = await supabase.functions.invoke('lms-proxy', { body: { path, body, fanout } })
+// paginate=true tells the proxy to walk `page_limit` (which is a PAGE NUMBER,
+// not a row count) until the pages run out. Without it the API answers with a
+// perfectly valid-looking page 1 of ten rows and no hint that more exist.
+async function lmsCall(path, body = {}, paginate = false) {
+  const { data, error } = await supabase.functions.invoke('lms-proxy', { body: { path, body, paginate } })
   if (error) throw new Error(error.message || 'LMS request failed')
   if (data && data.error) throw new Error(data.error)
   return data
@@ -119,10 +142,10 @@ export async function lmsVenueEvents(body = {}) {
 }
 
 // venue contracts — CONFIRMED events with venue/date/time/pax/amount.
-// Merged across CRM users by default; pass { fanout: false } for the raw
-// single-user call (10 rows) when debugging.
-export async function lmsVenueContracts(body = {}, { fanout = true } = {}) {
-  const res = await lmsCall('/api/v1/processerp_api/get_venue_contract_information_list', body, fanout)
+// Every page by default; pass { paginate: false } for the raw first page (10
+// rows) when debugging.
+export async function lmsVenueContracts(body = {}, { paginate = true } = {}) {
+  const res = await lmsCall('/api/v1/processerp_api/get_venue_contract_information_list', body, paginate)
   return asArray(res)
     .map(normContract)
     .filter((c) => !c.cancelled)

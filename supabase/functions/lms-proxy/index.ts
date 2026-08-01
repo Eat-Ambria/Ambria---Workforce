@@ -6,9 +6,9 @@
 // permissive CORS headers so the browser is happy.
 //
 // The frontend calls it via:  supabase.functions.invoke('lms-proxy', {
-//   body: { path: '/api/v1/processerp_api/get_venue_information_list', body: {} }
+//   body: { path: '/api/v1/processerp_api/get_venue_contract_information_list',
+//           body: {}, paginate: true }
 // })
-// It forwards `body` to `${LMS_BASE}${path}` as JSON, injecting loggeduserid.
 //
 // DEPLOY:  supabase functions deploy lms-proxy --no-verify-jwt
 // (No secrets needed — the LMS auth is just loggeduserid in the body.)
@@ -18,21 +18,35 @@ const LMS_BASE = 'https://gyv.inqcrm.in'
 const DEFAULT_LOGGED_USER = '1'
 
 // ---------------------------------------------------------------------------
-// WHY THE FAN-OUT MODE EXISTS
+// PAGINATION — the thing that makes or breaks this integration
 //
-// get_venue_contract_information_list returns AT MOST 10 contracts and ignores
-// every filter or paging parameter (verified against ~34 of them: from_date,
-// page, limit, offset, venue_id, entryno, ...). What it does honour is
-// `loggeduserid`: each CRM user gets THEIR OWN 10 most recent contracts.
+// `page_limit` is a PAGE NUMBER, not a row count. Send it once and you get a
+// perfectly valid-looking 10-row response that is merely page 1; there is no
+// `total`, `has_more` or `next` in the reply, so nothing tells you the rest
+// exists. Increment it until a page comes back empty.
 //
-// So the only way to see the whole diary is to ask as every user and merge the
-// answers. Sweeping ids 1..75 (nothing above 72 has data) turns 10 contracts
-// into ~85, and is what makes near-term months — August included — appear at
-// all. Doing it here rather than in the browser keeps it to ONE request from
-// the app instead of 75.
+// Every filter key must be present even when blank — omitting them can make the
+// API apply a default filter instead of treating them as unset.
+//
+// Pages are independent, so we fetch them in small concurrent batches and stop
+// at the first batch that yields nothing new. ~700 contracts arrive in seconds.
 // ---------------------------------------------------------------------------
-const FANOUT_MAX_USER = 75
-const FANOUT_BATCH = 10   // concurrent upstream calls
+const PAGE_BATCH = 8      // pages fetched concurrently
+const PAGE_CEILING = 200  // runaway guard
+
+// filter keys per endpoint — blank, but present
+const VENUE_FILTERS = {
+  fromdate: '', uptodated: '', search_venue_contract: '', priority_search: '',
+  venue_datetype: '', source_search: '', venue_search: '', balance_pending: '',
+  contract_venue_search: '', contract_assginee_search: '', leadtype_search: '',
+  report_fac: '',
+}
+const DECOR_FILTERS = {
+  entertain_search: '', source_search: '', lead_type_search: '',
+  entertain_venue_search: '', priority_search: '', fromdate: '', uptodated: '',
+  entertain_assginee_search: '', entertain_status_search: '', search_date_type: '',
+  visited_search: '', follow_dated: '',
+}
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -42,58 +56,66 @@ const cors = {
 const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 
+const rowsOf = (res: unknown): Record<string, unknown>[] => {
+  if (!res || typeof res !== 'object') return []
+  const obj = res as Record<string, unknown>
+  const key = ['Contractinfo', 'contractinfo', 'leadinfo'].find((k) => Array.isArray(obj[k]))
+  return key ? (obj[key] as Record<string, unknown>[]) : []
+}
+
+async function fetchPage(path: string, body: Record<string, unknown>, page: number) {
+  try {
+    const r = await fetch(LMS_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ ...body, page_limit: String(page) }),
+    })
+    if (!r.ok) return []
+    return rowsOf(await r.json())
+  } catch {
+    return []   // one bad page must not sink the sweep
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
-    const { path, body, fanout } = await req.json()
+    // `fanout` is the old flag name — still accepted so an un-updated client keeps working
+    const { path, body, paginate, fanout } = await req.json()
 
     // only allow the documented LMS API paths through this proxy
     if (typeof path !== 'string' || !path.startsWith('/api/')) {
       return json({ error: 'invalid or missing "path" (must start with /api/)' }, 400)
     }
 
-    // fan-out mode: ask as every CRM user and merge, de-duplicated by row id
-    if (fanout) {
+    if (paginate || fanout) {
+      const filters = path.includes('decor') || path.includes('entertain') ? DECOR_FILTERS : VENUE_FILTERS
+      const base = { loggeduserid: DEFAULT_LOGGED_USER, ...filters, ...(body || {}) }
       const merged = new Map<string, Record<string, unknown>>()
-      let envelopeKey = 'Contractinfo'
-      let reached = 0
+      let page = 1
+      let pages = 0
 
-      for (let start = 1; start <= FANOUT_MAX_USER; start += FANOUT_BATCH) {
-        const ids: number[] = []
-        for (let u = start; u < start + FANOUT_BATCH && u <= FANOUT_MAX_USER; u++) ids.push(u)
+      while (page <= PAGE_CEILING) {
+        const batch = Array.from({ length: PAGE_BATCH }, (_, i) => page + i)
+        const results = await Promise.all(batch.map((p) => fetchPage(path, base, p)))
+        const before = merged.size
 
-        const results = await Promise.all(ids.map(async (uid) => {
-          try {
-            const r = await fetch(LMS_BASE + path, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-              body: JSON.stringify({ ...(body || {}), loggeduserid: String(uid) }),
-            })
-            if (!r.ok) return null
-            return await r.json()
-          } catch {
-            return null   // one unhappy user must not sink the whole sweep
-          }
-        }))
-
-        for (const res of results) {
-          if (!res || typeof res !== 'object') continue
-          reached++
-          const obj = res as Record<string, unknown>
-          const key = ['Contractinfo', 'contractinfo', 'leadinfo'].find((k) => Array.isArray(obj[k]))
-          if (!key) continue
-          envelopeKey = key
-          for (const row of obj[key] as Record<string, unknown>[]) {
-            // `id` is the contract-detail row id and is unique per event
+        for (const rows of results) {
+          for (const row of rows) {
             const rid = String(row?.id ?? `${row?.headid}-${row?.fiscd_entryno}`)
             if (!merged.has(rid)) merged.set(rid, row)
           }
         }
+        pages += batch.length
+        // stop when a whole batch adds nothing new — either empty pages, or the
+        // API started repeating a page instead of returning []
+        if (merged.size === before) break
+        page += PAGE_BATCH
       }
 
       return json({
-        [envelopeKey]: [...merged.values()],
-        message: `merged ${merged.size} records from ${reached} user views`,
+        Contractinfo: [...merged.values()],
+        message: `merged ${merged.size} records from ${pages} pages`,
         status: true,
       })
     }
