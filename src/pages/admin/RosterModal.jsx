@@ -81,11 +81,39 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       })
     return () => { alive = false }
   }, [props])
-  const staff = useMemo(() => (
-    anyVenue
+  // Anyone who ALREADY has work here is always listed, whichever venue they are
+  // based at. Without this their chip is missing while the head count still
+  // includes them: the job reads "1 people" with nothing ticked, and "Fill empty
+  // rows" skips it as already covered.
+  const assignedHere = useMemo(
+    () => new Set(rows.filter((r) => r.assigned_to).map((r) => r.assigned_to)),
+    [rows]
+  )
+  // Someone holding work here who is no longer in the assignable list at all —
+  // deactivated, or moved out of an assignable role. They cannot be looked up, so
+  // the chip is rebuilt from the name stored on the task itself. Without this the
+  // head count includes a person no chip can show, and the two disagree forever.
+  const formerStaff = useMemo(() => {
+    const known = new Set(members.map((m) => m.id))
+    const out = new Map()
+    rows.forEach((r) => {
+      if (r.assigned_to && !known.has(r.assigned_to) && !out.has(r.assigned_to)) {
+        out.set(r.assigned_to, { id: r.assigned_to, name: r.assignee_name || '—', inactive: true })
+      }
+    })
+    return [...out.values()]
+  }, [rows, members])
+
+  const staff = useMemo(() => {
+    const base = anyVenue
       ? members
-      : members.filter((m) => deployed.includes(m.id) || props.some((code) => memberInProperty(m, code)))
-  ), [members, props, anyVenue, deployed])
+      : members.filter((m) => (
+        assignedHere.has(m.id)
+        || deployed.includes(m.id)
+        || props.some((code) => memberInProperty(m, code))
+      ))
+    return [...base, ...formerStaff]
+  }, [members, props, anyVenue, deployed, assignedHere, formerStaff])
 
   // someone on this roster who is not based at any of the selected venues
   const isVisiting = useCallback(
@@ -326,7 +354,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           >
             {on && <Icon name="check" size={12} color="#fff" />}
             {personName(m, lang)}
-            {isVisiting(m) && (
+            {m.inactive && (
+              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                · {t.inactiveStaff}
+              </span>
+            )}
+            {!m.inactive && isVisiting(m) && (
               <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
                 · {propName(m.property, lang)}
               </span>
