@@ -206,7 +206,9 @@ export function SectionTitle({ children, subtitle, right }) {
 // to show every choice instead of hiding them in a dropdown.
 // `dot` paints a small colour disc before the label (venue colours on the valet
 // calendar), so the filter and the marks it filters read as one system.
-export function FilterChip({ children, active, onClick, dot, dotRing }) {
+// `check` turns the chip into a checkbox: use it when several can be on at once.
+// A single-choice row leaves it off, so the two kinds of row never look alike.
+export function FilterChip({ children, active, onClick, dot, dotRing, check }) {
   const C = useColors()
   return (
     <button
@@ -221,6 +223,17 @@ export function FilterChip({ children, active, onClick, dot, dotRing }) {
         color: active ? '#fff' : C.tl,
       }}
     >
+      {check && (
+        <span
+          style={{
+            width: 15, height: 15, borderRadius: 4, flexShrink: 0, display: 'grid', placeItems: 'center',
+            border: `1.5px solid ${active ? 'rgba(255,255,255,0.9)' : C.borderStrong || C.border}`,
+            background: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+          }}
+        >
+          {active && <Icon name="check" size={11} color="#fff" />}
+        </span>
+      )}
       {dot && (
         <span style={{
           width: 9, height: 9, borderRadius: '50%', background: dot, flexShrink: 0,

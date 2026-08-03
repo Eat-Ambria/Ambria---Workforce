@@ -358,6 +358,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             return (
               <FilterChip
                 key={p.code}
+                check
                 active={on}
                 onClick={() => setProps((prev) => (
                   // never leave the roster with no venue selected
