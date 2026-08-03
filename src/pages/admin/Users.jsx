@@ -6,7 +6,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import {
-  ROLES, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, PROPERTY_MAP, propName, deptName, personName,
+  ROLES, DEPARTMENTS, DEPARTMENT_MAP, DESIGNATIONS, PROPERTIES, PROPERTY_MAP, propName, deptName, personName,
 } from '../../constants/org'
 import { navForRole, ALWAYS_VISIBLE } from '../../constants/nav'
 import { normalizePhone, typedPhone, isValidPhone } from '../../lib/phone'
@@ -25,9 +25,6 @@ const roleLabel = (role, t) => ({
   [ROLES.SUPER_ADMIN]: t.roleSuperAdmin, [ROLES.ADMIN]: t.roleAdmin, [ROLES.EMPLOYEE]: t.roleEmployee,
 }[role] || role)
 const roleTone = (role, C) => (role === ROLES.SUPER_ADMIN ? C.maroon : role === ROLES.ADMIN ? C.indigo : C.blue)
-
-// designation marker that identifies an Admin who is a department head
-const DEPT_HEAD_TITLE = 'Department Head'
 
 // default set of visible tab paths for a role
 const seedAccess = (role) => new Set(navForRole(role).map((i) => i.path))
@@ -225,8 +222,6 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
     if (stored.length) return new Set(stored)
     return seedAccess(record?.role || ROLES.EMPLOYEE)
   })
-  // a "Department Head" is a staff member given full Admin access (not super admin)
-  const [deptHead, setDeptHead] = useState(() => record?.designation === DEPT_HEAD_TITLE)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -240,23 +235,6 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
     const role = e.target.value
     setForm((f) => ({ ...f, role }))
     setAccess(seedAccess(role))
-  }
-
-  // toggling Department Head elevates the user to the Admin role (full admin tabs)
-  function toggleDeptHead() {
-    setDeptHead((prev) => {
-      const next = !prev
-      if (next) {
-        // elevate to Admin with full admin tabs
-        setForm((f) => ({ ...f, role: ROLES.ADMIN, designation: DEPT_HEAD_TITLE }))
-        setAccess(seedAccess(ROLES.ADMIN))
-      } else {
-        // revert to a normal Employee with employee tabs
-        setForm((f) => ({ ...f, role: ROLES.EMPLOYEE, designation: f.designation === DEPT_HEAD_TITLE ? '' : f.designation }))
-        setAccess(seedAccess(ROLES.EMPLOYEE))
-      }
-      return next
-    })
   }
 
   // load the existing password so the admin can view it / reset a forgotten one
@@ -422,8 +400,8 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
 
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label={t.role} hint={deptHead ? 'Set by Department Head' : undefined}>
-            <select style={inputStyle(C)} value={form.role} onChange={changeRole} disabled={isSelf || deptHead}>
+          <Field label={t.role}>
+            <select style={inputStyle(C)} value={form.role} onChange={changeRole} disabled={isSelf}>
               {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{roleLabel(r.value, t)}</option>)}
             </select>
           </Field>
@@ -447,31 +425,20 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
             </select>
           </Field>
         </div>
-        <div style={{ flex: 1 }}><Field label={t.designation}><input style={inputStyle(C)} value={form.designation} onChange={set('designation')} disabled={deptHead} /></Field></div>
+        <div style={{ flex: 1 }}><Field label={t.designation} hint={t.designationHeadHint}>
+            <input
+              style={inputStyle(C)}
+              value={form.designation}
+              onChange={set('designation')}
+              list="designation-options"
+              placeholder={t.designationPlaceholder}
+            />
+            {/* suggestions, not a fixed list — an unusual title can still be typed */}
+            <datalist id="designation-options">
+              {DESIGNATIONS.map((d) => <option key={d} value={d} />)}
+            </datalist>
+          </Field></div>
       </div>
-
-      {/* elevate a staff member to Department Head → full Admin access */}
-      <Field label="">
-        <button
-          type="button"
-          onClick={() => !isSelf && toggleDeptHead()}
-          disabled={isSelf}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-            background: deptHead ? C.maroonSoft : C.cardAlt, color: deptHead ? C.maroon : C.tl,
-            border: `1px solid ${deptHead ? C.maroon : C.border}`, borderRadius: 10, padding: '11px 13px',
-            fontSize: 14, fontWeight: 600, opacity: isSelf ? 0.6 : 1, cursor: isSelf ? 'not-allowed' : 'pointer',
-          }}
-        >
-          <span style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${deptHead ? C.maroon : C.border}`, background: deptHead ? C.maroon : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            {deptHead && <Icon name="check" size={13} color="#fff" />}
-          </span>
-          <span>
-            Department Head
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: deptHead ? C.maroon : C.faint }}>Grants full Admin access (not super admin)</span>
-          </span>
-        </button>
-      </Field>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
         <div style={{ flex: 1 }}><Field label={t.phone} hint={t.phoneRule}><input style={inputStyle(C)} value={form.phone} type="tel" inputMode="numeric" maxLength={10} placeholder={t.phonePlaceholder} onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))} /></Field></div>

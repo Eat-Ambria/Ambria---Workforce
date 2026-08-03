@@ -12,6 +12,7 @@ import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import AudioPlayer from '../../components/common/AudioPlayer'
 import Icon from '../../components/common/Icon'
+import PhotoViewer from '../../components/common/PhotoViewer'
 
 const AUTO_REFRESH_MS = 30000
 const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
@@ -292,6 +293,7 @@ function TaskRow({ task, C, t, today, onOpen, hi }) {
 
 // ---- Start Work (before photo) -> work (timer) -> Mark for Completion (after photo) ----
 function WorkModal({ task, onClose, onSaved, user }) {
+  const [viewing, setViewing] = useState(null)  // { photos, index } in the lightbox
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -379,8 +381,12 @@ function WorkModal({ task, onClose, onSaved, user }) {
   const afterLabel = hi ? 'काम के बाद' : 'After work'
   const thumbs = (arr) => (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      {(arr || []).length ? arr.map((u) => (
-        <img key={u} src={u} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }} />
+      {(arr || []).length ? arr.map((u, i) => (
+        <img
+          key={u} src={u} alt=""
+          onClick={() => setViewing({ photos: arr, index: i })}
+          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}`, cursor: 'zoom-in' }}
+        />
       )) : <span style={{ fontSize: 13, color: C.faint }}>—</span>}
     </div>
   )
@@ -490,6 +496,15 @@ function WorkModal({ task, onClose, onSaved, user }) {
       )}
 
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 12 }}>{err}</div>}
+
+      {viewing && (
+        <PhotoViewer
+          photos={viewing.photos}
+          index={viewing.index}
+          onIndex={(n) => setViewing((v) => ({ ...v, index: n }))}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </Modal>
   )
 }

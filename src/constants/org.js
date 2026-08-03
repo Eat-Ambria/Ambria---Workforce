@@ -26,6 +26,13 @@ export const DEPARTMENTS = [
   { code: 'hr', name: 'HR', nameHi: 'एचआर', color: '#D4537E' },
   { code: 'finance', name: 'Finance', nameHi: 'वित्त', color: '#059669' },
   { code: 'marketing', name: 'Marketing', nameHi: 'मार्केटिंग', color: '#DC2626' },
+  // Leadership groups. These behave like any other department — they scope what
+  // a person sees, receive repair requests and group the analytics — so a head
+  // put here is NOT inside Housekeeping or Security for filtering purposes.
+  { code: 'oh', name: 'Overall Head', nameHi: 'ओवरऑल हेड', color: '#7C3AED' },
+  { code: 'sth', name: 'Site Head', nameHi: 'साइट हेड', color: '#B45309' },
+  { code: 'sv', name: 'Supervisor', nameHi: 'सुपरवाइज़र', color: '#0E7490' },
+  { code: 'sech', name: 'Security Head', nameHi: 'सिक्योरिटी हेड', color: '#9D174D' },
 ]
 
 // Lookup incl. the legacy "Admin" department so any existing department='a'
@@ -137,6 +144,18 @@ export const isOwnAssignedWork = (user, assignedTo) =>
 // 'alternate' = every other day. Unlike the others it has no fixed weekday or
 // date to key off, so the nightly reset works from the task's own last date:
 // it comes back two days after it was last set, giving a day-on/day-off rhythm.
+// Job titles offered on the user form. Free text is still allowed — this is a
+// suggestion list, not a restriction — but picking from it keeps the spelling
+// consistent, which matters because "Department Head" is read as a marker by
+// Analytics and the sidebar, and "overall head" != "Overall Head" to a computer.
+export const DESIGNATIONS = [
+  'Overall Head',
+  'Site Head',
+  'Department Head',
+  'Supervisor',
+  'Security Head',
+]
+
 export const TASK_CATEGORIES = ['daily', 'alternate', 'weekly', 'monthly']
 export const TASK_STATUS = {
   PENDING: 'pending',

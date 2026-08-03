@@ -14,6 +14,8 @@ import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
+import RosterModal from './RosterModal'
+import PhotoViewer from '../../components/common/PhotoViewer'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 import VoiceRecorder from '../../components/common/VoiceRecorder'
 import { deleteStorageFile } from '../../lib/storage'
@@ -50,6 +52,7 @@ export default function AdminTasks() {
   const [memberFilter, setMemberFilter] = useState(presetMember || 'all') // all | <staff id>
   const [review, setReview] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [roster, setRoster] = useState(false)  // bulk assignment table
 
   const today = todayISO()
   // collapse the status tabs into a dropdown once the row gets tight (≤1073px)
@@ -184,7 +187,7 @@ export default function AdminTasks() {
     <div>
       <SectionTitle
         right={(
-          <Button variant="primary" onClick={() => setCreating(true)}>
+          <Button variant="primary" onClick={() => setRoster(true)}>
             <Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />{t.tasks}
           </Button>
         )}
@@ -361,6 +364,17 @@ export default function AdminTasks() {
           onSaved={() => { setReview(null); load() }}
         />
       )}
+      {roster && (
+        <RosterModal
+          user={user}
+          members={members}
+          canSeeAllProps={canSeeAllProps}
+          defaultProperty={propFilter !== 'all' ? propFilter : (user.property !== 'all' ? user.property : undefined)}
+          onClose={() => setRoster(false)}
+          onSaved={() => { setRoster(false); load() }}
+          onDetailed={() => { setRoster(false); setCreating(true) }}
+        />
+      )}
       {creating && (
         <CreateModal
           user={user}
@@ -391,16 +405,22 @@ function PropChip({ children, active, onClick, C, full }) {
 }
 
 function PhotoCol({ C, label, photos }) {
+  const [at, setAt] = useState(null)   // index open in the lightbox
   return (
     <div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: C.tl, marginBottom: 6 }}>{label}</div>
       {photos && photos.length ? (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {photos.map((u) => (
-            <a key={u} href={u} target="_blank" rel="noreferrer">
-              <img src={u} alt="" style={{ width: 78, height: 78, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }} />
-            </a>
+          {photos.map((u, i) => (
+            <img
+              key={u} src={u} alt=""
+              onClick={() => setAt(i)}
+              style={{ width: 78, height: 78, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}`, cursor: 'zoom-in' }}
+            />
           ))}
+          {at != null && (
+            <PhotoViewer photos={photos} index={at} onIndex={setAt} onClose={() => setAt(null)} />
+          )}
         </div>
       ) : <div style={{ fontSize: 13, color: C.faint }}>—</div>}
     </div>

@@ -31,6 +31,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // take over from the previous worker straight away instead of waiting
+        // for every tab to close, and bin the old build's caches
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         // pull our Web Push handlers into the generated service worker
         importScripts: ['push-sw.js'],
         runtimeCaching: [

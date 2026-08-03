@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { nowISO, fmtDateTime, todayISO, fmtDate } from '../../lib/time'
@@ -14,6 +14,7 @@ import AudioPlayer from '../../components/common/AudioPlayer'
 import VoiceRecorder from '../../components/common/VoiceRecorder'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
+import PhotoViewer from '../../components/common/PhotoViewer'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 // The Completed tab only shows recent work by default — finished repairs pile
@@ -84,7 +85,9 @@ export default function TaskBoard() {
 
       if (admin) {
         // staff *and* fellow admins can take a repair request
-        const { data: mem } = await assigneesQuery({ propScope, deptScope })
+        // no propScope: a repair can be handed to anyone, whichever venue they
+        // are based at — the request's property is where the work happens
+        const { data: mem } = await assigneesQuery({ deptScope })
         setMembers(mem || [])
       }
     } catch {
@@ -368,7 +371,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const admin = isAdminRole(user?.role)          // admin + super admin can assign at creation
   const superAdmin = isSuperAdmin(user?.role)    // only super admin picks the property
   const [form, setForm] = useState({
-    title: '', description: '', priority: '', due_date: '',
+    title: '', description: '', priority: '', due_date: '', assignee: '',
     property: user.property && user.property !== 'all' ? user.property : 'pp',
     dept: '',
   })
@@ -379,8 +382,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const [fieldErr, setFieldErr] = useState({}) // per-field validation shown inline
   const titleRef = useRef(null)
   const dueRef = useRef(null)
-  const deptRef = useRef(null)
   const prioRef = useRef(null)
+  const assigneeRef = useRef(null)
   // update a field and clear its inline error as the user fixes it
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -388,48 +391,49 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   }
 
   // everyone at the chosen venue — the picker narrows it by kind + department
-  const atProperty = useMemo(
-    () => members.filter((m) => memberInProperty(m, form.property)),
-    [members, form.property]
-  )
+  // everyone assignable, in one list — the venue does not narrow it
+  const atProperty = members
 
   async function save() {
     // validate per-field so the message appears next to the field, not at the bottom
     const fe = {}
     if (!form.title.trim()) fe.title = `${t.title} ${t.isRequired}`
     if (!form.priority) fe.priority = `${t.priority} ${t.isRequired}`
-    if (!form.dept) fe.dept = `${t.department} ${t.isRequired}`
+    if (!form.assignee) fe.assignee = `${t.members} ${t.isRequired}`
     if (form.due_date && form.due_date < todayISO()) fe.due_date = t.dueDatePast
     setFieldErr(fe)
     if (Object.keys(fe).length) {
       // jump the user to the first field that needs fixing
       const target = fe.title ? titleRef.current
         : fe.priority ? prioRef.current
-        : fe.dept ? deptRef.current
+        : fe.assignee ? assigneeRef.current
         : fe.due_date ? dueRef.current : null
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       target?.focus?.({ preventScroll: true })
       return
     }
     setBusy(true); setErr('')
-    const property = superAdmin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp')
+    const property = admin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp')
+    const person = atProperty.find((m) => m.id === form.assignee)
     const { error } = await supabase.from('work_board').insert({
       title: form.title.trim(),
       description: form.description || null,
       category: 'other',
+      // the venue the work has to be done at
       property,
       posted_by: user.id,
       posted_by_name: user.name,
-      // the chosen department routes the request to that department's head
-      department: form.dept,
+      // taken from whoever is doing it, so department scoping still works;
+      // left null when nobody is picked yet
+      department: person?.department || null,
       priority: form.priority,
       due_date: form.due_date || null,
-      // left unassigned on purpose: the department head picks the person
-      assigned_to: null,
-      assigned_to_name: null,
+      assigned_to: person?.id || null,
+      assigned_to_name: person?.name || null,
       photos,
       voice_url: voice || null,
-      status: 'open',
+      // assigning at creation skips the open->assigned hop
+      status: person ? 'assigned' : 'open',
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -444,8 +448,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       <Field label={`${t.voiceNote} (${t.optional})`} hint={t.voiceInsteadHint}>
         <VoiceRecorder folder="work-voice" value={voice} onChange={setVoice} />
       </Field>
-      {superAdmin && (
-        <Field label={t.properties || 'Property'}>
+      {admin && (
+        <Field label={t.propertyLabel} hint={t.propertyWorkHint}>
           <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
             {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
           </select>
@@ -457,14 +461,19 @@ function PostModal({ user, members = [], onClose, onSaved }) {
           {PRIO_CHOICES.map((p) => <option key={p} value={p}>{prioLabel(p, t)}</option>)}
         </select>
       </Field>
-      {/* Which team should handle this. Required — the request is routed to that
-          department's head, who then assigns it to one of their staff. */}
-      <Field label={t.department} required error={fieldErr.dept} hint={t.deptRoutingHint}>
-        <select ref={deptRef} style={inputStyle(C)} value={form.dept} onChange={set('dept')}>
-          <option value="">{t.selectDepartment}</option>
-          {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
-        </select>
-      </Field>
+      {/* Straight to a person. Everyone at the chosen venue is listed, with
+          their department beside the name so the right one is easy to spot. */}
+      {admin && (
+        <Field label={t.members} required error={fieldErr.assignee} hint={t.assigneeAnyVenueHint}>
+          <PersonPicker
+            ref={assigneeRef}
+            C={C} t={t} lang={lang}
+            people={atProperty}
+            value={form.assignee}
+            onChange={(id) => { setForm((f) => ({ ...f, assignee: id })); setFieldErr((fe) => ({ ...fe, assignee: undefined })) }}
+          />
+        </Field>
+      )}
       <Field label={`${t.dueDate} (${t.optional})`} error={fieldErr.due_date}>
         <input ref={dueRef} type="date" min={todayISO()} style={inputStyle(C)} value={form.due_date} onChange={set('due_date')} />
       </Field>
@@ -484,12 +493,12 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const superAdmin = isSuperAdmin(user?.role) // super admin also picks the property when assigning
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
   const [propFilter, setPropFilter] = useState(row.property || 'pp') // property to assign within (super admin)
-  const [deptFilter, setDeptFilter] = useState(row.department || '') // '' = not routed yet
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
   const [note, setNote] = useState(row.resolution_note || '')
   const [resPhotos, setResPhotos] = useState(Array.isArray(row.resolution_photos) ? row.resolution_photos : [])
   const [reassigning, setReassigning] = useState(false) // admin editing the assignment
   const [rating, setRating] = useState(row.rating || 0)  // 1..5 stars given by admin
+  const [viewing, setViewing] = useState(null)           // { photos, index } in the lightbox
 
   // super admin assigns within a chosen property; other admins are already scoped
   const scopedMembers = useMemo(
@@ -497,13 +506,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     [members, superAdmin, propFilter]
   )
 
-  // people in the chosen department, at the chosen property
-  const deptMembers = useMemo(
-    () => (deptFilter ? scopedMembers.filter((m) => m.department === deptFilter) : []),
-    [scopedMembers, deptFilter]
-  )
-
-  // changing the property clears the person; the department stays as routed
+  // changing the property clears the person
   useEffect(() => { setAssignTo('') }, [propFilter])
 
   const postedPhotos = Array.isArray(row.photos) ? row.photos : []
@@ -540,20 +543,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   // STEP 1: hand the request to a department. Stays 'open' and unassigned — the
   // trigger notifies that department's head, who then picks the person.
-  function routeToDepartment() {
-    if (!deptFilter) { setErr(`${t.department} ${t.isRequired}`); return }
-    if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
-    setStatus('open', {
-      department: deptFilter,
-      property: superAdmin ? propFilter : (row.property || null),
-      due_date: dueDate || null,
-    })
-  }
-
   // used for the first assignment AND for admin reassignment later
   function saveAssignment() {
-    if (!deptFilter) { setErr(`${t.department} ${t.isRequired}`); return }
-    if (!assignTo) { setErr(`${t.personName} ${t.isRequired}`); return }
+    if (!assignTo) { setErr(`${t.members} ${t.isRequired}`); return }
     if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
     const m = members.find((x) => x.id === assignTo)
     const changedAssignee = assignTo !== row.assigned_to
@@ -565,7 +557,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       assigned_to: assignTo,
       assigned_to_name: m?.name || null,
       property: superAdmin ? propFilter : (row.property || null),
-      department: deptFilter || m?.department || row.department || null,
+      department: m?.department || row.department || null,
       due_date: dueDate || null,
     })
   }
@@ -589,9 +581,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // footer actions depend on status + who's looking
   let actions = null
   if (s === 'open' && admin) {
-    actions = hasDept
-      ? <Button variant="primary" disabled={busy || !assignTo} onClick={saveAssignment} style={{ flex: 2 }}>{t.assign}</Button>
-      : <Button variant="primary" disabled={busy || !deptFilter} onClick={routeToDepartment} style={{ flex: 2 }}>{t.routeToDept}</Button>
+    actions = <Button variant="primary" disabled={busy || !assignTo} onClick={saveAssignment} style={{ flex: 2 }}>{t.assign}</Button>
   } else if (s === 'assigned' && isAssignee) {
     actions = <Button variant="primary" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 2 }}>{t.startWork}</Button>
   } else if (s === 'in_progress' && isAssignee) {
@@ -638,7 +628,13 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
       {postedPhotos.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          {postedPhotos.map((u) => <img key={u} src={u} alt="" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }} />)}
+          {postedPhotos.map((u, i) => (
+            <img
+              key={u} src={u} alt=""
+              onClick={() => setViewing({ photos: postedPhotos, index: i })}
+              style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}`, cursor: 'zoom-in' }}
+            />
+          ))}
         </div>
       )}
 
@@ -673,35 +669,17 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
               </select>
             </Field>
           )}
-          {/* STEP 1 — which team owns this. Required; changing it clears the
-              person, since staff belong to one department. */}
-          <Field label={t.department} required hint={hasDept ? undefined : t.deptRoutingHint}>
-            <select
-              style={inputStyle(C)}
-              value={deptFilter}
-              onChange={(e) => { setDeptFilter(e.target.value); setAssignTo('') }}
-            >
-              <option value="">{t.selectDepartment}</option>
-              {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
-            </select>
+          {/* Straight to a person — every assignable name, searchable. The
+              department is taken from whoever is picked, so routing still works
+              without anyone choosing a team first. */}
+          <Field label={t.members} required hint={t.assigneeAnyVenueHint}>
+            <PersonPicker
+              C={C} t={t} lang={lang}
+              people={members}
+              value={assignTo}
+              onChange={setAssignTo}
+            />
           </Field>
-
-          {/* STEP 2 — the person, drawn from that department only. Gated on the
-              department already SAVED on the row, not on the dropdown: an admin
-              routing a request should never see a person picker. It appears only
-              once the request has been handed to a department. */}
-          {hasDept && (
-            <Field label={t.personName} hint={deptMembers.length ? undefined : t.noStaffInDept}>
-              <select style={inputStyle(C)} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
-                <option value="">—</option>
-                {deptMembers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {assigneeLabel(m, { showDept: false, lang })}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
           <Field label={`${t.dueDate} (${t.optional})`}>
             <input type="date" min={todayISO()} style={inputStyle(C)} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </Field>
@@ -709,10 +687,19 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {reassigning && (
             <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
               <Button variant="ghost" onClick={() => { setReassigning(false); setAssignTo(row.assigned_to || ''); setDueDate(row.due_date || '') }} style={{ flex: 1 }}>{t.cancel}</Button>
-              <Button variant="primary" disabled={busy || !assignTo || !deptFilter} onClick={saveAssignment} style={{ flex: 2 }}>{t.save}</Button>
+              <Button variant="primary" disabled={busy || !assignTo} onClick={saveAssignment} style={{ flex: 2 }}>{t.save}</Button>
             </div>
           )}
         </>
+      )}
+
+      {viewing && (
+        <PhotoViewer
+          photos={viewing.photos}
+          index={viewing.index}
+          onIndex={(i) => setViewing((v) => ({ ...v, index: i }))}
+          onClose={() => setViewing(null)}
+        />
       )}
 
       {/* assignee submits the completed work */}
@@ -733,7 +720,13 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{t.completed} — {row.assigned_to_name}</div>
           {row.resolution_note && <p style={{ fontSize: 13.5, color: C.tl, marginBottom: 8 }}>{row.resolution_note}</p>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {(row.resolution_photos || []).map((u) => <img key={u} src={u} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }} />)}
+            {(row.resolution_photos || []).map((u, i) => (
+              <img
+                key={u} src={u} alt=""
+                onClick={() => setViewing({ photos: row.resolution_photos || [], index: i })}
+                style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}`, cursor: 'zoom-in' }}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -806,3 +799,70 @@ function Stars({ value = 0, onRate, C, size = 26 }) {
     </div>
   )
 }
+
+// A person picker with a search box. There are enough staff across five venues
+// that a plain <select> means scrolling a long unsorted list; typing two letters
+// of a name is faster, and the department/venue beside each name settles the
+// "which Akash?" question without opening anything else.
+const PersonPicker = forwardRef(function PersonPicker({ C, t, lang, people, value, onChange }, ref) {
+  const [q, setQ] = useState('')
+  const chosen = people.find((m) => m.id === value)
+
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return people
+    return people.filter((m) => [
+      m.name, m.name_hi, m.designation,
+      deptName(m.department, lang), propName(m.property, lang),
+    ].filter(Boolean).some((f) => String(f).toLowerCase().includes(needle)))
+  }, [people, q, lang])
+
+  return (
+    <div>
+      <input
+        ref={ref}
+        style={{ ...inputStyle(C), marginBottom: 6 }}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={t.searchPerson}
+      />
+      <div style={{ maxHeight: 210, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }} className="modal-scroll">
+        {matches.length === 0 ? (
+          <div style={{ padding: '12px 12px', fontSize: 13, color: C.tl }}>{t.noMatch}</div>
+        ) : matches.map((m) => {
+          const on = m.id === value
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onChange(on ? '' : m.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                padding: '9px 11px', background: on ? C.maroonSoft : 'transparent',
+                borderBottom: `1px solid ${C.border}`, color: C.text,
+              }}
+            >
+              <span style={{
+                width: 17, height: 17, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
+                border: `1.5px solid ${on ? C.maroon : C.borderStrong || C.border}`, background: on ? C.maroon : 'transparent',
+              }}>
+                {on && <Icon name="check" size={11} color="#fff" />}
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 13.5, fontWeight: on ? 700 : 600, color: on ? C.maroon : C.text }}>{personName(m, lang)}</span>
+                <span style={{ fontSize: 12, color: C.tl, marginLeft: 6 }}>
+                  {[m.department ? deptName(m.department, lang) : null, propName(m.property, lang)].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {chosen && (
+        <div style={{ fontSize: 12.5, color: C.maroon, fontWeight: 600, marginTop: 6 }}>
+          {t.assignedTo}: {personName(chosen, lang)}
+        </div>
+      )}
+    </div>
+  )
+})

@@ -12,16 +12,42 @@ export default function AudioPlayer({ src, label }) {
   const [dur, setDur] = useState(0)
   const [cur, setCur] = useState(0)
 
+  // A voice note is WebM straight from MediaRecorder, and that container is
+  // written without a duration in its header — the browser reports Infinity
+  // until it has scanned the whole file, which is why the length used to appear
+  // only after playing. Seeking far past the end forces that scan immediately;
+  // once the real duration arrives we jump back to the start.
+  const probingRef = useRef(false)
+
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
-    const onTime = () => setCur(a.currentTime)
-    const onMeta = () => setDur(isFinite(a.duration) ? a.duration : 0)
+    probingRef.current = false
+
+    const onTime = () => { if (!probingRef.current) setCur(a.currentTime) }
+    const onMeta = () => {
+      const d = a.duration
+      if (isFinite(d) && d > 0) {
+        setDur(d)
+        if (probingRef.current) {          // finished probing — rewind
+          probingRef.current = false
+          a.currentTime = 0
+          setCur(0)
+        }
+        return
+      }
+      if (!probingRef.current) {           // Infinity / NaN — make it resolve
+        probingRef.current = true
+        try { a.currentTime = 1e101 } catch { probingRef.current = false }
+      }
+    }
     const onEnd = () => { setPlaying(false); setCur(0) }
+
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('loadedmetadata', onMeta)
     a.addEventListener('durationchange', onMeta)
     a.addEventListener('ended', onEnd)
+    onMeta()                               // metadata may already be in place
     return () => {
       a.removeEventListener('timeupdate', onTime)
       a.removeEventListener('loadedmetadata', onMeta)
@@ -67,7 +93,7 @@ export default function AudioPlayer({ src, label }) {
         </div>
       </div>
       <span style={{ fontSize: 12, color: C.tl, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-        {fmt(cur)}{dur ? ` / ${fmt(dur)}` : ''}
+        {fmt(cur)} / {dur ? fmt(dur) : '--:--'}
       </span>
     </div>
   )
