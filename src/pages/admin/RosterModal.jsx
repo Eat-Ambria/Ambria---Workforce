@@ -447,30 +447,45 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               {/* blank rows for work that isn't in the list yet */}
               {drafts.map((d) => (
                 <div key={d.key} style={{ padding: '10px 12px', borderRadius: 10, background: C.card, border: `1px dashed ${C.borderStrong || C.border}` }}>
+                  {/* Title on its own line, then the time window below it. Four
+                      controls in one row collapsed the title to a couple of
+                      characters on a phone, and a native time input shows only
+                      "--:--" with no way to hint what it is for — hence the
+                      labels rather than placeholders. */}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                     <input
-                      style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13.5 }}
+                      style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13.5, flex: 1, minWidth: 0 }}
                       value={d.title}
                       placeholder={t.newTaskTitle}
                       onChange={(e) => setDraft(d.key, { title: e.target.value })}
                     />
-                    {/* when in the day it should happen — optional, shown on the
-                        task card so staff know whether it is a morning job */}
-                    <input
-                      type="time" title={t.fromTime} aria-label={t.fromTime}
-                      style={{ ...inputStyle(C), padding: '8px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
-                      value={d.from || ''}
-                      onChange={(e) => setDraft(d.key, { from: e.target.value })}
-                    />
-                    <input
-                      type="time" title={t.toTime} aria-label={t.toTime}
-                      style={{ ...inputStyle(C), padding: '8px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
-                      value={d.to || ''}
-                      onChange={(e) => setDraft(d.key, { to: e.target.value })}
-                    />
-                    <button type="button" onClick={() => removeDraft(d.key)} aria-label={t.delete} style={{ background: 'transparent', color: C.tl, display: 'grid', placeItems: 'center', width: 34, flexShrink: 0 }}>
+                    <button type="button" onClick={() => removeDraft(d.key)} aria-label={t.delete} title={t.delete} style={{ background: 'transparent', color: C.tl, display: 'grid', placeItems: 'center', width: 34, flexShrink: 0 }}>
                       <Icon name="close" size={16} color={C.tl} />
                     </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <label style={{ flex: '1 1 130px', minWidth: 130 }}>
+                      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>
+                        {`${t.fromTime} (${t.optional})`}
+                      </span>
+                      <input
+                        type="time"
+                        style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13 }}
+                        value={d.from || ''}
+                        onChange={(e) => setDraft(d.key, { from: e.target.value })}
+                      />
+                    </label>
+                    <label style={{ flex: '1 1 130px', minWidth: 130 }}>
+                      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>
+                        {`${t.toTime} (${t.optional})`}
+                      </span>
+                      <input
+                        type="time"
+                        style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13 }}
+                        value={d.to || ''}
+                        onChange={(e) => setDraft(d.key, { to: e.target.value })}
+                      />
+                    </label>
                   </div>
                   {props.length > 1 && (
                     <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 6 }}>
@@ -509,23 +524,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                             <input
                               autoFocus
-                              style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13.5, flex: 1, minWidth: 150 }}
+                              style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13.5, flex: '1 1 100%', minWidth: 0 }}
                               value={g.title}
                               onChange={(e) => renameGroup(g.key, e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingKey(null) }}
                             />
-                            <input
-                              type="time" aria-label={t.fromTime} title={t.fromTime}
-                              style={{ ...inputStyle(C), padding: '7px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
-                              value={g.from || ''}
-                              onChange={(e) => setGroupTime(g.key, { from: e.target.value })}
-                            />
-                            <input
-                              type="time" aria-label={t.toTime} title={t.toTime}
-                              style={{ ...inputStyle(C), padding: '7px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
-                              value={g.to || ''}
-                              onChange={(e) => setGroupTime(g.key, { to: e.target.value })}
-                            />
+                            <label style={{ flex: '1 1 130px', minWidth: 130 }}>
+                              <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>{t.fromTime}</span>
+                              <input
+                                type="time"
+                                style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13 }}
+                                value={g.from || ''}
+                                onChange={(e) => setGroupTime(g.key, { from: e.target.value })}
+                              />
+                            </label>
+                            <label style={{ flex: '1 1 130px', minWidth: 130 }}>
+                              <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>{t.toTime}</span>
+                              <input
+                                type="time"
+                                style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13 }}
+                                value={g.to || ''}
+                                onChange={(e) => setGroupTime(g.key, { to: e.target.value })}
+                              />
+                            </label>
                           </div>
                         ) : (
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
