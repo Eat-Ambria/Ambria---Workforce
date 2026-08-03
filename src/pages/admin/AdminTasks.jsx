@@ -34,6 +34,7 @@ export default function AdminTasks() {
   const presetProp = location.state?.property // set when navigating from the dashboard
   const presetTab = location.state?.tab       // which tab to open (e.g. 'pending', 'completed')
   const presetMember = location.state?.member // staff filter carried from the dashboard
+  const presetPriority = location.state?.priority // e.g. dashboard 'High' row
 
   const PAGE_SIZE = 20
   const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'issuesDone', 'completed', 'all']
@@ -53,6 +54,7 @@ export default function AdminTasks() {
   const [review, setReview] = useState(null)
   const [creating, setCreating] = useState(false)
   const [deptFilter, setDeptFilter] = useState('all')  // narrow the list to one department
+  const [prioFilter, setPrioFilter] = useState(presetPriority || 'all')
   const [roster, setRoster] = useState(false)  // bulk assignment table
   // the detailed form can be opened FROM the roster; remember that so closing
   // it puts you back where you were instead of dumping you on the task list
@@ -70,9 +72,10 @@ export default function AdminTasks() {
     if (deptScope) q = q.eq('department', deptScope)
     else if (deptFilter !== 'all') q = q.eq('department', deptFilter)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
+    if (prioFilter !== 'all') q = q.eq('priority', prioFilter)
     if (memberFilter !== 'all') q = q.eq('assigned_to', memberFilter)
     return q
-  }, [user, propFilter, deptFilter, catFilter, memberFilter])
+  }, [user, propFilter, deptFilter, catFilter, prioFilter, memberFilter])
 
   // narrow a query to a tab's status condition
   const withStatus = useCallback((q, key) => {
@@ -90,6 +93,7 @@ export default function AdminTasks() {
   // even when we're already on this page and the component doesn't remount.
   useEffect(() => {
     if (location.state?.tab) { setTab(location.state.tab); setPage(0) }
+    if (location.state?.priority) { setPrioFilter(location.state.priority); setPage(0) }
   }, [location.state])
 
   // deep-link from a notification: open the exact task's review modal by id
@@ -149,6 +153,7 @@ export default function AdminTasks() {
   const changeTab = (k) => { setTab(k); setPage(0) }
   const changeProp = (p) => { setPropFilter(p); setPage(0) }
   const changeDept = (d) => { setDeptFilter(d); setPage(0) }
+  const changePrio = (p) => { setPrioFilter(p); setPage(0) }
   const changeCat = (c) => { setCatFilter(c); setPage(0) }
   const changeMember = (m) => { setMemberFilter(m); setPage(0) }
 
@@ -234,6 +239,18 @@ export default function AdminTasks() {
             </select>
           </div>
         )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
+          <Icon name="warning" size={16} color={C.tl} />
+          <select
+            style={inputStyle(C)}
+            value={prioFilter}
+            onChange={(e) => changePrio(e.target.value)}
+            aria-label={t.priority}
+          >
+            <option value="all">{t.priority} — {t.all}</option>
+            {PRIORITIES.map((p) => <option key={p} value={p}>{t[`priority${p[0].toUpperCase()}${p.slice(1)}`] || p}</option>)}
+          </select>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
           <Icon name="user" size={16} color={C.tl} />
           <select

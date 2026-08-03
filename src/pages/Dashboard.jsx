@@ -289,10 +289,15 @@ function AdminDashboard({ user }) {
           </div>
         </Widget>
 
+        {/* each row opens the task list filtered to that priority — the View
+            link alone landed on an unfiltered list, which told you nothing */}
         <Widget C={C} icon="warning" title={t.taskPriority} onView={() => go('/tasks', 'all')}>
-          <Row C={C} label={t.priorityHigh} value={d.task.priority.high} tone={C.red} />
-          <Row C={C} label={t.priorityMedium} value={d.task.priority.medium} tone={C.yellow} />
-          <Row C={C} label={t.priorityLow} value={d.task.priority.low} tone={C.green} />
+          <Row C={C} label={t.priorityHigh} value={d.task.priority.high} tone={C.red}
+               onClick={() => navigate('/tasks', { state: { tab: 'all', priority: 'high', property: prop, member } })} />
+          <Row C={C} label={t.priorityMedium} value={d.task.priority.medium} tone={C.yellow}
+               onClick={() => navigate('/tasks', { state: { tab: 'all', priority: 'medium', property: prop, member } })} />
+          <Row C={C} label={t.priorityLow} value={d.task.priority.low} tone={C.green}
+               onClick={() => navigate('/tasks', { state: { tab: 'all', priority: 'low', property: prop, member } })} />
         </Widget>
       </div>
     </div>
@@ -588,14 +593,36 @@ function Widget({ C, icon, title, onView, children }) {
   )
 }
 
-function Row({ C, label, value, tone, danger }) {
+// A clickable row needs to look clickable: a bare label and number reads as
+// static text, so people go for the widget's "View" link instead and land on an
+// unfiltered list. The chevron and the hover tint say it is a link.
+function Row({ C, label, value, tone, danger, onClick }) {
+  const interactive = !!onClick
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div
+      onClick={onClick}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
+      onMouseEnter={interactive ? (e) => { e.currentTarget.style.background = C.cardAlt } : undefined}
+      onMouseLeave={interactive ? (e) => { e.currentTarget.style.background = 'transparent' } : undefined}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        cursor: interactive ? 'pointer' : undefined,
+        margin: interactive ? '0 -8px' : undefined,
+        padding: interactive ? '4px 8px' : undefined,
+        borderRadius: interactive ? 8 : undefined,
+        transition: 'background .12s',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: danger ? C.red : C.tl, fontWeight: danger ? 700 : 400 }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tone }} />
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tone, flexShrink: 0 }} />
         {label}
       </div>
-      <span style={{ fontSize: 16, fontWeight: 700, color: danger ? C.red : C.text }}>{value ?? 0}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: danger ? C.red : C.text }}>{value ?? 0}</span>
+        {interactive && <Icon name="chevronRight" size={14} color={C.faint} />}
+      </span>
     </div>
   )
 }
