@@ -208,7 +208,7 @@ export default function MyTasks() {
       </div>
 
       {/* category filter — full-width segmented row */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <Chip C={C} full active={cat === 'all'} onClick={() => setCat('all')}>{t.all}</Chip>
         {TASK_CATEGORIES.map((c) => (
           <Chip key={c} C={C} full active={cat === c} onClick={() => setCat(c)}>{t[c]}</Chip>
@@ -247,7 +247,10 @@ function Chip({ children, active, onClick, C, full }) {
         whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 14, fontWeight: 600,
         background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
-        flex: full ? 1 : undefined, // full: share the row evenly (segmented control)
+        // share a wide row, but wrap rather than clip once five categories no
+        // longer fit a phone
+        flex: full ? '1 1 auto' : undefined,
+        minWidth: full ? 86 : undefined,
       }}
     >
       {children}

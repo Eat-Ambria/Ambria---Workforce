@@ -225,8 +225,9 @@ export default function AdminTasks() {
         </div>
       </div>
 
-      {/* category filter — full-width segmented row: all / daily / weekly / monthly */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      {/* category filter — a segmented row that WRAPS. Five categories no longer
+          fit a phone in one line, and a fixed row simply clipped the last one. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <PropChip C={C} full active={catFilter === 'all'} onClick={() => changeCat('all')}>{t.all}</PropChip>
         {TASK_CATEGORIES.map((cat) => (
           <PropChip key={cat} C={C} full active={catFilter === cat} onClick={() => changeCat(cat)}>{t[cat]}</PropChip>
@@ -396,7 +397,10 @@ function PropChip({ children, active, onClick, C, full }) {
         whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
         background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
-        flex: full ? 1 : undefined, // full: stretch to share the row evenly (segmented control)
+        // grow to share a wide row, but keep a readable minimum and wrap to the
+        // next line instead of squeezing the label away on a phone
+        flex: full ? '1 1 auto' : undefined,
+        minWidth: full ? 86 : undefined,
       }}
     >
       {children}
