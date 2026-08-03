@@ -8,7 +8,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
@@ -52,6 +52,7 @@ export default function AdminTasks() {
   const [memberFilter, setMemberFilter] = useState(presetMember || 'all') // all | <staff id>
   const [review, setReview] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [deptFilter, setDeptFilter] = useState('all')  // narrow the list to one department
   const [roster, setRoster] = useState(false)  // bulk assignment table
   // the detailed form can be opened FROM the roster; remember that so closing
   // it puts you back where you were instead of dumping you on the task list
@@ -65,11 +66,13 @@ export default function AdminTasks() {
   const applyFilters = useCallback((q) => {
     const deptScope = scopedDepartment(user) // Sandeep → security only
     if (propFilter !== 'all') q = q.eq('property', propFilter)
+    // a department-locked admin is pinned to theirs; everyone else may filter
     if (deptScope) q = q.eq('department', deptScope)
+    else if (deptFilter !== 'all') q = q.eq('department', deptFilter)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
     if (memberFilter !== 'all') q = q.eq('assigned_to', memberFilter)
     return q
-  }, [user, propFilter, catFilter, memberFilter])
+  }, [user, propFilter, deptFilter, catFilter, memberFilter])
 
   // narrow a query to a tab's status condition
   const withStatus = useCallback((q, key) => {
@@ -145,6 +148,7 @@ export default function AdminTasks() {
   // filter/tab changes reset to the first page (single fetch, no double-load)
   const changeTab = (k) => { setTab(k); setPage(0) }
   const changeProp = (p) => { setPropFilter(p); setPage(0) }
+  const changeDept = (d) => { setDeptFilter(d); setPage(0) }
   const changeCat = (c) => { setCatFilter(c); setPage(0) }
   const changeMember = (m) => { setMemberFilter(m); setPage(0) }
 
@@ -211,6 +215,22 @@ export default function AdminTasks() {
             >
               <option value="all">{t.properties} — {t.all}</option>
               {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+            </select>
+          </div>
+        )}
+        {/* department — hidden for an admin already locked to one, who has no
+            choice to make */}
+        {!scopedDepartment(user) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
+            <Icon name="team" size={16} color={C.tl} />
+            <select
+              style={inputStyle(C)}
+              value={deptFilter}
+              onChange={(e) => changeDept(e.target.value)}
+              aria-label={t.department}
+            >
+              <option value="all">{t.department} — {t.all}</option>
+              {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
             </select>
           </div>
         )}
@@ -315,6 +335,12 @@ export default function AdminTasks() {
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
                       {nameOf(task.assigned_to, task.assignee_name)}{task.area ? ` · ${task.area}` : ''}
                     </div>
+                    {task.department && (
+                      <div style={{ fontSize: 12, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: DEPARTMENT_MAP[task.department]?.color || C.tl }} />
+                        {deptName(task.department, lang)}
+                      </div>
+                    )}
                     {canSeeAllProps && (
                       <div style={{ fontSize: 12, color: C.faint, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Icon name="pin" size={12} /> {propName(task.property, lang)}
