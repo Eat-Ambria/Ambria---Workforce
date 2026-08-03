@@ -14,6 +14,16 @@ import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 
+// A task's time window lives in the existing `time_block` column as free text.
+// Storing "09:00 - 10:00" keeps that column working everywhere it is already
+// displayed, while letting the roster edit it as two proper time inputs.
+const HHMM = /(\d{1,2}:\d{2})/g
+const parseRange = (block) => {
+  const found = String(block || '').match(HHMM) || []
+  return { from: found[0] || '', to: found[1] || '' }
+}
+const fmtRange = (from, to) => (from && to ? `${from} - ${to}` : (from || ''))
+
 // Roster: one screen to hand out a venue's recurring work.
 //
 // A task row carries exactly ONE assignee, so "three people water the lawn" is
@@ -31,7 +41,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const { lang } = useLang()
   const confirm = useConfirm()
 
-  const [property, setProperty] = useState(defaultProperty || PROPERTIES[0].code)
+  // several venues at once: the same daily round usually applies to more than
+  // one, and setting it up venue by venue is how they drift apart
+  const [props, setProps] = useState([defaultProperty || PROPERTIES[0].code])
   const [category, setCategory] = useState('daily')
   const [rows, setRows] = useState([])        // raw task rows for this venue + category
   const [groups, setGroups] = useState([])    // one per distinct job, with its chosen people
@@ -43,39 +55,76 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [editingKey, setEditingKey] = useState(null)  // job whose title is being renamed
 
   // staff of this venue — the only people a row may be handed to
-  const staff = useMemo(
-    () => members.filter((m) => memberInProperty(m, property)),
-    [members, property]
+  // Normally only the venue's own people are offered. Turning this on lists
+  // everyone, so a person can be put on another venue's round for a few days —
+  // the task belongs to the venue, the person keeps their own posting, and it
+  // reverts by simply unticking them when they go back.
+  const [anyVenue, setAnyVenue] = useState(false)
+  const [coverFrom, setCoverFrom] = useState(todayISO())
+  const [coverTo, setCoverTo] = useState('')          // blank = until further notice
+  const [deployed, setDeployed] = useState([])        // user ids on cover here today
+
+  // People already lent to these venues show up without ticking anything — the
+  // cover was arranged once and should hold until its end date passes.
+  useEffect(() => {
+    let alive = true
+    const today = todayISO()
+    supabase.from('staff_deployments')
+      .select('user_id, property, from_date, to_date')
+      .in('property', props)
+      .lte('from_date', today)
+      .then(({ data }) => {
+        if (!alive) return
+        setDeployed((data || [])
+          .filter((d) => !d.to_date || d.to_date >= today)
+          .map((d) => d.user_id))
+      })
+    return () => { alive = false }
+  }, [props])
+  const staff = useMemo(() => (
+    anyVenue
+      ? members
+      : members.filter((m) => deployed.includes(m.id) || props.some((code) => memberInProperty(m, code)))
+  ), [members, props, anyVenue, deployed])
+
+  // someone on this roster who is not based at any of the selected venues
+  const isVisiting = useCallback(
+    (m) => !!m && !props.some((code) => memberInProperty(m, code)),
+    [props]
   )
 
   const load = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, category, property, assigned_to, assignee_name, area, status, started_at, before_photo, completion_photo')
-      .eq('property', property)
+      .select('id, title, title_hi, category, property, assigned_to, assignee_name, area, time_block, status, started_at, before_photo, completion_photo')
+      .in('property', props)
       .eq('category', category)
       .order('title')
     setRows(data || [])
     // one entry per distinct job; `people` is the set currently doing it
     const byTitle = new Map()
     ;(data || []).forEach((r) => {
-      const key = `${r.title}||${r.area || ''}`
-      if (!byTitle.has(key)) byTitle.set(key, { key, title: r.title, title_hi: r.title_hi, area: r.area, rows: [] })
+      const key = `${r.property}||${r.title}||${r.area || ''}`
+      if (!byTitle.has(key)) byTitle.set(key, { key, property: r.property, title: r.title, title_hi: r.title_hi, area: r.area, time_block: r.time_block, rows: [] })
       byTitle.get(key).rows.push(r)
     })
     setGroups([...byTitle.values()].map((g) => ({
       ...g,
+      ...parseRange(g.time_block),
       people: g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to),
     })))
     setDrafts([])
     setLoading(false)
-  }, [property, category])
+  }, [props, category])
 
   useEffect(() => { load() }, [load])
 
   const renameGroup = (key, title) =>
     setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, title } : g)))
+
+  const setGroupTime = (key, patch) =>
+    setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, ...patch } : g)))
 
   // removes the job from EVERY person at this venue, not just one of them
   async function deleteGroup(g) {
@@ -111,12 +160,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // a job nobody is on keeps one spare row rather than vanishing entirely
     const spare = g.rows.find((r) => !r.assigned_to)
     const renamed = g.title.trim() && g.title.trim() !== g.rows[0]?.title
-    return { g, added, dropped, spare, renamed }
+    const retimed = fmtRange(g.from, g.to) !== (g.rows[0]?.time_block || '')
+    return { g, added, dropped, spare, renamed, retimed }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
   const dropCount = plan.reduce((n, x) => n + x.dropped.length, 0)
-  const renameCount = plan.filter((x) => x.renamed).length
+  const renameCount = plan.filter((x) => x.renamed || x.retimed).length
   const filledDrafts = drafts.filter((d) => d.title.trim())
   const nothingToSave = addCount + dropCount + renameCount + filledDrafts.length === 0
 
@@ -135,12 +185,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         try { return await translateToHindi(title) } catch { return null }
       }
 
-      for (const { g, added, dropped, spare, renamed } of plan) {
-        // a rename applies to every person's copy of the job
-        if (renamed) {
-          const title = g.title.trim()
+      for (const { g, added, dropped, spare, renamed, retimed } of plan) {
+        // a rename or a new time window applies to every person's copy of the job
+        if (renamed || retimed) {
+          const patch = {}
+          if (renamed) {
+            patch.title = g.title.trim()
+            patch.title_hi = await hiFor(patch.title)
+          }
+          if (retimed) patch.time_block = fmtRange(g.from, g.to) || null
           const { error } = await supabase.from('tasks')
-            .update({ title, title_hi: await hiFor(title) })
+            .update(patch)
             .in('id', g.rows.map((r) => r.id))
           if (error) throw error
         }
@@ -169,7 +224,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           } else {
             const { error } = await supabase.from('tasks').insert({
               id: newId('t_'),
-              property,
+              property: g.property,
               department: person?.department || user.department || 'k',
               category,
               title: g.title,
@@ -186,21 +241,45 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         }
       }
 
+      // Anyone from outside these venues who has just been given work here is
+      // recorded as being on cover, so tomorrow's roster still lists them
+      // without the "other venues" switch. Dates are optional: no end date
+      // means until further notice.
+      const visitors = [...new Set(
+        plan.flatMap(({ added }) => added).concat(filledDrafts.flatMap((d) => d.people || []))
+      )].filter((id) => isVisiting(staff.find((m) => m.id === id)))
+      if (visitors.length) {
+        const rows = visitors.flatMap((id) => props.map((prop) => ({
+          user_id: id,
+          property: prop,
+          from_date: coverFrom || todayISO(),
+          to_date: coverTo || null,
+          created_by: user.id,
+        })))
+        // ignore a failure here: the assignment itself already succeeded, and a
+        // missing cover record must not undo it
+        await supabase.from('staff_deployments')
+          .upsert(rows, { onConflict: 'user_id,property,from_date' })
+      }
+
       // brand-new jobs typed into the blank rows — one task per chosen person,
       // or a single unassigned row when nobody is picked yet
       for (const d of filledDrafts) {
         const title = d.title.trim()
         const title_hi = await hiFor(title)
         const people = d.people?.length ? d.people : [null]
-        const inserts = people.map((id) => {
+        // one row per person PER SELECTED VENUE
+        const combos = props.flatMap((prop) => people.map((id) => ({ prop, id })))
+        const inserts = combos.map(({ prop, id }) => {
           const person = staff.find((m) => m.id === id)
           return {
             id: newId('t_'),
-            property,
+            property: prop,
             department: person?.department || user.department || 'k',
             category,
             title,
             title_hi,
+            time_block: fmtRange(d.from, d.to) || null,
             priority: 'medium',
             assigned_to: id || null,
             assignee_name: person?.name || null,
@@ -220,7 +299,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     }
   }
 
-  const addDraftRow = () => setDrafts((prev) => [...prev, { key: `d${Date.now()}${prev.length}`, title: '', people: [] }])
+  const addDraftRow = () => setDrafts((prev) => [...prev, { key: `d${Date.now()}${prev.length}`, title: '', from: '', to: '', people: [] }])
   const setDraft = (key, patch) => setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)))
   const removeDraft = (key) => setDrafts((prev) => prev.filter((d) => d.key !== key))
 
@@ -236,7 +315,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             key={m.id}
             type="button"
             onClick={() => onToggle(m.id)}
-            title={m.department ? deptName(m.department, lang) : undefined}
+            title={[m.department ? deptName(m.department, lang) : null, propName(m.property, lang)].filter(Boolean).join(' · ')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '5px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
@@ -247,6 +326,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           >
             {on && <Icon name="check" size={12} color="#fff" />}
             {personName(m, lang)}
+            {isVisiting(m) && (
+              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                · {propName(m.property, lang)}
+              </span>
+            )}
           </button>
         )
       })}
@@ -269,11 +353,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       {/* venue + recurrence pickers */}
       {canSeeAllProps && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          {PROPERTIES.map((p) => (
-            <FilterChip key={p.code} active={property === p.code} onClick={() => setProperty(p.code)}>
-              {propName(p.code, lang)}
-            </FilterChip>
-          ))}
+          {PROPERTIES.map((p) => {
+            const on = props.includes(p.code)
+            return (
+              <FilterChip
+                key={p.code}
+                active={on}
+                onClick={() => setProps((prev) => (
+                  // never leave the roster with no venue selected
+                  on ? (prev.length > 1 ? prev.filter((c) => c !== p.code) : prev) : [...prev, p.code]
+                ))}
+              >
+                {propName(p.code, lang)}
+              </FilterChip>
+            )
+          })}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -302,17 +396,45 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           <Icon name="plus" size={14} color="#fff" style={{ marginRight: 4 }} />{t.addTaskRow}
         </Button>
       </div>
-      {/* the roster only carries title + people; anything needing a due date,
-          priority, description or time block goes through the full form */}
-      {onDetailed && (
-        <button
-          type="button"
-          onClick={onDetailed}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 700, padding: 0, marginBottom: 12 }}
-        >
-          <Icon name="edit" size={13} color={C.maroon} /> {t.detailedTask}
-        </button>
-      )}
+      {/* Options strip: the cover switch on the left, the escape hatch to the
+          full form on the right. They were sitting side by side as bare text,
+          which read as one run-on sentence. */}
+      <div
+        style={{
+          border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 14,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: C.tl, cursor: 'pointer' }}>
+            <input type="checkbox" checked={anyVenue} onChange={(e) => setAnyVenue(e.target.checked)} />
+            {t.includeOtherVenues}
+          </label>
+          {onDetailed && (
+            <button
+              type="button"
+              onClick={onDetailed}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 700, padding: 0, whiteSpace: 'nowrap' }}
+            >
+              <Icon name="edit" size={13} color={C.maroon} /> {t.detailedTask}
+            </button>
+          )}
+        </div>
+
+        {anyVenue && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+            <div style={{ minWidth: 150 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: C.tl, marginBottom: 4 }}>{t.coverFrom}</div>
+              <input type="date" style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13 }} value={coverFrom} onChange={(e) => setCoverFrom(e.target.value)} />
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: C.tl, marginBottom: 4 }}>{`${t.coverTo} (${t.optional})`}</div>
+              <input type="date" style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13 }} min={coverFrom} value={coverTo} onChange={(e) => setCoverTo(e.target.value)} />
+            </div>
+            <div style={{ fontSize: 11.5, color: C.faint, flex: 1, minWidth: 180, paddingBottom: 8, lineHeight: 1.45 }}>{t.coverHint}</div>
+          </div>
+        )}
+      </div>
+
       <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 12, lineHeight: 1.5 }}>{t.rosterNote}</div>
 
       {loading ? <Loader label={t.loading} /> : (
@@ -331,10 +453,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                       placeholder={t.newTaskTitle}
                       onChange={(e) => setDraft(d.key, { title: e.target.value })}
                     />
+                    {/* when in the day it should happen — optional, shown on the
+                        task card so staff know whether it is a morning job */}
+                    <input
+                      type="time" title={t.fromTime} aria-label={t.fromTime}
+                      style={{ ...inputStyle(C), padding: '8px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
+                      value={d.from || ''}
+                      onChange={(e) => setDraft(d.key, { from: e.target.value })}
+                    />
+                    <input
+                      type="time" title={t.toTime} aria-label={t.toTime}
+                      style={{ ...inputStyle(C), padding: '8px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
+                      value={d.to || ''}
+                      onChange={(e) => setDraft(d.key, { to: e.target.value })}
+                    />
                     <button type="button" onClick={() => removeDraft(d.key)} aria-label={t.delete} style={{ background: 'transparent', color: C.tl, display: 'grid', placeItems: 'center', width: 34, flexShrink: 0 }}>
                       <Icon name="close" size={16} color={C.tl} />
                     </button>
                   </div>
+                  {props.length > 1 && (
+                    <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 6 }}>
+                      {t.createdInProperties.replace('{n}', props.length)}
+                    </div>
+                  )}
                   <PeoplePicker
                     chosen={d.people || []}
                     onToggle={(id) => setDraft(d.key, {
@@ -364,20 +505,40 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                         {editingKey === g.key ? (
                           // renaming changes the job for everyone doing it, so it
                           // is applied on Save with the rest, not instantly
-                          <input
-                            autoFocus
-                            style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13.5 }}
-                            value={g.title}
-                            onChange={(e) => renameGroup(g.key, e.target.value)}
-                            onBlur={() => setEditingKey(null)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingKey(null) }}
-                          />
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <input
+                              autoFocus
+                              style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13.5, flex: 1, minWidth: 150 }}
+                              value={g.title}
+                              onChange={(e) => renameGroup(g.key, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingKey(null) }}
+                            />
+                            <input
+                              type="time" aria-label={t.fromTime} title={t.fromTime}
+                              style={{ ...inputStyle(C), padding: '7px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
+                              value={g.from || ''}
+                              onChange={(e) => setGroupTime(g.key, { from: e.target.value })}
+                            />
+                            <input
+                              type="time" aria-label={t.toTime} title={t.toTime}
+                              style={{ ...inputStyle(C), padding: '7px 8px', fontSize: 13, width: 116, flexShrink: 0 }}
+                              value={g.to || ''}
+                              onChange={(e) => setGroupTime(g.key, { to: e.target.value })}
+                            />
+                          </div>
                         ) : (
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
                             {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
                           </div>
                         )}
-                        {g.area && <div style={{ fontSize: 12, color: C.tl, marginTop: 2 }}>{g.area}</div>}
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2, fontSize: 12, color: C.tl }}>
+                          <span>{[props.length > 1 ? propName(g.property, lang) : null, g.area].filter(Boolean).join(' · ')}</span>
+                          {editingKey !== g.key && fmtRange(g.from, g.to) && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <Icon name="clock" size={12} color={C.tl} /> {fmtRange(g.from, g.to)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: g.people.length ? C.maroon : C.faint, whiteSpace: 'nowrap' }}>

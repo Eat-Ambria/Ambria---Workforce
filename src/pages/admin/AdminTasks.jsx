@@ -53,6 +53,9 @@ export default function AdminTasks() {
   const [review, setReview] = useState(null)
   const [creating, setCreating] = useState(false)
   const [roster, setRoster] = useState(false)  // bulk assignment table
+  // the detailed form can be opened FROM the roster; remember that so closing
+  // it puts you back where you were instead of dumping you on the task list
+  const [cameFromRoster, setCameFromRoster] = useState(false)
 
   const today = todayISO()
   // collapse the status tabs into a dropdown once the row gets tight (≤1073px)
@@ -373,7 +376,7 @@ export default function AdminTasks() {
           defaultProperty={propFilter !== 'all' ? propFilter : (user.property !== 'all' ? user.property : undefined)}
           onClose={() => setRoster(false)}
           onSaved={() => { setRoster(false); load() }}
-          onDetailed={() => { setRoster(false); setCreating(true) }}
+          onDetailed={() => { setRoster(false); setCameFromRoster(true); setCreating(true) }}
         />
       )}
       {creating && (
@@ -381,8 +384,13 @@ export default function AdminTasks() {
           user={user}
           members={members}
           record={creating === true ? null : creating}
-          onClose={() => setCreating(false)}
-          onSaved={() => { setCreating(false); load() }}
+          onClose={() => { setCreating(false); if (cameFromRoster) { setCameFromRoster(false); setRoster(true) } }}
+          onSaved={() => {
+            setCreating(false)
+            load()
+            // back to the roster, which reloads and shows the task just created
+            if (cameFromRoster) { setCameFromRoster(false); setRoster(true) }
+          }}
         />
       )}
     </div>
@@ -472,6 +480,31 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
       onSaved()
     }
   }
+  // The assignee never got to it. An admin can close it out, but the record has
+  // to be honest about that: completed_by is the admin, and a note says the work
+  // was signed off without the usual photo proof, so a completion with no
+  // before/after images is never mistaken for one that had them.
+  async function completeForStaff() {
+    if (!(await confirm({ message: t.markDoneNoProofConfirm, confirmLabel: t.markDone }))) return
+    const patch = {
+      status: TASK_STATUS.COMPLETED,
+      completed_at: nowISO(),
+      completed_by: user.id,
+      approved_by: user.id,
+      approved_at: nowISO(),
+      rejection_voice_url: null,
+    }
+    if (!task.completion_note) patch.completion_note = t.closedByAdminNote
+    const voiceUrl = task.rejection_voice_url
+    if (await update(patch)) {
+      // the person it was assigned to gets told, so a task disappearing from
+      // their list is never a mystery
+      await notifyEmployee('task_closed_by_admin')
+      if (voiceUrl) deleteStorageFile(voiceUrl)
+      onSaved()
+    }
+  }
+
   async function del() {
     // an admin looking at a reported issue can easily read the bin as "clear
     // this issue" — spell out that it takes the whole task with it
@@ -568,6 +601,11 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
           {!ownWork && (
             <Button variant="ghost" onClick={() => onEdit?.(task)} disabled={busy} style={{ flexShrink: 0 }}>
               <Icon name="edit" size={15} color={C.text} style={{ marginRight: 4 }} />{t.edit}
+            </Button>
+          )}
+          {!ownWork && !isQueue && sc.key !== 'completed' && (
+            <Button variant="success" onClick={completeForStaff} disabled={busy} style={{ flexShrink: 0 }}>
+              <Icon name="check" size={15} color="#fff" style={{ marginRight: 4 }} />{t.markDone}
             </Button>
           )}
           {!ownWork && hasOpenIssue && (

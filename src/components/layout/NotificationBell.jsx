@@ -24,6 +24,7 @@ function meta(n, hi) {
     case 'task_assigned': return { icon: 'myTasks', link: '/my-tasks', status: 'pending', title: hi ? 'नया टास्क सौंपा गया' : 'New task assigned', body: item }
     case 'task_sent_back': return { icon: 'warning', link: '/my-tasks', status: 'in_progress', title: hi ? 'टास्क वापस भेजा गया — दोबारा करें' : 'Task sent back — please redo', body: item }
     case 'task_approved': return { icon: 'check', link: '/my-tasks', status: 'completed', title: hi ? 'आपका काम मंज़ूर हुआ' : 'Your work was approved', body: item }
+    case 'task_closed_by_admin': return { icon: 'check', link: '/my-tasks', status: 'completed', title: hi ? 'एडमिन ने आपका टास्क पूरा मार्क किया' : 'Admin marked your task complete', body: item }
     case 'task_submitted': return { icon: 'inbox', link: '/tasks', tab: 'review', title: hi ? 'मंज़ूरी के लिए टास्क आया' : 'Task submitted for approval', body: item + who }
     case 'task_issue': return { icon: 'warning', link: '/tasks', tab: 'issues', title: hi ? 'स्टाफ ने समस्या बताई' : 'Staff reported an issue', body: item + who }
     case 'issue_working': return { icon: 'clock', link: '/my-tasks', issueStatus: 'issue_working', title: hi ? 'एडमिन आपकी समस्या पर काम कर रहा है' : 'Admin is working on your issue', body: item }
