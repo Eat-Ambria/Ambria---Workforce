@@ -8,6 +8,7 @@ import { useT, useLang } from '../../context/LangContext'
 import {
   ROLES, isAdminRole, canSeeAllProperties, scopedDepartment,
   PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName, TASK_STATUS,
+  FREQUENCY_MAP, frequencyLabel, dayName,
 } from '../../constants/org'
 import { Card, Loader, EmptyState, Button, SectionTitle, Tabs, ProgressBar, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -18,12 +19,32 @@ import { Headline, HeadChart, StatusChip, MetricGuide } from './AnalyticsParts'
 // --- period windows ----------------------------------------------------------
 // All windows are half-open [from, to) in local time, converted to ISO for the
 // query. "Week" starts Monday, matching how the weekly task reset works.
-function periodRange(key) {
+function periodRange(key, custom) {
   const now = new Date()
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
   let from
   let to = startOfDay(now)
   to.setDate(to.getDate() + 1) // through the end of today
+
+  // Chosen dates. Parsed by parts, not by passing the string to Date(), which
+  // reads 'YYYY-MM-DD' as UTC and can shift the day. `to` is exclusive, so one
+  // day means from that date to the next — which is how a single day is picked.
+  if (key === 'custom') {
+    const parse = (iso) => {
+      const [y, m, d] = String(iso || '').split('-').map(Number)
+      return y ? new Date(y, m - 1, d) : null
+    }
+    const a = parse(custom?.from)
+    const b = parse(custom?.to) || a
+    if (a && b) {
+      const end = new Date(b)
+      end.setDate(end.getDate() + 1)
+      return { from: a.toISOString(), to: end.toISOString() }
+    }
+    // incomplete dates: fall back to today rather than querying all of time
+    from = startOfDay(now)
+    return { from: from.toISOString(), to: to.toISOString() }
+  }
 
   if (key === 'week') {
     from = startOfDay(now)
@@ -96,6 +117,9 @@ export default function Analytics() {
   const { lang } = useLang()
 
   const [period, setPeriod] = useState('week')
+  // custom range; `to` blank means a single day
+  const [customFrom, setCustomFrom] = useState(todayISO())
+  const [customTo, setCustomTo] = useState('')
   // three levels of narrowing, each one feeding the next
   const [propFilter, setPropFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')
@@ -111,14 +135,14 @@ export default function Analytics() {
   const load = useCallback(async () => {
     setLoading(true)
     setErr('')
-    const { from, to } = periodRange(period)
+    const { from, to } = periodRange(period, { from: customFrom, to: customTo })
     const args = { p_from: from, p_to: to }
     const prev = previousRange({ from, to })
     const prevArgs = { p_from: prev.from, p_to: prev.to }
     try {
       // every figure is aggregated server-side; these responses are one row per
       // person (or per property+department), never one row per task
-      const [users, byAssignee, byApprover, repairs, open, prevAssignee, prevRepairs] = await Promise.all([
+      const [users, byAssignee, byApprover, repairs, open, prevAssignee, prevRepairs, byDay] = await Promise.all([
         supabase.from('users')
           .select('id, name, name_hi, role, property, department, designation')
           .eq('is_active', true).order('name'),
@@ -128,6 +152,7 @@ export default function Analytics() {
         supabase.rpc('analytics_open'),
         supabase.rpc('analytics_by_assignee', prevArgs),
         supabase.rpc('analytics_repairs', prevArgs),
+        supabase.rpc('analytics_by_day', args),
       ])
       const firstError = [users, byAssignee, byApprover, repairs, open].find((r) => r.error)
       if (firstError) throw firstError.error
@@ -139,6 +164,9 @@ export default function Analytics() {
         open: open.data || [],
         prevAssignee: prevAssignee.data || [],
         prevRepairs: prevRepairs.data || [],
+        // day-by-day is additive: an install that has not run the new function
+        // yet still gets every other figure instead of an error page
+        byDay: byDay.error ? [] : (byDay.data || []),
       })
     } catch (e) {
       // these are created by SUPABASE-MIGRATION-TASK-HISTORY.sql
@@ -149,7 +177,7 @@ export default function Analytics() {
     } finally {
       setLoading(false)
     }
-  }, [period])
+  }, [period, customFrom, customTo])
 
   useEffect(() => { load() }, [load])
 
@@ -158,6 +186,25 @@ export default function Analytics() {
     property: propFilter === 'all' ? null : propFilter,
     department: deptFilter === 'all' ? null : deptFilter,
   }), [propFilter, deptFilter])
+
+  // One row per day: how much of each kind of work was closed, and how much of
+  // it on time. Filtered here rather than in the query, so changing venue or
+  // department costs no round trip.
+  const dayRows = useMemo(() => {
+    const src = (data?.byDay || []).filter((r) => inViewScope(r, viewScope))
+    const by = new Map()
+    src.forEach((r) => {
+      if (!by.has(r.day)) {
+        by.set(r.day, { day: r.day, total: 0, onTime: 0, daily: 0, alternate: 0, weekly: 0, monthly: 0 })
+      }
+      const d = by.get(r.day)
+      const bucket = DAY_COLS.includes(r.category) ? r.category : 'daily'
+      d[bucket] += r.done
+      d.total += r.done
+      d.onTime += r.on_time
+    })
+    return [...by.values()].sort((a, b) => b.day.localeCompare(a.day))
+  }, [data, viewScope])
 
   // staff inside the current property/department selection
   const scopedStaff = useMemo(() => (
@@ -339,6 +386,9 @@ export default function Analytics() {
     month: lang === 'hi' ? 'इस महीने' : 'This month',
     last_month: lang === 'hi' ? 'पिछले महीने' : 'Last month',
     quarter: lang === 'hi' ? 'पिछले 90 दिनों में' : 'Last 90 days',
+    custom: customTo && customTo !== customFrom
+      ? `${fmtDate(customFrom)} – ${fmtDate(customTo)}`
+      : fmtDate(customFrom),
   }[period]
 
   const scopeLabel = selectedHead
@@ -351,6 +401,7 @@ export default function Analytics() {
     { key: 'month', label: lang === 'hi' ? 'यह महीना' : 'This Month' },
     { key: 'last_month', label: lang === 'hi' ? 'पिछला महीना' : 'Last Month' },
     { key: 'quarter', label: lang === 'hi' ? '90 दिन' : 'Last 90 Days' },
+    { key: 'custom', label: lang === 'hi' ? 'तारीख़ चुनें' : 'Pick dates' },
   ]
 
   return (
@@ -382,6 +433,43 @@ export default function Analytics() {
           </button>
         ))}
       </div>
+
+      {/* Chosen dates. Leaving "to" empty means that single day — which is the
+          usual question once the day-by-day table exists. */}
+      {period === 'custom' && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+          <div style={{ flex: '1 1 150px', minWidth: 140 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: C.tl, marginBottom: 4 }}>
+              {lang === 'hi' ? 'तारीख़ / से' : 'Date / from'}
+            </div>
+            <input
+              type="date"
+              max={todayISO()}
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              style={{ ...inputStyle(C), padding: '9px 11px', fontSize: 13 }}
+            />
+          </div>
+          <div style={{ flex: '1 1 150px', minWidth: 140 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: C.tl, marginBottom: 4 }}>
+              {lang === 'hi' ? 'तक (वैकल्पिक)' : 'To (optional)'}
+            </div>
+            <input
+              type="date"
+              min={customFrom}
+              max={todayISO()}
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              style={{ ...inputStyle(C), padding: '9px 11px', fontSize: 13 }}
+            />
+          </div>
+          <div style={{ fontSize: 11.5, color: C.faint, flex: '1 1 190px', paddingBottom: 9, lineHeight: 1.5 }}>
+            {lang === 'hi'
+              ? 'सिर्फ़ एक दिन देखना हो तो "तक" खाली छोड़ दें।'
+              : 'Leave "to" empty to look at a single day.'}
+          </div>
+        </div>
+      )}
 
       {/* property -> department -> head. Each picker narrows the one below it,
           and all three narrow the summary, the head list and the staff list. */}
@@ -499,6 +587,7 @@ export default function Analytics() {
             tabs={[
               { key: 'heads', label: `${lang === 'hi' ? 'हेड' : 'Department Heads'} (${visibleHeads.length})` },
               { key: 'staff', label: `${lang === 'hi' ? 'स्टाफ़' : 'Staff'} (${visibleStaff.length})` },
+              { key: 'byDay', label: `${lang === 'hi' ? 'दिन-वार' : 'By day'} (${dayRows.length})` },
             ]}
             active={tab}
             onChange={setTab}
@@ -546,6 +635,14 @@ export default function Analytics() {
             </>
           )}
 
+          {tab === 'byDay' && (
+            dayRows.length === 0
+              ? <EmptyState icon={null} title={t.noData} hint={lang === 'hi'
+                  ? 'जिस दिन कोई काम पूरा होगा, वह यहाँ अपने आप आ जाएगा।'
+                  : 'A day appears here as soon as work is completed on it.'} />
+              : <DayTable C={C} lang={lang} t={t} rows={dayRows} />
+          )}
+
           {tab === 'staff' && (
             visibleStaff.length === 0 ? <EmptyState icon={null} title={t.noData} /> : (
               <div style={{ display: 'grid', gap: 10 }}>
@@ -572,6 +669,86 @@ export default function Analytics() {
 }
 
 // percentage change; null when there is nothing to compare against
+// The roster is written by frequency, so the record of it reads the same way.
+const DAY_COLS = ['daily', 'alternate', 'weekly', 'monthly']
+
+function DayTable({ C, lang, t, rows }) {
+  const hi = lang === 'hi'
+  const GRID = '128px repeat(4, minmax(0,1fr)) 74px 84px'
+  const head = {
+    padding: '10px 9px', fontSize: 9.5, fontWeight: 700, color: C.faint,
+    textTransform: 'uppercase', letterSpacing: '0.11em', textAlign: 'center',
+  }
+  const cell = { padding: '12px 9px', fontSize: 14, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }
+  const total = rows.reduce((a, r) => ({
+    total: a.total + r.total, onTime: a.onTime + r.onTime,
+    daily: a.daily + r.daily, alternate: a.alternate + r.alternate,
+    weekly: a.weekly + r.weekly, monthly: a.monthly + r.monthly,
+  }), { total: 0, onTime: 0, daily: 0, alternate: 0, weekly: 0, monthly: 0 })
+  const pct = (r) => (r.total ? Math.round((r.onTime / r.total) * 100) : null)
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{ minWidth: 620 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: GRID, background: C.card }}>
+            <span style={{ ...head, textAlign: 'left', position: 'sticky', left: 0, background: C.card, zIndex: 1 }}>
+              {hi ? 'दिन' : 'Day'}
+            </span>
+            {DAY_COLS.map((k) => (
+              <span key={k} style={{ ...head, color: C.tl, boxShadow: `inset 0 -2px 0 ${FREQUENCY_MAP[k].ink}` }}>
+                {frequencyLabel(k, lang)}
+              </span>
+            ))}
+            <span style={{ ...head, boxShadow: `inset 0 -2px 0 ${C.maroon}` }}>{hi ? 'कुल' : 'Total'}</span>
+            <span style={head}>{hi ? 'समय पर' : 'On time'}</span>
+          </div>
+
+          {rows.map((r, i) => {
+            const p = pct(r)
+            return (
+              <div key={r.day} style={{ display: 'grid', gridTemplateColumns: GRID, borderTop: `1px solid ${C.border}`, background: i % 2 ? C.cardAlt : C.card }}>
+                <span style={{ ...cell, textAlign: 'left', position: 'sticky', left: 0, background: i % 2 ? C.cardAlt : C.card, zIndex: 1 }}>
+                  <span style={{ display: 'block', fontWeight: 600, color: C.text, fontSize: 13.5 }}>{fmtDate(r.day)}</span>
+                  <span style={{ display: 'block', fontSize: 11, color: C.faint }}>{dayName(isoDow(r.day), lang)}</span>
+                </span>
+                {DAY_COLS.map((k) => (
+                  <span key={k} style={{ ...cell, color: r[k] ? C.text : C.faint, fontWeight: r[k] ? 600 : 400 }}>
+                    {r[k] || 0}
+                  </span>
+                ))}
+                <span style={{ ...cell, fontWeight: 700, color: C.maroon, borderLeft: `1px solid ${C.border}` }}>{r.total}</span>
+                <span style={{ ...cell, fontWeight: 600, color: p === null ? C.faint : (p >= 90 ? C.green : p >= 70 ? C.yellow : C.red) }}>
+                  {p === null ? '—' : `${p}%`}
+                </span>
+              </div>
+            )
+          })}
+
+          <div style={{ display: 'grid', gridTemplateColumns: GRID, borderTop: `1px solid ${C.borderStrong}`, background: C.cardAlt }}>
+            <span style={{ ...cell, textAlign: 'left', position: 'sticky', left: 0, background: C.cardAlt, zIndex: 1, fontSize: 10, fontWeight: 700, color: C.tl, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              {hi ? `${rows.length} दिन` : `${rows.length} days`}
+            </span>
+            {DAY_COLS.map((k) => <span key={k} style={{ ...cell, fontWeight: 700, color: C.text }}>{total[k]}</span>)}
+            <span style={{ ...cell, fontWeight: 800, fontSize: 16, color: C.maroon, borderLeft: `1px solid ${C.border}` }}>{total.total}</span>
+            <span style={{ ...cell, fontWeight: 700, color: C.tl }}>
+              {total.total ? `${Math.round((total.onTime / total.total) * 100)}%` : '—'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// ISO weekday from a plain 'YYYY-MM-DD' — parsed by parts, because passing the
+// bare string to Date() is read as UTC and can land on the day before.
+function isoDow(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number)
+  const js = new Date(y, (m || 1) - 1, d || 1).getDay()
+  return js === 0 ? 7 : js
+}
+
 function deltaPct(cur, prev) {
   if (cur == null || prev == null || prev === 0) return null
   return Math.round(((cur - prev) / prev) * 100)

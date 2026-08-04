@@ -6,7 +6,12 @@ import Icon from './Icon'
 // Dropdown with a checkbox checklist — pick several values to filter by.
 // options: [{ value, label, sub? }]; selected: array of values.
 // Pass the theme colors as `C`. Set `searchable` to show a search box.
-export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false }) {
+//
+// `single` turns it into a one-choice dropdown that still looks and behaves like
+// this one. A native <select> would have done the job, but its option list is
+// drawn by the operating system — unstyleable — so sitting next to this component
+// the two looked like they came from different applications.
+export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false, single = false }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -27,6 +32,11 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
     : options
 
   const toggle = (value) => {
+    if (single) {
+      onChange([value])
+      setOpen(false)   // a single choice is finished the moment it is made
+      return
+    }
     const next = new Set(sel)
     if (next.has(value)) next.delete(value); else next.add(value)
     onChange([...next])
@@ -37,6 +47,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
   // and the full list goes in the tooltip.
   const names = options.filter((o) => sel.has(o.value)).map((o) => o.label)
   const label = names.length === 0 ? placeholder
+    : single ? names[0]
     : names.length === options.length && options.length > 1 ? `${t.all} (${names.length})`
     : names.length <= 3 ? names.join(', ')
     : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
@@ -57,7 +68,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
           {searchable && (
             <input autoFocus placeholder={t.search} value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(C), marginBottom: 8 }} />
           )}
-          {selected.length > 0 && (
+          {!single && selected.length > 0 && (
             <button type="button" onClick={() => onChange([])} style={{ background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 600, padding: '2px 6px 8px' }}>
               {t.clearFilters} ({selected.length})
             </button>
@@ -74,7 +85,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
                   onClick={() => toggle(o.value)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: on ? C.maroonSoft : 'transparent', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}
                 >
-                  <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? C.maroon : C.border}`, background: on ? C.maroon : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <span style={{ width: 18, height: 18, borderRadius: single ? '50%' : 5, border: `1.5px solid ${on ? C.maroon : C.border}`, background: on ? C.maroon : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                     {on && <Icon name="check" size={12} color="#fff" />}
                   </span>
                   <span style={{ fontSize: 14, color: C.text }}>{o.label}{o.sub ? <span style={{ color: C.faint, fontSize: 12 }}> {o.sub}</span> : null}</span>

@@ -226,9 +226,9 @@ export default function TaskBoard() {
             style={inputStyle(C)}
             value={memberFilter}
             onChange={(e) => setMemberFilter(e.target.value)}
-            aria-label={t.members}
+            aria-label={t.assignedTo}
           >
-            <option value="all">{t.members} — {t.all}</option>
+            <option value="all">{t.assignedTo} — {t.all}</option>
             {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
@@ -429,7 +429,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     const fe = {}
     if (!form.title.trim()) fe.title = `${t.title} ${t.isRequired}`
     if (!form.priority) fe.priority = `${t.priority} ${t.isRequired}`
-    if (!form.assignee) fe.assignee = `${t.members} ${t.isRequired}`
+    if (!form.assignee) fe.assignee = `${t.assignedTo} ${t.isRequired}`
     if (form.due_date && form.due_date < todayISO()) fe.due_date = t.dueDatePast
     setFieldErr(fe)
     if (Object.keys(fe).length) {
@@ -516,7 +516,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       {/* Straight to a person. Everyone at the chosen venue is listed, with
           their department beside the name so the right one is easy to spot. */}
       {admin && (
-        <Field label={t.members} required error={fieldErr.assignee} hint={t.assigneeAnyVenueHint}>
+        <Field label={t.assignedTo} required error={fieldErr.assignee} hint={t.assigneeAnyVenueHint}>
           <PersonPicker
             ref={assigneeRef}
             C={C} t={t} lang={lang}
@@ -543,6 +543,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const superAdmin = isSuperAdmin(user?.role) // super admin also picks the property when assigning
+  // The name stored on the row is a snapshot from assignment time. Prefer the
+  // live record, so a Hindi UI shows the Hindi name and a renamed person shows
+  // their new name; fall back to the snapshot when they are no longer listed.
+  const assigneeName = personName(members.find((m) => m.id === row.assigned_to) || {}, lang)
+    || row.assigned_to_name
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
   const [propFilter, setPropFilter] = useState(row.property || 'pp') // property to assign within (super admin)
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
@@ -550,6 +555,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const [resPhotos, setResPhotos] = useState(Array.isArray(row.resolution_photos) ? row.resolution_photos : [])
   const [reassigning, setReassigning] = useState(false) // admin editing the assignment
   const [editingText, setEditingText] = useState(false) // fixing the wording / the Hindi
+  const [closing, setClosing] = useState(false)         // admin closing it out themselves
   const [rating, setRating] = useState(row.rating || 0)  // 1..5 stars given by admin
   const [viewing, setViewing] = useState(null)           // { photos, index } in the lightbox
 
@@ -598,7 +604,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // trigger notifies that department's head, who then picks the person.
   // used for the first assignment AND for admin reassignment later
   function saveAssignment() {
-    if (!assignTo) { setErr(`${t.members} ${t.isRequired}`); return }
+    if (!assignTo) { setErr(`${t.assignedTo} ${t.isRequired}`); return }
     if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
     const m = members.find((x) => x.id === assignTo)
     const changedAssignee = assignTo !== row.assigned_to
@@ -618,10 +624,17 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // The assignee never finished it (or nobody was on it) and the job is done —
   // an admin closes it out. Recorded with resolved_at like any other completion.
   async function completeNow() {
-    if (!(await confirm({ message: t.repairMarkDoneConfirm, confirmLabel: t.markDone }))) return
     setBusy(true); setErr('')
-    const { error } = await supabase.from('work_board')
-      .update({ status: 'completed', resolved_at: nowISO() }).eq('id', row.id)
+    // The admin's own photo of the finished work, when they have one. With no
+    // photo the note records that fact rather than leaving a silent gap — the
+    // same honesty the task side applies when an admin closes someone's task.
+    const patch = {
+      status: 'completed',
+      resolved_at: nowISO(),
+      resolution_photos: resPhotos,
+      resolution_note: note.trim() || (resPhotos.length ? null : t.closedByAdminNote),
+    }
+    const { error } = await supabase.from('work_board').update(patch).eq('id', row.id)
     setBusy(false)
     if (error) { setErr(error.message); return }
     if (row.assigned_to && row.assigned_to !== user.id) {
@@ -705,8 +718,14 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
             </Button>
           )}
           {canCloseNow && (
-            <Button variant="success" disabled={busy} onClick={completeNow} style={{ flexShrink: 0 }}>
-              <Icon name="check" size={15} color="#fff" style={{ marginRight: 4 }} />{t.markDone}
+            <Button
+              variant="success"
+              disabled={busy}
+              onClick={() => (closing ? completeNow() : setClosing(true))}
+              style={{ flexShrink: 0 }}
+            >
+              <Icon name={closing ? 'check' : 'camera'} size={15} color="#fff" style={{ marginRight: 4 }} />
+              {closing ? t.markDone : t.closeItMyself}
             </Button>
           )}
           {actions}
@@ -752,7 +771,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       )}
 
       {row.assigned_to_name && (
-        <div style={{ fontSize: 13.5, marginBottom: 12 }}>{t.members || 'Assigned to'}: <b>{row.assigned_to_name}</b></div>
+        <div style={{ fontSize: 13.5, marginBottom: 12 }}>{t.assignedTo}: <b>{assigneeName}</b></div>
       )}
       {row.due_date && s !== 'open' && (
         <div style={{ fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 5, color: C.tl }}>
@@ -785,7 +804,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {/* Straight to a person — every assignable name, searchable. The
               department is taken from whoever is picked, so routing still works
               without anyone choosing a team first. */}
-          <Field label={t.members} required hint={t.assigneeAnyVenueHint}>
+          <Field label={t.assignedTo} required hint={t.assigneeAnyVenueHint}>
             <PersonPicker
               C={C} t={t} lang={lang}
               people={members}
@@ -813,6 +832,21 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           onIndex={(i) => setViewing((v) => ({ ...v, index: i }))}
           onClose={() => setViewing(null)}
         />
+      )}
+
+      {/* The admin closing it out: their own photo of the finished work, and a
+          note. Optional, because sometimes there is nothing left to photograph —
+          but then the note says the request was closed without proof. */}
+      {closing && canCloseNow && (
+        <div style={{ background: C.gBg, border: `1px solid ${C.green}22`, borderRadius: 12, padding: 12, marginTop: 4 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, marginBottom: 8 }}>{t.closeOnBehalf}</div>
+          <Field label={`${t.uploadPhoto} (${t.optional})`} hint={t.closeOnBehalfHint}>
+            <PhotoCapture folder="work_board" value={resPhotos} onChange={setResPhotos} />
+          </Field>
+          <Field label={`${t.completionNote} (${t.optional})`}>
+            <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </div>
       )}
 
       {/* assignee submits the completed work */}

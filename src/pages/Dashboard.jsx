@@ -5,7 +5,7 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, notDueToday, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, FilterChip, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -340,7 +340,10 @@ function EmployeeDashboard({ user }) {
       ])
       const [tasksR, deptVidsR, asgR, progR, fixR] = settled.map((r) => (r.status === 'fulfilled' ? r.value : { data: [] }))
 
-      const rows = tasksR.data || []
+      // Only work that is actually due today — the same rows My Tasks shows.
+      // Counting everything here while the list hides the rest is how a tile
+      // ends up disagreeing with the screen it opens.
+      const rows = (tasksR.data || []).filter((r) => !notDueToday(r))
       const c = (fn) => rows.filter(fn).length
       const today0 = todayISO()
       // high-priority tasks assigned by admin that still need attention

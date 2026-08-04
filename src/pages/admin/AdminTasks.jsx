@@ -8,14 +8,13 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, isSuperAdmin, personName, deptName } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import RosterModal from './RosterModal'
-import CoverPanel from './CoverPanel'
 import MyTasks from '../employee/MyTasks'
 import PhotoViewer from '../../components/common/PhotoViewer'
 import { useConfirm } from '../../components/common/ConfirmDialog'
@@ -58,7 +57,6 @@ export default function AdminTasks() {
   const [deptFilter, setDeptFilter] = useState('all')  // narrow the list to one department
   const [prioFilter, setPrioFilter] = useState(presetPriority || 'all')
   const [scope, setScope] = useState('all')    // 'all' = everyone's work | 'mine' = my own
-  const [roster, setRoster] = useState(false)  // bulk assignment table
   // the detailed form can be opened FROM the roster; remember that so closing
   // it puts you back where you were instead of dumping you on the task list
   const [cameFromRoster, setCameFromRoster] = useState(false)
@@ -202,30 +200,31 @@ export default function AdminTasks() {
 
   return (
     <div>
-      {/* Everyone's work vs my own. The "mine" side renders the staff screen
+      {/* Three ways into the same work. "My tasks" renders the staff screen
           itself rather than a copy, because an admin doing their own task needs
           the worker flow — before photo, start, submit — not the review one.
-          Cover sits here too: lending someone to another venue is a decision
-          about the same rounds this screen hands out. */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          "Roster" is where the work is handed out: it used to hide behind a
+          button and open as a dialog, which is the wrong container for a
+          121-row document. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
         <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
-        {isSuperAdmin(user?.role) && (
-          <PropChip C={C} full active={scope === 'cover'} onClick={() => setScope('cover')}>{t.coverTitle}</PropChip>
-        )}
+        <PropChip C={C} full active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</PropChip>
       </div>
 
-      {scope === 'cover' ? <CoverPanel /> : scope === 'mine' ? <MyTasks /> : (
+      {scope === 'roster' ? (
+        <RosterModal
+          inline
+          user={user}
+          members={members}
+          canSeeAllProps={canSeeAllProps}
+          defaultProperty={propFilter !== 'all' ? propFilter : (user.property !== 'all' ? user.property : undefined)}
+          onSaved={() => load()}
+          onDetailed={() => { setCameFromRoster(true); setCreating(true) }}
+        />
+      ) : scope === 'mine' ? <MyTasks /> : (
       <>
-      <SectionTitle
-        right={(
-          <Button variant="primary" onClick={() => setRoster(true)}>
-            <Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />{t.tasks}
-          </Button>
-        )}
-      >
-        {t.tasks}
-      </SectionTitle>
+      <SectionTitle>{t.tasks}</SectionTitle>
 
       {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -433,28 +432,17 @@ export default function AdminTasks() {
           onSaved={() => { setReview(null); load() }}
         />
       )}
-      {roster && (
-        <RosterModal
-          user={user}
-          members={members}
-          canSeeAllProps={canSeeAllProps}
-          defaultProperty={propFilter !== 'all' ? propFilter : (user.property !== 'all' ? user.property : undefined)}
-          onClose={() => setRoster(false)}
-          onSaved={() => { setRoster(false); load() }}
-          onDetailed={() => { setRoster(false); setCameFromRoster(true); setCreating(true) }}
-        />
-      )}
       {creating && (
         <CreateModal
           user={user}
           members={members}
           record={creating === true ? null : creating}
-          onClose={() => { setCreating(false); if (cameFromRoster) { setCameFromRoster(false); setRoster(true) } }}
+          onClose={() => { setCreating(false); if (cameFromRoster) { setCameFromRoster(false); setScope('roster') } }}
           onSaved={() => {
             setCreating(false)
             load()
-            // back to the roster, which reloads and shows the task just created
-            if (cameFromRoster) { setCameFromRoster(false); setRoster(true) }
+            // back to the roster tab, which re-reads and shows the new task
+            if (cameFromRoster) { setCameFromRoster(false); setScope('roster') }
           }}
         />
       )}

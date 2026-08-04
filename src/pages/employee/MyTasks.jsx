@@ -137,7 +137,13 @@ export default function MyTasks() {
 
   const today = todayISO()
   const filtered = useMemo(() => {
-    let rows = cat === 'all' ? tasks : tasks.filter((x) => x.category === cat)
+    // Not today, not shown. A Mon-Sat job on a Sunday is not merely "late-ish" —
+    // it must NOT be done: Sunday is client-visit day, no lawn work, no machines.
+    // Leaving it on the list with a label invited someone to do it anyway.
+    // Sunday-only work is hidden the rest of the week for the same reason.
+    // The roster still lists every job, because that is the plan, not the day.
+    const due = tasks.filter((x) => !notDueToday(x))
+    let rows = cat === 'all' ? due : due.filter((x) => x.category === cat)
     // task-status filter (lifecycle) and issue-status filter apply independently
     if (status === 'overdue') rows = rows.filter((x) => isTaskOverdue(x, today))
     else if (status !== 'all') rows = rows.filter((x) => x.status === status)
@@ -147,8 +153,9 @@ export default function MyTasks() {
 
   // Nothing to show: say whether this category is genuinely empty or whether a
   // status filter is hiding rows that do exist in it.
+  const dueToday = tasks.filter((x) => !notDueToday(x))
   const hiddenByFilter = (status !== 'all' || issueStatus !== 'all')
-    && (cat === 'all' ? tasks : tasks.filter((x) => x.category === cat)).length > 0
+    && (cat === 'all' ? dueToday : dueToday.filter((x) => x.category === cat)).length > 0
   const emptyTitle = hiddenByFilter ? t.noTaskForFilter : (t[EMPTY_KEY[cat]] || t.noData)
 
   // normal task-lifecycle statuses (left dropdown)
@@ -272,7 +279,6 @@ function TaskRow({ task, C, t, today, onOpen, hi }) {
   const od = isTaskOverdue(task, today)
   const fk = taskFrequency(task)
   const freq = FREQUENCY_MAP[fk] || FREQUENCY_MAP.daily
-  const notToday = notDueToday(task)
   const sched = scheduleText(task, hi ? 'hi' : 'en')
   return (
     <Card onClick={onOpen} style={{ cursor: 'pointer', borderLeft: `4px solid ${od ? TR_ORANGE : sc.color}` }}>
@@ -286,9 +292,6 @@ function TaskRow({ task, C, t, today, onOpen, hi }) {
             </span>
             {/* which days it actually comes round on — "Every Monday", "Mon · Wed · Fri" */}
             {sched && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.tl }}>{sched}</span>}
-            {notToday && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: TR_ORANGE }}>{t.notToday}</span>
-            )}
           </div>
           {task.area && <div style={metaLine(C)}><Icon name="pin" size={14} /> {task.area}</div>}
           {task.time_block && <div style={metaLine(C)}><Icon name="clock" size={14} /> {task.time_block}</div>}

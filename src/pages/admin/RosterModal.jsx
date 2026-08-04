@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { newId } from '../../lib/id'
-import { todayISO } from '../../lib/time'
+import { todayISO, fmtDate } from '../../lib/time'
 import { translateToHindi } from '../../lib/translate'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
@@ -11,7 +11,7 @@ import {
   TASK_FREQUENCIES, FREQUENCY_MAP, taskFrequency, frequencyLabel,
   WEEK_DAYS, dayName, scheduleText, staffingLabel,
 } from '../../constants/org'
-import { Button, Loader, Field, FilterChip, inputStyle } from '../../components/common/UI'
+import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
@@ -36,6 +36,11 @@ const draftSchedule = (d) => ({
 // The sheet has no photo column; that lives in the actions cell as a toggle, so
 // the six columns people read stay exactly the six they are used to.
 const COLS = '38px 132px minmax(0,1.25fr) 104px 112px minmax(0,1.5fr) 66px'
+// Phone: no row number, no frequency column (it moves into the task cell), and
+// the task column pins to the left while the rest scrolls.
+// last column fits three 34px touch targets plus their gaps (34*3 + 6*2 = 114);
+// it was 92px, and the department card clips overflow, so the bin disappeared
+const COLS_NARROW = '164px 104px 120px minmax(0,1.4fr) 118px'
 
 // The seven bands and the category/skip_sunday/week_day mapping live in
 // constants/org.js — the staff task list and the dashboard label tasks from the
@@ -46,6 +51,12 @@ const FREQ_MAP = FREQUENCY_MAP
 const freqOf = taskFrequency
 const SUMMARY_COLS = ['daily', 'sunday', 'alternate', 'weekly', 'monthly']
 const summaryBucket = (fk) => (fk === 'dailyMS' ? 'daily' : fk === 'alternateMS' ? 'alternate' : fk)
+// Filtering wants four buckets, not seven chips. "(Mon-Sat)" is a rule about
+// Sundays, not a different kind of work, and Sunday-only work IS weekly work —
+// so each of those folds into its parent. The Summary still counts Sunday
+// separately, because there the split is the point.
+const FILTER_BANDS = ['daily', 'alternate', 'weekly', 'monthly']
+const filterBucket = (fk) => (fk === 'sunday' ? 'weekly' : summaryBucket(fk))
 const freqLabel = (fk, lang) => frequencyLabel(fk, lang).toUpperCase()
 
 const MONTH_WEEKS = [
@@ -61,16 +72,20 @@ const weekName = (v, lang) => {
 
 // Summary cells: a spreadsheet reads as a grid, so the cells carry the borders.
 const sumHead = {
-  padding: '8px 9px', fontSize: 10, fontWeight: 800,
-  textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center',
+  padding: '11px 9px 9px', fontSize: 9.5, fontWeight: 700,
+  textTransform: 'uppercase', letterSpacing: '0.11em', textAlign: 'center',
 }
-const sumCell = { padding: '9px', fontSize: 13, fontWeight: 600, textAlign: 'center' }
+const sumCell = { padding: '12px 9px', fontSize: 14, textAlign: 'center' }
 // one grid for the head, the rows and the totals — three different template
 // strings is how a table quietly stops lining up
 const SUM_GRID = '138px repeat(5, minmax(0,1fr)) 68px'
+// The first column pins itself while the rest scrolls sideways. It needs a solid
+// background of its own: a transparent sticky cell lets the scrolling numbers
+// slide underneath it.
+const stickyCell = (bg) => ({ position: 'sticky', left: 0, zIndex: 1, background: bg })
 const thCell = {
-  padding: '6px 8px', fontSize: 10, fontWeight: 800, color: '#fff',
-  textTransform: 'uppercase', letterSpacing: '0.04em',
+  padding: '9px 8px', fontSize: 9.5, fontWeight: 700, color: '#94A3B8',
+  textTransform: 'uppercase', letterSpacing: '0.11em',
 }
 const tdCell = { padding: '8px' }
 
@@ -97,12 +112,34 @@ const normRange = (block) => fmtRange(...Object.values(parseRange(block)))
 // Removing someone DELETES their row only while it is untouched (still pending,
 // no photos, never started). Once there is work recorded against it the row is
 // merely unassigned, because deleting would throw away that history.
-export default function RosterModal({ user, members, canSeeAllProps, defaultProperty, onClose, onSaved, onDetailed }) {
+export default function RosterModal({ user, members, canSeeAllProps, defaultProperty, inline, onClose, onSaved, onDetailed }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
   const confirm = useConfirm()
   const wide = useMediaQuery('(min-width: 760px)')
+  // A 13px icon with 1px of padding is a mouse target. A finger needs ~34px, so
+  // the row actions grow on a phone instead of asking for a precise tap.
+  const iconSize = wide ? 14 : 18
+  const today = todayISO()
+  // How far down the sticky filter bar has to sit. The app header is sticky at
+  // top: 0, so anything else pinned to 0 disappears behind it — and its height
+  // differs between phone and desktop, so it is measured, not assumed.
+  const [headerH, setHeaderH] = useState(0)
+  const listRef = useRef(null)
+  const barRef = useRef(null)
+  useEffect(() => {
+    const measure = () => setHeaderH(document.querySelector('header')?.offsetHeight || 0)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+  const todayDow = new Date().getDay() === 0 ? 7 : new Date().getDay()
+  const tapTarget = {
+    background: 'transparent', display: 'grid', placeItems: 'center',
+    padding: wide ? 1 : 0, width: wide ? 'auto' : 34, height: wide ? 'auto' : 34,
+    borderRadius: 8, flexShrink: 0,
+  }
 
   // several venues at once: the same daily round usually applies to more than
   // one, and setting it up venue by venue is how they drift apart
@@ -276,10 +313,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const setGroupTime = (key, patch) =>
     setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, ...patch } : g)))
 
+  // Narrowing the list is only half the job: if the screen still shows the
+  // summary afterwards, nothing appears to have happened. Scroll to the work,
+  // stopping clear of the app header and the filter bar that sit over it.
+  const goToList = () => {
+    const el = listRef.current
+    if (!el) return
+    const offset = headerH + (barRef.current?.offsetHeight || 0) + 8
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: 'smooth' })
+  }
+  const pickDept = (code) => { setDeptTab(code); requestAnimationFrame(goToList) }
+
   // which department's round is on screen, and which frequency band
   const shownGroups = useMemo(
     () => groups.filter((g) => (deptTab === 'all' || g.department === deptTab)
-      && (freqFilter === 'all' || freqOf(g) === freqFilter)),
+      && (freqFilter === 'all' || filterBucket(freqOf(g)) === freqFilter)),
     [groups, deptTab, freqFilter]
   )
 
@@ -538,111 +586,82 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   const removeDraft = (key) => setDrafts((prev) => prev.filter((d) => d.key !== key))
 
-  // Person toggles rather than a dropdown: several people per job is the normal
-  // case here, and a multi-select <select> is unusable on a phone.
-  const PeoplePicker = ({ chosen, onToggle }) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {staff.length === 0 && <span style={{ fontSize: 12.5, color: C.tl }}>{t.noStaffInScope}</span>}
-      {staff.map((m) => {
-        const on = chosen.includes(m.id)
-        return (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => onToggle(m.id)}
-            title={[m.department ? deptName(m.department, lang) : null, propName(m.property, lang)].filter(Boolean).join(' · ')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '5px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
-              border: `1.5px solid ${on ? C.maroon : C.border}`,
-              background: on ? C.maroon : C.card,
-              color: on ? '#fff' : C.tl,
-            }}
-          >
-            {on && <Icon name="check" size={12} color="#fff" />}
-            {personName(m, lang)}
-            {m.inactive && (
-              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
-                · {t.inactiveStaff}
-              </span>
-            )}
-            {!m.inactive && isVisiting(m) && (
-              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
-                · {propName(m.property, lang)}
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
+  // Discarding is not "close" when there is nothing to close: on the tab it
+  // means throw away the unsaved edits and re-read the roster.
+  const discard = () => { setDrafts([]); setForm(null); setExpandedKey(null); load() }
+
+  const footer = (
+    <>
+      <Button variant="ghost" onClick={inline ? discard : onClose} disabled={inline && nothingToSave} style={{ flex: 1 }}>
+        {inline ? t.discardChanges : t.cancel}
+      </Button>
+      <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
+        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + filledDrafts.length})`}
+      </Button>
+    </>
   )
 
-  return (
-    <Modal
-      open onClose={onClose} maxWidth={1240}
-      title={t.roster}
-      footer={(
-        <>
-          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
-          <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
-            {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + filledDrafts.length})`}
-          </Button>
-        </>
-      )}
-    >
-      {/* venue + recurrence pickers */}
-      {canSeeAllProps && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, maxWidth: 340 }}>
-          <Icon name="pin" size={16} color={C.tl} />
-          <MultiSelect
-            C={C}
-            placeholder={t.properties}
-            options={PROPERTIES.map((p) => ({ value: p.code, label: propName(p.code, lang) }))}
-            selected={props}
-            // never leave the roster with nothing selected — it would show an
-            // empty table with no way to tell why
-            onChange={(next) => setProps(next.length ? next : props)}
-          />
-        </div>
-      )}
+  const body = (
+    <>
       {/* The sheet's own masthead. The shift and the Sunday rule are the two
           facts every row is written against, so they sit above every row. */}
       <div style={{ border: `1px solid ${C.borderStrong}`, borderRadius: 14, overflow: 'hidden', marginBottom: 14, boxShadow: C.shadow }}>
-        <div style={{ background: `linear-gradient(135deg, ${C.maroon} 0%, ${C.maroonDark} 100%)`, padding: '13px 14px', textAlign: 'center' }}>
-          <div style={{ fontSize: 15.5, fontWeight: 800, color: '#fff', letterSpacing: '0.06em' }}>
-            {t.dutyRosterTitle}
+        <div style={{ background: `linear-gradient(160deg, ${C.maroon} 0%, ${C.maroonDark} 100%)`, padding: '16px 18px', textAlign: 'center' }}>
+          <div style={{ fontSize: 19, fontWeight: 700, color: '#fff', letterSpacing: '0.01em' }}>
+            {t.dutyRoster}
           </div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#ffffffcc', marginTop: 5, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 500, color: '#ffffffa8', marginTop: 6 }}>
             {t.rosterShift}
-            <span style={{ opacity: 0.45, margin: '0 8px' }}>|</span>
-            <b style={{ color: '#fff' }}>⊖ {t.noLawnSunday}</b>
-            <span style={{ opacity: 0.45, margin: '0 8px' }}>|</span>
-            {t.villaAt}
+            <span style={{ opacity: 0.35, margin: '0 10px' }}>·</span>
+            <b style={{ color: '#fff', fontWeight: 600 }}>{dayName(todayDow, lang)}</b>
+            {', '}{fmtDate(today)}
+            {todayDow === 7 && (
+              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', background: '#ffffff26', borderRadius: 999, padding: '2px 8px' }}>
+                {t.clientVisitDay}
+              </span>
+            )}
           </div>
         </div>
         {/* Summary: the whole roster's weight per department, per frequency */}
         <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 520 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: SUM_GRID, background: C.cardAlt, borderBottom: `2px solid ${C.borderStrong}` }}>
-              <span style={{ ...sumHead, color: C.tl, textAlign: 'left' }}>{t.department}</span>
-              {/* each heading wears its band's colour, so the column and the
-                  chips and the rows below are visibly the same thing */}
+          <div style={{ minWidth: wide ? 520 : 430 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: SUM_GRID, background: C.card }}>
+              <span style={{ ...sumHead, ...stickyCell(C.card), color: C.faint, textAlign: 'left' }}>
+                {t.department}
+                <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', color: C.faint, fontWeight: 600, marginTop: 2 }}>
+                  {t.tapToFilter}
+                </span>
+              </span>
+              {/* the band's colour as a 2px rule under its heading. Enough to tie
+                  the column to its chips and its rows; not enough to shout. */}
               {SUMMARY_COLS.map((k) => (
-                <span key={k} style={{ ...sumHead, color: FREQ_MAP[k].ink, background: FREQ_MAP[k].tint }}>
+                <span key={k} style={{ ...sumHead, color: C.tl, boxShadow: `inset 0 -2px 0 ${FREQ_MAP[k].ink}` }}>
                   {freqLabel(k, lang)}
                 </span>
               ))}
-              <span style={{ ...sumHead, color: C.maroon }}>{t.total}</span>
+              <span style={{ ...sumHead, color: C.faint, boxShadow: `inset 0 -2px 0 ${C.maroon}` }}>{t.total}</span>
             </div>
             {DEPARTMENTS.map((d) => {
               const r = summary[d.code] || {}
               const tot = SUMMARY_COLS.reduce((n, k) => n + (r[k] || 0), 0)
+              // the row IS the filter — tap to narrow, tap again to clear
+              const on = deptTab === d.code
+              const rowBg = on ? C.maroonSoft : C.card
               return (
-                <div key={d.code} style={{ display: 'grid', gridTemplateColumns: SUM_GRID, borderTop: `1px solid ${C.border}` }}>
-                  {/* accent bar + the department's own ink: identity without a
-                      heavy block of colour fighting the numbers beside it */}
-                  <span style={{ ...sumCell, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9, fontWeight: 800, color: d.ink || d.color }}>
-                    <span style={{ width: 4, alignSelf: 'stretch', borderRadius: 2, background: d.color, flexShrink: 0 }} />
+                <div
+                  key={d.code}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={on}
+                  onClick={() => pickDept(on ? 'all' : d.code)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDept(on ? 'all' : d.code) } }}
+                  style={{ display: 'grid', gridTemplateColumns: SUM_GRID, borderTop: `1px solid ${C.border}`, background: rowBg, cursor: 'pointer' }}
+                >
+                  {/* the department's colour as a slim bar; the name itself stays
+                      plain dark text, because a coloured bar AND coloured text AND
+                      a coloured column is three ways of saying the same thing */}
+                  <span style={{ ...sumCell, ...stickyCell(rowBg), textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, fontWeight: on ? 800 : 600, color: on ? C.maroon : C.text }}>
+                    <span style={{ width: on ? 4 : 3, alignSelf: on ? 'stretch' : undefined, height: on ? undefined : 16, borderRadius: 2, background: d.color, flexShrink: 0 }} />
                     {deptName(d.code, lang)}
                   </span>
                   {SUMMARY_COLS.map((k) => (
@@ -650,66 +669,107 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                       key={k}
                       style={{
                         ...sumCell,
-                        background: FREQ_MAP[k].tint,
-                        // A zero should read quieter than a real number, but it is
-                        // still information: C.faint manages only 2.1:1 on these
-                        // pale tints, so a zero would be a smudge. Slate-600
-                        // clears 4.5:1 on all five and still recedes.
-                        color: r[k] ? FREQ_MAP[k].ink : '#475569',
-                        fontWeight: r[k] ? 800 : 500,
-                        fontSize: r[k] ? 14 : 13,
+                        fontVariantNumeric: 'tabular-nums',
+                        // a zero is absence of work: present, but it should not
+                        // compete with a real figure for attention
+                        color: r[k] ? C.text : C.faint,
+                        fontWeight: r[k] ? 600 : 400,
                       }}
                     >
                       {r[k] || 0}
                     </span>
                   ))}
-                  <span style={{ ...sumCell, fontWeight: 800, fontSize: 14, color: C.maroon, background: C.maroonSoft }}>{tot}</span>
+                  <span style={{ ...sumCell, fontWeight: 700, color: C.maroon, fontVariantNumeric: 'tabular-nums', borderLeft: `1px solid ${C.border}` }}>{tot}</span>
                 </div>
               )
             })}
             {/* Column totals, not five blank cells. "How much daily work does a
                 venue carry" is a question this table should answer. */}
-            <div style={{ display: 'grid', gridTemplateColumns: SUM_GRID, borderTop: `2px solid ${C.maroon}`, background: C.maroonSoft }}>
-              <span style={{ ...sumCell, textAlign: 'left', paddingLeft: 22, fontWeight: 800, color: C.maroon, textTransform: 'uppercase', fontSize: 11, letterSpacing: '0.04em' }}>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => pickDept('all')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDept('all') } }}
+              style={{ display: 'grid', gridTemplateColumns: SUM_GRID, borderTop: `1px solid ${C.borderStrong}`, background: deptTab === 'all' ? C.maroonSoft : C.cardAlt, cursor: 'pointer' }}
+            >
+              <span style={{ ...sumCell, ...stickyCell(deptTab === 'all' ? C.maroonSoft : C.cardAlt), textAlign: 'left', paddingLeft: 23, fontWeight: 700, color: deptTab === 'all' ? C.maroon : C.tl, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.1em' }}>
                 {t.totalPerProperty}
               </span>
               {SUMMARY_COLS.map((k) => (
-                <span key={k} style={{ ...sumCell, fontWeight: 800, fontSize: 14, color: FREQ_MAP[k].ink }}>
+                <span key={k} style={{ ...sumCell, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
                   {Object.values(summary).reduce((n, row) => n + (row[k] || 0), 0)}
                 </span>
               ))}
-              <span style={{ ...sumCell, fontWeight: 800, fontSize: 15.5, color: '#fff', background: C.maroon }}>{grandTotal}</span>
+              <span style={{ ...sumCell, fontWeight: 800, fontSize: 16, color: C.maroon, fontVariantNumeric: 'tabular-nums', borderLeft: `1px solid ${C.border}` }}>{grandTotal}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* The Sunday rule, spelled out where it cannot be missed */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: FREQ_MAP.sunday.tint, borderLeft: `4px solid ${FREQ_MAP.sunday.ink}`, borderRadius: 10, padding: '11px 13px', marginBottom: 14, fontSize: 12, fontWeight: 700, color: FREQ_MAP.sunday.ink, lineHeight: 1.55 }}>
-        <span style={{ fontSize: 15, lineHeight: 1.1 }}>⊖</span>
-        <span>{t.sundayRule}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, background: '#FFF7F7', border: `1px solid ${FREQ_MAP.sunday.ink}1f`, borderRadius: 12, padding: '12px 14px', marginBottom: 16, lineHeight: 1.6 }}>
+        <span style={{ fontSize: 14, lineHeight: 1.3, color: FREQ_MAP.sunday.ink }}>⊖</span>
+        <span style={{ fontSize: 12, color: C.text }}>
+          <b style={{ color: FREQ_MAP.sunday.ink, letterSpacing: '0.02em' }}>{t.sundayRuleLead}</b> {t.sundayRuleBody}
+        </span>
       </div>
 
-      {/* frequency bands, colour-coded exactly as the sheet legends them */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-        <FilterChip active={freqFilter === 'all'} onClick={() => setFreqFilter('all')}>{t.all}</FilterChip>
-        {FREQ.map((f) => (
-          <FilterChip key={f.key} dot={f.ink} active={freqFilter === f.key} onClick={() => setFreqFilter(f.key)}>
-            {freqLabel(f.key, lang)}
-          </FilterChip>
-        ))}
-      </div>
-      {/* Whose round: a roster is written and read one department at a time.
-          Only departments that actually have work here are offered. */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        <FilterChip active={deptTab === 'all'} onClick={() => setDeptTab('all')}>{t.all}</FilterChip>
-        {/* every department, not only those that already have work — a round
-            has to be startable for a department with nothing on it yet */}
-        {DEPARTMENTS.map((d) => (
-          <FilterChip key={d.code} dot={d.color} active={deptTab === d.code} onClick={() => setDeptTab(d.code)}>
-            {deptName(d.code, lang)}
-          </FilterChip>
-        ))}
+      {/* Venue, frequency and department in one bar that follows the page. They
+          used to sit on either side of the summary, so narrowing a 121-row list
+          meant scrolling back to the top for every change.
+          Each chip row scrolls sideways instead of wrapping: on a phone, wrapping
+          turned the bar into a third of the screen. */}
+      <div
+        ref={barRef}
+        style={{
+          position: 'sticky', top: headerH, zIndex: 20,
+          background: C.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8,
+          borderBottom: `1px solid ${C.border}`,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {canSeeAllProps && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: '1 1 190px', minWidth: 170 }}>
+              <Icon name="pin" size={15} color={C.tl} />
+              <MultiSelect
+                C={C}
+                placeholder={t.properties}
+                options={PROPERTIES.map((p) => ({ value: p.code, label: propName(p.code, lang) }))}
+                selected={props}
+                // never leave the roster with nothing selected — it would show an
+                // empty table with no way to tell why
+                onChange={(next) => setProps(next.length ? next : props)}
+              />
+            </div>
+          )}
+
+          {/* Selects, not chips: ten chips over two sideways-scrolling rows took a
+              third of a phone screen and still hid half of themselves. */}
+          <div style={{ flex: '1 1 150px', minWidth: 135 }}>
+            <MultiSelect
+              single
+              C={C}
+              placeholder={t.allFrequencies}
+              options={[{ value: 'all', label: t.allFrequencies }, ...FILTER_BANDS.map((k) => ({ value: k, label: freqLabel(k, lang) }))]}
+              selected={[freqFilter]}
+              onChange={([v]) => setFreqFilter(v || 'all')}
+            />
+          </div>
+
+          {/* The summary above narrows by department in one tap; this is where the
+              active one stays visible once the summary has scrolled away — which
+              is exactly when you need to know what is filtered. */}
+          <div style={{ flex: '1 1 150px', minWidth: 135 }}>
+            <MultiSelect
+              single
+              C={C}
+              placeholder={t.allDepts}
+              options={[{ value: 'all', label: t.allDepts }, ...DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) }))]}
+              selected={[deptTab]}
+              onChange={([v]) => pickDept(v || 'all')}
+            />
+          </div>
+        </div>
       </div>
 
       {/* "Assign all to …" and the cover-dates switch are both gone. Cover has
@@ -752,15 +812,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     key={d.key}
                     style={{
                       border: `1px dashed ${C.maroon}`, borderRadius: 10, background: C.card,
-                      marginBottom: 8, overflow: 'hidden',
+                      marginBottom: 8,
                     }}
                   >
-                    <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : '1fr', gap: wide ? 0 : 5, alignItems: 'start' }}>
-                      <span style={{ ...tdCell, color: C.maroon, fontWeight: 800, textAlign: wide ? 'center' : 'left' }}>+</span>
-                      <span style={{ ...tdCell, fontSize: 11, fontWeight: 800, color: f.ink, textTransform: 'uppercase' }}>
-                        {freqLabel(d.freq || 'daily', lang)}
-                      </span>
-                      <div style={{ ...tdCell, minWidth: 0 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, alignItems: 'start' }}>
+                      {wide && <span style={{ ...tdCell, color: C.maroon, fontWeight: 800, textAlign: 'center' }}>+</span>}
+                      {wide && (
+                        <span style={{ ...tdCell, fontSize: 11, fontWeight: 800, color: f.ink, textTransform: 'uppercase' }}>
+                          {freqLabel(d.freq || 'daily', lang)}
+                        </span>
+                      )}
+                      <div style={{ ...tdCell, minWidth: 0, ...(wide ? null : stickyCell(C.card)) }}>
+                        {!wide && (
+                          <div style={{ fontSize: 9.5, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
+                            {freqLabel(d.freq || 'daily', lang)}
+                          </div>
+                        )}
                         <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>{d.title}</div>
                         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', fontSize: 11, marginTop: 2 }}>
                           <span style={{ color: C.maroon, fontWeight: 700 }}>{t.notSavedYet}</span>
@@ -786,20 +853,20 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                         </span>
                       </div>
                       <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>{d.sop || '—'}</span>
-                      <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: 4, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
-                        <span title={`${t.photoRequired}: ${d.photoRequired !== false ? t.yes : t.no}`} style={{ display: 'grid', placeItems: 'center', padding: 1 }}>
-                          <Icon name={d.photoRequired !== false ? 'camera' : 'cameraOff'} size={14} color={d.photoRequired !== false ? C.maroon : C.faint} />
+                      <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: wide ? 4 : 6, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
+                        <span title={`${t.photoRequired}: ${d.photoRequired !== false ? t.yes : t.no}`} style={tapTarget}>
+                          <Icon name={d.photoRequired !== false ? 'camera' : 'cameraOff'} size={iconSize} color={d.photoRequired !== false ? C.maroon : C.faint} />
                         </span>
                         <button
                           type="button"
                           onClick={() => setForm({ mode: 'draft', ...d })}
                           title={t.edit} aria-label={t.edit}
-                          style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 1 }}
+                          style={tapTarget}
                         >
-                          <Icon name="edit" size={13} color={C.tl} />
+                          <Icon name="edit" size={iconSize} color={C.tl} />
                         </button>
-                        <button type="button" onClick={() => removeDraft(d.key)} title={t.delete} aria-label={t.delete} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 1 }}>
-                          <Icon name="close" size={14} color={C.tl} />
+                        <button type="button" onClick={() => removeDraft(d.key)} title={t.delete} aria-label={t.delete} style={tapTarget}>
+                          <Icon name="close" size={iconSize + 1} color={C.tl} />
                         </button>
                       </div>
                     </div>
@@ -812,34 +879,35 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                   its own header row. The six columns are the sheet's six —
                   # / Frequency / Task / Time / Assigned / SOP — and the photo rule
                   sits with the row actions so it does not add a seventh. */}
-              <div style={{ overflowX: wide ? 'auto' : 'visible' }}>
-              <div style={{ minWidth: wide ? 960 : 0, display: 'grid', gap: 14 }}>
+              <div ref={listRef} style={{ overflowX: 'auto' }}>
+              <div style={{ minWidth: wide ? 960 : 620, display: 'grid', gap: 14 }}>
               {sections.map(({ dept, count, bands }) => (
                 <div key={dept} style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
                   {/* department band, the sheet's full-width colour bar */}
-                  <div style={{ background: dept === '_' ? C.tl : (DEPARTMENT_MAP[dept]?.color || C.tl), padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fff', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  <div style={{ background: C.card, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ width: 3, height: 18, borderRadius: 2, background: dept === '_' ? C.tl : (DEPARTMENT_MAP[dept]?.color || C.tl), flexShrink: 0 }} />
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, letterSpacing: '0.01em' }}>
                       {dept === '_' ? t.unassigned : deptName(dept, lang)}
                     </span>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#ffffffcc' }}>{count}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
                   </div>
 
                   {bands.map(({ fk, rows: bandRows }) => {
                     const f = FREQ_MAP[fk] || FREQ_MAP.daily
                     return (
                       <div key={fk}>
-                        {/* the sheet's dark column header, repeated per band */}
-                        {wide && (
-                          <div style={{ display: 'grid', gridTemplateColumns: COLS, background: '#2F3742' }}>
-                            <span style={thCell}>#</span>
-                            <span style={thCell}>{t.frequency}</span>
-                            <span style={thCell}>{t.task}</span>
-                            <span style={thCell}>{t.time}</span>
-                            <span style={thCell}>{t.assigned}</span>
-                            <span style={thCell}>{t.sopColumn}</span>
-                            <span style={thCell} />
-                          </div>
-                        )}
+                        {/* the sheet's column header, repeated per band. Always
+                            shown — on a phone the list is a scrolling table, not a
+                            stack of cards, so it needs its headings. */}
+                        <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
+                          {wide && <span style={thCell}>#</span>}
+                          {wide && <span style={thCell}>{t.frequency}</span>}
+                          <span style={{ ...thCell, ...(wide ? null : stickyCell(C.cardAlt)) }}>{t.task}</span>
+                          <span style={thCell}>{t.time}</span>
+                          <span style={thCell}>{t.assigned}</span>
+                          <span style={thCell}>{t.sopColumn}</span>
+                          <span style={thCell} />
+                        </div>
 
                         {bandRows.map((g, i) => {
                           const before = g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to)
@@ -855,13 +923,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           const when = scheduleText(g, lang)
                           const clock = fmtRange(g.from, g.to)
                           return (
-                            <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: edited ? C.maroonSoft : f.tint }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : '1fr', gap: wide ? 0 : 5, alignItems: 'start', padding: wide ? 0 : '9px 10px' }}>
-                                <span style={{ ...tdCell, color: C.tl, fontWeight: 700, textAlign: wide ? 'center' : 'left' }}>{i + 1}</span>
-                                <span style={{ ...tdCell, fontSize: 11, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                                  {freqLabel(fk, lang)}
-                                </span>
-                                <div style={{ ...tdCell, minWidth: 0 }}>
+                            <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card), boxShadow: `inset 3px 0 0 ${f.ink}` }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, alignItems: 'start' }}>
+                                {wide && (
+                                  <span style={{ ...tdCell, color: C.tl, fontWeight: 700, textAlign: 'center' }}>{i + 1}</span>
+                                )}
+                                {wide && (
+                                  <span style={{ ...tdCell, fontSize: 11, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                                    {freqLabel(fk, lang)}
+                                  </span>
+                                )}
+                                <div style={{ ...tdCell, minWidth: 0, ...(wide ? null : stickyCell(edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card))) }}>
+                                  {!wide && (
+                                    <div style={{ fontSize: 9.5, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
+                                      {freqLabel(fk, lang)}
+                                    </div>
+                                  )}
                                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>
                                     {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
                                   </div>
@@ -896,31 +973,43 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>
                                   {g.sop || '—'}
                                 </span>
-                                <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: 4, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
+                                <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: wide ? 4 : 6, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
                                   <button
                                     type="button"
                                     onClick={() => setGroupTime(g.key, { photoRequired: !g.photoRequired })}
                                     title={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
                                     aria-label={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
                                     aria-pressed={g.photoRequired}
-                                    style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 1 }}
+                                    style={tapTarget}
                                   >
                                     {/* the icon carries the whole message: a camera, or a
                                         camera with a line through it. No pill, no border. */}
-                                    <Icon name={g.photoRequired ? 'camera' : 'cameraOff'} size={14} color={g.photoRequired ? C.maroon : C.faint} />
+                                    <Icon name={g.photoRequired ? 'camera' : 'cameraOff'} size={iconSize} color={g.photoRequired ? C.maroon : C.faint} />
                                   </button>
-                                  <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 1 }}>
-                                    <Icon name="edit" size={13} color={C.tl} />
+                                  <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={tapTarget}>
+                                    <Icon name="edit" size={iconSize} color={C.tl} />
                                   </button>
-                                  <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 1 }}>
-                                    <Icon name="trash" size={13} color={C.red} />
+                                  <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={tapTarget}>
+                                    <Icon name="trash" size={iconSize} color={C.red} />
                                   </button>
                                 </div>
                               </div>
 
                               {open && (
-                                <div style={{ padding: '10px', borderTop: `1px solid ${C.border}`, background: C.card }}>
-                                  <PeoplePicker chosen={g.people} onToggle={(id) => togglePerson(g.key, id)} />
+                                <div
+                                  style={{
+                                    padding: '10px', borderTop: `1px solid ${C.border}`, background: C.card,
+                                    // the row is 620px wide on a phone so the panel would
+                                    // sit mostly off-screen; sticky-left keeps it in view
+                                    ...(wide ? null : { position: 'sticky', left: 0, width: 'min(100%, 92vw)' }),
+                                  }}
+                                >
+                                  <PeoplePicker
+                                    C={C} t={t} lang={lang} staff={staff}
+                                    chosen={g.people}
+                                    onToggle={(id) => togglePerson(g.key, id)}
+                                    isVisiting={isVisiting}
+                                  />
                                 </div>
                               )}
                             </div>
@@ -950,7 +1039,117 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           {err && <div style={{ color: C.red, fontSize: 13, marginTop: 10 }}>{err}</div>}
         </>
       )}
+    </>
+  )
+
+  // On the tab the actions follow the page instead of being pinned to a dialog,
+  // and they stick to the bottom of the viewport so Save is reachable without
+  // scrolling past 121 rows to find it.
+  if (inline) {
+    return (
+      <div>
+        {body}
+        <div
+          style={{
+            position: 'sticky', bottom: 0, zIndex: 5, display: 'flex', gap: 10,
+            padding: '12px 0', marginTop: 16,
+            background: C.bg, borderTop: `1px solid ${C.border}`,
+          }}
+        >
+          {footer}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Modal open onClose={onClose} maxWidth={1240} title={t.roster} footer={footer}>
+      {body}
     </Modal>
+  )
+}
+
+// Person toggles rather than a dropdown: several people per job is the normal
+// case here, and a multi-select <select> is unusable on a phone. Past a couple of
+// dozen names the chips stop being a choice and become a scan, so there is a
+// search box — and anyone already ticked stays visible while you type, or you
+// could not see what you had picked.
+//
+// Module level on purpose: defined inside the parent's body, its identity changed
+// every render, React remounted it, and the search text died on each keystroke.
+function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting }) {
+  const [q, setQ] = useState('')
+  const needle = q.trim().toLowerCase()
+  // Nothing is listed until something is typed. Forty names on screen is a wall
+  // to read past; the people already picked stay, because that is the one thing
+  // you must be able to see without searching for it.
+  const matches = needle
+    ? staff.filter((m) => !chosen.includes(m.id)
+        && `${m.name || ''} ${m.name_hi || ''} ${deptName(m.department, 'en')} ${propName(m.property, 'en')}`
+          .toLowerCase().includes(needle))
+    : []
+  const picked = staff.filter((m) => chosen.includes(m.id))
+  const shown = [...picked, ...matches]
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+        <Icon name="search" size={15} color={C.faint} />
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t.searchPerson}
+          style={{ ...inputStyle(C), padding: '8px 11px', fontSize: 13 }}
+        />
+        {chosen.length > 0 && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.maroon, whiteSpace: 'nowrap' }}>
+            {chosen.length}
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {staff.length === 0 && <span style={{ fontSize: 12.5, color: C.tl }}>{t.noStaffInScope}</span>}
+        {staff.length > 0 && !needle && picked.length === 0 && (
+          <span style={{ fontSize: 12.5, color: C.faint }}>{t.typeToFindPerson}</span>
+        )}
+        {needle && matches.length === 0 && (
+          <span style={{ fontSize: 12.5, color: C.faint }}>{t.noMatch}</span>
+        )}
+        {shown.map((m) => {
+          const on = chosen.includes(m.id)
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onToggle(m.id)}
+              title={[m.department ? deptName(m.department, lang) : null, propName(m.property, lang)].filter(Boolean).join(' · ')}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '5px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
+                border: `1.5px solid ${on ? C.maroon : C.border}`,
+                background: on ? C.maroon : C.card,
+                color: on ? '#fff' : C.tl,
+              }}
+            >
+              {on && <Icon name="check" size={12} color="#fff" />}
+              {personName(m, lang)}
+              {m.inactive && (
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                  · {t.inactiveStaff}
+                </span>
+              )}
+              {!m.inactive && isVisiting(m) && (
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                  · {propName(m.property, lang)}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -1071,31 +1270,18 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
         </label>
       </Field>
 
-      <Field label={`${t.members} (${t.optional})`}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {staff.map((m) => {
-            const on = value.people.includes(m.id)
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => set({
-                  people: on ? value.people.filter((x) => x !== m.id) : [...value.people, m.id],
-                })}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '5px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
-                  border: `1.5px solid ${on ? C.maroon : C.border}`,
-                  background: on ? C.maroon : C.card,
-                  color: on ? '#fff' : C.tl,
-                }}
-              >
-                {on && <Icon name="check" size={12} color="#fff" />}
-                {personName(m, lang)}
-              </button>
-            )
+      {/* the same searchable picker as the table rows — one list, one behaviour */}
+      <Field label={`${t.assignedTo} (${t.optional})`}>
+        <PeoplePicker
+          C={C} t={t} lang={lang} staff={staff}
+          chosen={value.people}
+          onToggle={(id) => set({
+            people: value.people.includes(id)
+              ? value.people.filter((x) => x !== id)
+              : [...value.people, id],
           })}
-        </div>
+          isVisiting={() => false}
+        />
       </Field>
     </Modal>
   )
