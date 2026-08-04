@@ -5,7 +5,7 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, FilterChip, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -90,11 +90,21 @@ function AdminDashboard({ user }) {
     // Daily tasks carry no due date, so the due_date query below can't see
     // them. Past the cutoff hour, an unfinished one is late as well. The or()
     // keeps a daily task with a genuinely past due date from being counted twice.
+    //
+    // On a Sunday, "(Mon-Sat)" daily work is not due at all — no lawn work on
+    // client-visit day. It has to be excluded HERE too, because this tile is a
+    // database count while the list it opens is filtered by isTaskOverdue: count
+    // one way and list another and the two disagree in public.
+    const isSunday = new Date().getDay() === 0
     const dailyLateQ = dailyOverdueActive()
-      ? taskBase().eq('category', 'daily')
-          .neq('status', TASK_STATUS.COMPLETED)
-          .neq('status', TASK_STATUS.COMPLETION_REQUESTED)
-          .or(`due_date.is.null,due_date.gte.${today}`)
+      ? (() => {
+          let q = taskBase().eq('category', 'daily')
+            .neq('status', TASK_STATUS.COMPLETED)
+            .neq('status', TASK_STATUS.COMPLETION_REQUESTED)
+            .or(`due_date.is.null,due_date.gte.${today}`)
+          if (isSunday) q = q.or('skip_sunday.is.null,skip_sunday.eq.false')
+          return q
+        })()
       : Promise.resolve({ count: 0 })
 
     const [
@@ -322,7 +332,7 @@ function EmployeeDashboard({ user }) {
       // fetch tasks + training data in parallel (faster, and a single failing
       // query can't stall or wipe out the rest)
       const settled = await Promise.allSettled([
-        supabase.from('tasks').select('id, title, title_hi, status, priority, area, due_date, category').eq('assigned_to', user.id),
+        supabase.from('tasks').select('id, title, title_hi, status, priority, area, due_date, category, week_day, skip_sunday').eq('assigned_to', user.id),
         supabase.from('training_videos').select('id, deadline').eq('is_active', true).eq('department', user.department),
         supabase.from('training_assignments').select('video_id, deadline').eq('user_id', user.id),
         supabase.from('training_progress').select('video_key, completed').eq('user_id', user.id),
@@ -458,7 +468,9 @@ function EmployeeDashboard({ user }) {
                         </span>
                         <span style={{ fontSize: 11, fontWeight: 700, color: TR_ORANGE, background: tint(TR_ORANGE, 0.12), padding: '2px 8px', borderRadius: 999 }}>{t.priorityHigh}</span>
                         {task.category && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, padding: '2px 8px', borderRadius: 999 }}>{t[task.category]}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: (FREQUENCY_MAP[taskFrequency(task)] || {}).tint || C.maroonSoft, color: (FREQUENCY_MAP[taskFrequency(task)] || {}).ink || C.maroon }}>
+                            {frequencyLabel(taskFrequency(task), lang)}
+                          </span>
                         )}
                       </div>
                       {task.area && (

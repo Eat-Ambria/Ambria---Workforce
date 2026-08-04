@@ -5,7 +5,10 @@ import { nowISO, todayISO, fmtDate } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { TASK_STATUS, TASK_CATEGORIES, isTaskOverdue, isAdminRole } from '../../constants/org'
+import {
+  TASK_STATUS, TASK_CATEGORIES, isTaskOverdue, isAdminRole,
+  taskFrequency, frequencyLabel, FREQUENCY_MAP, notDueToday, scheduleText, staffingLabel,
+} from '../../constants/org'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -267,11 +270,26 @@ function TaskRow({ task, C, t, today, onOpen, hi }) {
   const sc = statusColors(task.status, C)
   const isc = task.issue_status ? statusColors(task.issue_status, C) : null
   const od = isTaskOverdue(task, today)
+  const fk = taskFrequency(task)
+  const freq = FREQUENCY_MAP[fk] || FREQUENCY_MAP.daily
+  const notToday = notDueToday(task)
+  const sched = scheduleText(task, hi ? 'hi' : 'en')
   return (
     <Card onClick={onOpen} style={{ cursor: 'pointer', borderLeft: `4px solid ${od ? TR_ORANGE : sc.color}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{taskTitle(task, hi)}</div>
+          {/* the roster's own wording for how often this comes back */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.02em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 999, background: freq.tint, color: freq.ink }}>
+              {frequencyLabel(fk, hi ? 'hi' : 'en')}
+            </span>
+            {/* which days it actually comes round on — "Every Monday", "Mon · Wed · Fri" */}
+            {sched && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.tl }}>{sched}</span>}
+            {notToday && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: TR_ORANGE }}>{t.notToday}</span>
+            )}
+          </div>
           {task.area && <div style={metaLine(C)}><Icon name="pin" size={14} /> {task.area}</div>}
           {task.time_block && <div style={metaLine(C)}><Icon name="clock" size={14} /> {task.time_block}</div>}
           {task.due_date && (
@@ -314,6 +332,10 @@ function WorkModal({ task, onClose, onSaved, user }) {
 
   const sc = statusColors(task.status, C)
   const isc = task.issue_status ? statusColors(task.issue_status, C) : null
+  const fk = taskFrequency(task)
+  const freq = FREQUENCY_MAP[fk] || FREQUENCY_MAP.daily
+  const notToday = notDueToday(task)
+  const sched = scheduleText(task, lang)
   const isPending = task.status === TASK_STATUS.PENDING
   const isInProgress = task.status === TASK_STATUS.IN_PROGRESS
   const isWaiting = task.status === TASK_STATUS.COMPLETION_REQUESTED
@@ -431,8 +453,17 @@ function WorkModal({ task, onClose, onSaved, user }) {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Badge color={sc.color} bg={sc.bg}>{t[sc.key]}</Badge>
         {isc && <Badge color={isc.color} bg={isc.bg}>{t[isc.key]}</Badge>}
-        {task.category && <Badge>{t[task.category]}</Badge>}
+        {task.category && <Badge color={freq.ink} bg={freq.tint}>{frequencyLabel(fk, lang)}</Badge>}
+        {/* how many people the roster puts on this job — "All", "Any 2" */}
+        {task.staffing && <Badge>{staffingLabel(task.staffing, lang)}</Badge>}
+        {sched && <Badge>{sched}</Badge>}
       </div>
+
+      {/* A Mon-Sat job on a Sunday, or Sunday work on a weekday. Said plainly so
+          nobody mows the lawn on client-visit day just because the row is there. */}
+      {notToday && (
+        <Notice C={C} tone={C.tl} bg={C.cardAlt} icon="clock" title={t.notToday} sub={t.notTodayMsg} />
+      )}
 
       {(task.rejection_note || task.rejection_voice_url) && (isInProgress || isPending) && !issueMode && (
         <div style={{ background: C.rBg, borderRadius: 10, padding: 12, marginBottom: 14, border: `1px solid ${C.red}22` }}>

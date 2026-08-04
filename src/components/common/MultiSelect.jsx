@@ -32,16 +32,24 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
     onChange([...next])
   }
 
-  const label = selected.length === 0 ? placeholder : `${selected.length} selected`
+  // Name what is chosen. "2 selected" tells you the one thing you already knew —
+  // you picked them. Past three names it would not fit, so the rest become "+N"
+  // and the full list goes in the tooltip.
+  const names = options.filter((o) => sel.has(o.value)).map((o) => o.label)
+  const label = names.length === 0 ? placeholder
+    : names.length === options.length && options.length > 1 ? `${t.all} (${names.length})`
+    : names.length <= 3 ? names.join(', ')
+    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
 
   return (
     <div ref={ref} style={{ position: 'relative', flex: 1, minWidth: 150 }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        style={{ ...inputStyle(C), display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', textAlign: 'left' }}
+        title={names.join(', ') || placeholder}
+        style={{ ...inputStyle(C), display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, cursor: 'pointer', textAlign: 'left' }}
       >
-        <span style={{ color: selected.length ? C.text : C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ color: selected.length ? C.text : C.tl, fontWeight: selected.length ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
         <Icon name="chevronRight" size={16} color={C.tl} style={{ transform: 'rotate(90deg)', flexShrink: 0 }} />
       </button>
       {open && (
@@ -51,7 +59,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
           )}
           {selected.length > 0 && (
             <button type="button" onClick={() => onChange([])} style={{ background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 600, padding: '2px 6px 8px' }}>
-              Clear ({selected.length})
+              {t.clearFilters} ({selected.length})
             </button>
           )}
           {list.length === 0 ? (

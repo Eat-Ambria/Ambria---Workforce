@@ -18,11 +18,16 @@ export const PROPERTY_MAP = PROPERTIES.reduce((m, p) => ({ ...m, [p.code]: p }),
 // intentionally not selectable here — filter/assign by role instead.
 // The four departments the venues actually run on. Admin is one of them here:
 // it is also a role, but people are posted to it as a team.
+// `color` is the department's band / dot — always carries WHITE text, so it has
+// to be dark enough for that (Horticulture's old #16A34A gave white only 3.3:1,
+// which is why the roster's green band was hard to read).
+// `ink` is the same identity as TEXT on a pale tint of itself, where the band
+// colour would be too light. Both are ≥ 4.5:1 against what they sit on.
 export const DEPARTMENTS = [
-  { code: 'a', name: 'Admin', nameHi: 'एडमिन', color: '#7B1E2F' },
-  { code: 'h', name: 'Horticulture', nameHi: 'बागवानी', color: '#16A34A' },
-  { code: 'k', name: 'Housekeeping', nameHi: 'हाउसकीपिंग', color: '#2563EB' },
-  { code: 's', name: 'Security', nameHi: 'सुरक्षा', color: '#6B21A8' },
+  { code: 'a', name: 'Admin', nameHi: 'एडमिन', color: '#7B1E2F', ink: '#7B1E2F' },
+  { code: 'h', name: 'Horticulture', nameHi: 'बागवानी', color: '#15803D', ink: '#166534' },
+  { code: 'k', name: 'Housekeeping', nameHi: 'हाउसकीपिंग', color: '#2563EB', ink: '#1D4ED8' },
+  { code: 's', name: 'Security', nameHi: 'सुरक्षा', color: '#6B21A8', ink: '#6B21A8' },
 ]
 
 // Retired codes. NOT offered when choosing a department, but kept here so any
@@ -209,11 +214,149 @@ export function dailyOverdueLabel() {
   return `${h12} ${DAILY_OVERDUE_HOUR >= 12 ? 'PM' : 'AM'}`
 }
 
+// ---------------------------------------------------------------------------
+// How often a task comes back, as the duty roster words it.
+//
+// The roster's seven bands are three DB columns underneath: `category`, plus
+// `skip_sunday` for "(Mon-Sat)" and `week_day = 7` for "Sunday only". These
+// helpers are the single place that mapping lives, so the roster, a staff
+// member's task list and the dashboard can never label the same task
+// differently.
+//
+// Sunday is client-visit day at every venue: no mowing, no trimming, no
+// sprinklers, no machines. "(Mon-Sat)" work stands down; "Sunday only" is the
+// light work done instead.
+// ---------------------------------------------------------------------------
+export const TASK_FREQUENCIES = [
+  { key: 'daily',       en: 'Daily',                hi: 'रोज़',                     tint: '#DBEAFE', ink: '#1D4ED8' },
+  { key: 'dailyMS',     en: 'Daily (Mon-Sat)',      hi: 'रोज़ (सोम-शनि)',           tint: '#DBEAFE', ink: '#1D4ED8' },
+  { key: 'sunday',      en: 'Sunday only',          hi: 'सिर्फ़ रविवार',             tint: '#FEE2E2', ink: '#B91C1C' },
+  { key: 'alternate',   en: 'Alternate days',       hi: 'एक दिन छोड़',              tint: '#FEF3C7', ink: '#854D0E' },
+  { key: 'alternateMS', en: 'Alternate (Mon-Sat)',  hi: 'एक दिन छोड़ (सोम-शनि)',    tint: '#FEF3C7', ink: '#854D0E' },
+  { key: 'weekly',      en: 'Weekly',               hi: 'साप्ताहिक',                tint: '#D1FAE5', ink: '#166534' },
+  { key: 'monthly',     en: 'Monthly',              hi: 'मासिक',                    tint: '#FCE7F3', ink: '#BE185D' },
+]
+export const FREQUENCY_MAP = TASK_FREQUENCIES.reduce((m, f) => ({ ...m, [f.key]: f }), {})
+
+// Accepts a DB row (skip_sunday / week_day) or the roster's in-memory group
+// (skipSunday / weekDay) — the same task, spelled two ways by two layers.
+export function taskFrequency(task) {
+  if (!task) return 'daily'
+  const skip = task.skip_sunday ?? task.skipSunday
+  const day = Number(task.week_day ?? task.weekDay ?? 0)
+  if (task.category === 'weekly') return day === 7 ? 'sunday' : 'weekly'
+  if (task.category === 'daily') return skip ? 'dailyMS' : 'daily'
+  if (task.category === 'alternate') return skip ? 'alternateMS' : 'alternate'
+  return task.category || 'daily'
+}
+
+export const frequencyLabel = (key, lang) =>
+  (lang === 'hi' ? FREQUENCY_MAP[key]?.hi : FREQUENCY_MAP[key]?.en) || key
+
+// The duty roster's staffing rule — "All", "Any 2", "Day Guard 1", "Site Head" —
+// in the reader's language. It is stored as the English text the sheet uses, so
+// this is a lookup rather than a column: the vocabulary is small and fixed, and
+// an admin who types something of their own keeps exactly what they typed.
+const STAFFING_HI = {
+  'all': 'सभी',
+  'any 1': 'कोई 1',
+  'any 2': 'कोई 2',
+  'any 3': 'कोई 3',
+  'rotational': 'बारी-बारी',
+  'site head': 'साइट हेड',
+  'site head + all': 'साइट हेड + सभी',
+  'supervisor': 'सुपरवाइज़र',
+  'day guard 1': 'दिन गार्ड 1',
+  'day guard 2': 'दिन गार्ड 2',
+  'day guards': 'दिन के गार्ड',
+  'night guards': 'रात के गार्ड',
+  'sandeep/head': 'संदीप / हेड',
+  'sandeep + all': 'संदीप + सभी',
+  'sandeep + guard': 'संदीप + गार्ड',
+}
+export function staffingLabel(text, lang) {
+  const raw = String(text || '').trim()
+  if (!raw || lang !== 'hi') return raw
+  const key = raw.toLowerCase()
+  if (STAFFING_HI[key]) return STAFFING_HI[key]
+  // "3 persons" / "1 person" — a count, so handle any number rather than listing
+  // every one the sheet happens to use today
+  const n = key.match(/^(\d+)\s+persons?$/)
+  if (n) return `${n[1]} व्यक्ति`
+  return raw
+}
+
+// ISO weekdays, 1 = Monday.
+export const WEEK_DAYS = [
+  { v: 1, en: 'Monday',    short: 'Mon', hi: 'सोमवार',  hiShort: 'सोम' },
+  { v: 2, en: 'Tuesday',   short: 'Tue', hi: 'मंगलवार', hiShort: 'मंगल' },
+  { v: 3, en: 'Wednesday', short: 'Wed', hi: 'बुधवार',  hiShort: 'बुध' },
+  { v: 4, en: 'Thursday',  short: 'Thu', hi: 'गुरुवार', hiShort: 'गुरु' },
+  { v: 5, en: 'Friday',    short: 'Fri', hi: 'शुक्रवार', hiShort: 'शुक्र' },
+  { v: 6, en: 'Saturday',  short: 'Sat', hi: 'शनिवार',  hiShort: 'शनि' },
+  { v: 7, en: 'Sunday',    short: 'Sun', hi: 'रविवार',  hiShort: 'रवि' },
+]
+export const dayName = (v, lang) => {
+  const d = WEEK_DAYS.find((x) => x.v === Number(v))
+  return d ? (lang === 'hi' ? d.hi : d.en) : ''
+}
+export const dayShort = (v, lang) => {
+  const d = WEEK_DAYS.find((x) => x.v === Number(v))
+  return d ? (lang === 'hi' ? d.hiShort : d.short) : ''
+}
+
+// Alternate-day work is anchored to MONDAY, not to whenever it last happened.
+// Counting two days from the last run drifts — miss a reset and the whole rhythm
+// shifts — and nobody can answer "is it on today?" without checking history.
+// Anchored, it is always Mon / Wed / Fri, plus Sunday when Sunday is a working
+// day for that job.
+export const alternateDays = (skipSunday) => (skipSunday ? [1, 3, 5] : [1, 3, 5, 7])
+
+// Which date of the month a monthly task falls on: week 1 = the 1st, week 2 the
+// 8th, week 3 the 15th, week 4 the 22nd.
+export const monthlyDate = (monthWeek) => 1 + (Math.min(Math.max(Number(monthWeek) || 1, 1), 4) - 1) * 7
+const ORDINAL = { 1: '1st', 8: '8th', 15: '15th', 22: '22nd' }
+
+// When the job actually comes round, in words, for the roster's Time column and
+// the staff member's task card. Empty for plain daily work — "Daily" already
+// said it, and repeating it adds noise to 121 rows.
+export function scheduleText(task, lang) {
+  const hi = lang === 'hi'
+  const fk = taskFrequency(task)
+  const day = task?.week_day ?? task?.weekDay
+  const week = task?.month_week ?? task?.monthWeek
+  if (fk === 'sunday') return hi ? 'हर रविवार' : 'Every Sunday'
+  if (fk === 'weekly') return hi ? `हर ${dayName(day || 1, hi ? 'hi' : 'en')}` : `Every ${dayName(day || 1, 'en')}`
+  if (fk === 'alternate' || fk === 'alternateMS') {
+    const skip = task?.skip_sunday ?? task?.skipSunday
+    return alternateDays(skip).map((d) => dayShort(d, lang)).join(' · ')
+  }
+  if (fk === 'monthly') {
+    const d = monthlyDate(week)
+    return hi ? `महीने की ${d}` : `${ORDINAL[d] || d} of month`
+  }
+  return ''
+}
+
+// Not this person's problem today: a Mon-Sat job on a Sunday, or Sunday-only
+// work on any other day. The row is still shown — hiding work is how it gets
+// forgotten — but it is never counted as late.
+export function notDueToday(task, now = new Date()) {
+  if (!task) return false
+  const sunday = now.getDay() === 0
+  const fk = taskFrequency(task)
+  if (fk === 'sunday') return !sunday
+  if (sunday && (fk === 'dailyMS' || fk === 'alternateMS')) return true
+  return false
+}
+
 // A task is overdue when it has a due date in the past and isn't completed yet.
 // Dated tasks without a due_date are never overdue; DAILY tasks are the
 // exception and go by the cutoff hour instead. `today` is an ISO date.
 export function isTaskOverdue(task, today, now = new Date()) {
   if (!task || task.status === TASK_STATUS.COMPLETED) return false
+  // a job that isn't due today cannot be late today
+  if (notDueToday(task, now)) return false
   if (task.category === 'daily') {
     // already sent for approval = the staff member did their part on time
     return task.status !== TASK_STATUS.COMPLETION_REQUESTED

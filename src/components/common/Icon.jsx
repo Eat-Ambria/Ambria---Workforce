@@ -11,6 +11,10 @@ const PATHS = {
   valet: <><path d="M5 17h14M6 17l1.5-5A2 2 0 0 1 9.4 10.6h5.2a2 2 0 0 1 1.9 1.4L18 17" /><circle cx="7.5" cy="17.5" r="1.5" /><circle cx="16.5" cy="17.5" r="1.5" /></>,
   vendors: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" /></>,
   camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z" /><circle cx="12" cy="13" r="4" /></>,
+  // A camera with a line through it. "Photo not required" used to be drawn as a
+  // bare ✕, which says nothing about photos — you could not tell whether the row
+  // wanted one or not. Same shape, struck out, reads instantly.
+  cameraOff: <><path d="M2 2 22 22" /><path d="M7 7H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16" /><path d="M9 3h6l2 3h4a2 2 0 0 1 2 2v8.5" /><path d="M14.1 15.1a3 3 0 1 1-4.2-4.2" /></>,
   image: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></>,
   close: <><path d="M18 6 6 18M6 6l12 12" /></>,
   plus: <><path d="M12 5v14M5 12h14" /></>,
