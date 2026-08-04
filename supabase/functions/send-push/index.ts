@@ -31,6 +31,8 @@ function render(n: Record<string, unknown>, lang: string) {
     task_sent_back: ['Task sent back — please redo', 'टास्क वापस भेजा गया — दोबारा करें', 'my-tasks'],
     task_approved: ['Your work was approved', 'आपका काम मंज़ूर हुआ', 'my-tasks'],
     task_closed_by_admin: ['Admin marked your task complete', 'एडमिन ने आपका टास्क पूरा मार्क किया', 'my-tasks'],
+    fix_closed_by_admin: ['Admin marked your repair complete', 'एडमिन ने आपकी रिक्वेस्ट पूरी मार्क की', 'task-board'],
+    task_done: ['Staff completed a task', 'स्टाफ ने टास्क पूरा किया', 'tasks'],
     task_submitted: ['Task submitted for approval', 'मंज़ूरी के लिए टास्क आया', 'tasks'],
     task_issue: ['Staff reported an issue', 'स्टाफ ने समस्या बताई', 'tasks'],
     issue_working: ['Admin is working on your issue', 'एडमिन आपकी समस्या पर काम कर रहा है', 'my-tasks'],
@@ -58,7 +60,7 @@ function render(n: Record<string, unknown>, lang: string) {
   const entry = M[n.type as string]
   const title = entry ? (hi ? entry[1] : entry[0]) : 'Ambria WorkForce'
   const path = entry ? entry[2] : 'dashboard'
-  const needsWho = ['task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'quiz_completed'].includes(n.type as string)
+  const needsWho = ['task_done', 'task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'quiz_completed'].includes(n.type as string)
   return { title, body: item + (needsWho ? who : ''), url: BASE + path, tag: `${n.type}-${n.entity_id ?? ''}` }
 }
 

@@ -5,7 +5,7 @@ import { nowISO, todayISO, fmtDate } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { TASK_STATUS, TASK_CATEGORIES, isTaskOverdue } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, isTaskOverdue, isAdminRole } from '../../constants/org'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -93,6 +93,8 @@ export default function MyTasks() {
       .select('*')
       .eq('assigned_to', user.id)
       .order('task_date', { ascending: false })
+      // a day is worked in time order; tasks with no time sit after the timed ones
+      .order('time_block', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
     if (!error) setTasks(data || [])
     setLoading(false)
@@ -319,8 +321,14 @@ function WorkModal({ task, onClose, onSaved, user }) {
   // issue is an independent dimension — it never blocks the task workflow
   const hasActiveIssue = [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING].includes(task.issue_status)
 
-  const canStart = beforePhotos.length > 0   // must add a "before" photo to start
-  const canComplete = photos.length > 0      // must add an "after" photo to submit
+  // Photo proof is the default, but a supervisory round has nothing to
+  // photograph — the roster can switch it off per task (tasks.photo_required).
+  // An admin's own task never insists on one either: the rule exists to prove
+  // the work TO an admin. They can still attach photos.
+  const showCapture = task.photo_required !== false         // offer the camera
+  const needsPhoto = showCapture && !isAdminRole(user?.role) // ...and insist on it
+  const canStart = !needsPhoto || beforePhotos.length > 0   // "before" photo to start
+  const canComplete = !needsPhoto || photos.length > 0      // "after" photo to submit
 
   // live timer while working
   useEffect(() => {
@@ -357,17 +365,25 @@ function WorkModal({ task, onClose, onSaved, user }) {
     await update({ completion_photo: next })
   }
 
+  // Marking it done finishes it — there is no approval queue any more. The
+  // admin sees the completed work and, if it will not do, sends it back for a
+  // redo (which is the honest correction: the task reopens, it is not "rejected
+  // pending approval"). completion_requested_at still stamps the moment the work
+  // ended, because that is what work_seconds is measured to.
   async function markForCompletion() {
     if (!canComplete) { setErr(t.photoRequired); return }
+    const done = nowISO()
     const ok = await update({
-      status: TASK_STATUS.COMPLETION_REQUESTED,
+      status: TASK_STATUS.COMPLETED,
       completion_photo: photos,
       completion_note: note,
-      completion_requested_at: nowISO(),
-      rejection_note: null, // clear the previous send-back reason on resubmit
-      // NOTE: rejection_voice_url is intentionally kept until the task is
-      // completed/approved (admin deletes it then), so the recording isn't
-      // orphaned in storage. It's hidden from staff once resubmitted anyway.
+      completion_requested_at: done,
+      completed_at: done,
+      completed_by: user.id,
+      rejection_note: null, // clear the previous send-back reason on a redo
+      // NOTE: rejection_voice_url is intentionally kept until the admin clears
+      // it, so the recording isn't orphaned in storage. It's hidden from staff
+      // once the task is done anyway.
     })
     if (ok) onSaved()
   }
@@ -405,7 +421,7 @@ function WorkModal({ task, onClose, onSaved, user }) {
           {isPending && !issueMode && <Button variant="primary" onClick={startWork} disabled={busy || !canStart} style={{ flex: 2 }}>{t.startWork}</Button>}
           {isInProgress && !issueMode && (
             <Button variant="success" onClick={markForCompletion} disabled={busy || !canComplete} style={{ flex: 2 }}>
-              {t.markForCompletion}
+              {t.markDone}
             </Button>
           )}
           {issueMode && <Button variant="danger" onClick={reportIssue} disabled={busy} style={{ flex: 2 }}>{t.submit}</Button>}
@@ -453,17 +469,21 @@ function WorkModal({ task, onClose, onSaved, user }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
-              {beforeLabel} {isPending && <span style={{ color: C.red }}>*</span>}
+              {beforeLabel} {isPending && (needsPhoto
+                ? <span style={{ color: C.red }}>*</span>
+                : showCapture && <span style={{ color: C.faint, fontWeight: 500 }}>({t.optional})</span>)}
             </div>
-            {isPending ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
+            {isPending && showCapture ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
           </div>
 
           {(isInProgress || isWaiting || isDone) && (
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
-                {afterLabel} {isInProgress && <span style={{ color: C.red }}>*</span>}
+                {afterLabel} {isInProgress && (needsPhoto
+                  ? <span style={{ color: C.red }}>*</span>
+                  : showCapture && <span style={{ color: C.faint, fontWeight: 500 }}>({t.optional})</span>)}
               </div>
-              {isInProgress ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
+              {isInProgress && showCapture ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
             </div>
           )}
         </div>

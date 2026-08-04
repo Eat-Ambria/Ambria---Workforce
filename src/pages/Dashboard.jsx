@@ -241,7 +241,11 @@ function AdminDashboard({ user }) {
         <StatCell C={C} value={task.total} label={t.totalTasks} tone={C.maroon} onClick={() => go('/tasks', 'all')} />
         <StatCell C={C} value={task.pending} label={t.pending} tone={C.yellow} onClick={() => go('/tasks', 'pending')} />
         <StatCell C={C} value={task.inProgress} label={t.inProgress} tone={C.blue} onClick={() => go('/tasks', 'inprogress')} />
-        <StatCell C={C} value={task.waiting} label={t.reviewQueue} tone={C.indigo} onClick={() => go('/tasks', 'review')} />
+        {/* staff close their own tasks now — this only counts rows left over
+            from the old approval queue, so the tile goes once they are cleared */}
+        {task.waiting > 0 && (
+          <StatCell C={C} value={task.waiting} label={t.reviewQueue} tone={C.indigo} onClick={() => go('/tasks', 'review')} />
+        )}
         <StatCell C={C} value={task.done} label={t.completed} tone={C.green} onClick={() => go('/tasks', 'completed')} />
       </StatBlock>
 
@@ -318,11 +322,11 @@ function EmployeeDashboard({ user }) {
       // fetch tasks + training data in parallel (faster, and a single failing
       // query can't stall or wipe out the rest)
       const settled = await Promise.allSettled([
-        supabase.from('tasks').select('id, title, status, priority, area, due_date, category').eq('assigned_to', user.id),
+        supabase.from('tasks').select('id, title, title_hi, status, priority, area, due_date, category').eq('assigned_to', user.id),
         supabase.from('training_videos').select('id, deadline').eq('is_active', true).eq('department', user.department),
         supabase.from('training_assignments').select('video_id, deadline').eq('user_id', user.id),
         supabase.from('training_progress').select('video_key, completed').eq('user_id', user.id),
-        supabase.from('work_board').select('id, title, status, priority, category, due_date').eq('assigned_to', user.id),
+        supabase.from('work_board').select('id, title, title_hi, status, priority, category, due_date').eq('assigned_to', user.id),
       ])
       const [tasksR, deptVidsR, asgR, progR, fixR] = settled.map((r) => (r.status === 'fulfilled' ? r.value : { data: [] }))
 
@@ -406,8 +410,11 @@ function EmployeeDashboard({ user }) {
                   onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.PENDING } })} />
         <StatCell C={C} value={s.inProgress} label={t.inProgress} tone={C.blue}
                   onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.IN_PROGRESS } })} />
-        <StatCell C={C} value={s.waiting} label={t.completionRequested} tone={C.indigo}
-                  onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
+        {/* nothing waits for approval any more; shown only if something still is */}
+        {s.waiting > 0 && (
+          <StatCell C={C} value={s.waiting} label={t.completionRequested} tone={C.indigo}
+                    onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
+        )}
         <StatCell C={C} value={s.done} label={t.completed} tone={C.green}
                   onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETED } })} />
       </StatBlock>
@@ -446,7 +453,9 @@ function EmployeeDashboard({ user }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, fontSize: 15, color: C.text }}>{task.title}</span>
+                        <span style={{ fontWeight: 700, fontSize: 15, color: C.text }}>
+                          {lang === 'hi' && task.title_hi ? task.title_hi : task.title}
+                        </span>
                         <span style={{ fontSize: 11, fontWeight: 700, color: TR_ORANGE, background: tint(TR_ORANGE, 0.12), padding: '2px 8px', borderRadius: 999 }}>{t.priorityHigh}</span>
                         {task.category && (
                           <span style={{ fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, padding: '2px 8px', borderRadius: 999 }}>{t[task.category]}</span>
@@ -492,7 +501,9 @@ function EmployeeDashboard({ user }) {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fix.title}</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {lang === 'hi' && fix.title_hi ? fix.title_hi : fix.title}
+                      </div>
                       <div style={{ fontSize: 12.5, color: C.tl, marginTop: 4 }}>{t[FIX_STATUS_LABEL[fix.status]] || fix.status}</div>
                     </div>
                     {/* priority badge pinned to the right, next to the chevron */}

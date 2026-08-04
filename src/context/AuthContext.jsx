@@ -8,6 +8,23 @@ const STORAGE_KEY = 'ambria_user'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+
+  // Venues this person is covering today. Read on every app open so a cover
+  // that started or ended overnight is reflected without anyone logging out.
+  async function loadCover(id) {
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const { data } = await supabase.from('staff_deployments')
+        .select('property, from_date, to_date')
+        .eq('user_id', id)
+        .lte('from_date', today)
+      return (data || [])
+        .filter((d) => !d.to_date || d.to_date >= today)
+        .map((d) => d.property)
+    } catch {
+      return []   // table missing or offline: no cover, everything else works
+    }
+  }
   const [loading, setLoading] = useState(true)
 
   // restore session: localStorage = "remembered" (persists), sessionStorage = this tab only
@@ -35,7 +52,8 @@ export function AuthProvider({ children }) {
         if (data) {
           if (data.is_active === false) { logout() }
           else {
-            const { password: _pw, ...fresh } = data
+            const { password: _pw, ...rest } = data
+            const fresh = { ...rest, cover: await loadCover(rest.id) }
             setUser(fresh)
             const store = localStorage.getItem(STORAGE_KEY) ? localStorage : sessionStorage
             store.setItem(STORAGE_KEY, JSON.stringify(fresh))

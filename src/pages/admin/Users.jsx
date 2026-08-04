@@ -48,6 +48,11 @@ export default function Users() {
   const [roleSel, setRoleSel] = useState([])     // selected role codes
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState(null) // user object, or 'new'
+  // Deactivated people are kept forever (their name is on old tasks) but they
+  // are not staff any more, so they are a separate list rather than greyed-out
+  // rows mixed into the working one.
+  const [showInactive, setShowInactive] = useState(false)
+  const [inactiveCount, setInactiveCount] = useState(0)
 
   // options for the multi-select dropdowns ({ value, label })
   const deptOptions = useMemo(() => DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) })), [lang])
@@ -65,6 +70,11 @@ export default function Users() {
     let query = supabase
       .from('users')
       .select('id, username, name, name_hi, role, property, department, phone, designation, is_active, access', { count: 'exact' })
+    // one list or the other, never both. is_active is NULL on rows created
+    // before the column existed — those are working accounts, not disabled ones.
+    query = showInactive
+      ? query.eq('is_active', false)
+      : query.or('is_active.is.null,is_active.eq.true')
     // filters combine (AND): role, department, property, search
     if (roleSel.length) query = query.in('role', roleSel)
     if (deptSel.length) query = query.in('department', deptSel)
@@ -79,9 +89,14 @@ export default function Users() {
     const { data, count } = await query.order('name').range(from, from + PAGE_SIZE - 1)
     setRows(data || [])
     setTotal(count || 0)
+    // the badge on the toggle — counted unfiltered, so it always answers "how
+    // many disabled accounts are there", not "…that match the current search"
+    const { count: off } = await supabase
+      .from('users').select('id', { count: 'exact', head: true }).eq('is_active', false)
+    setInactiveCount(off || 0)
     setListLoading(false)
     setLoading(false)
-  }, [roleSel, deptSel, propSel, debouncedQ, page])
+  }, [roleSel, deptSel, propSel, debouncedQ, page, showInactive])
 
   useEffect(() => { load() }, [load])
 
@@ -108,8 +123,31 @@ export default function Users() {
       <SectionTitle
         right={<Button variant="primary" onClick={() => setEditing('new')}><Icon name="plus" size={16} style={{ marginRight: 4 }} />{t.newLabel}</Button>}
       >
-        {t.userManagement}
+        {showInactive ? t.inactiveUsers : t.userManagement}
       </SectionTitle>
+
+      {/* the two lists are exclusive — this switches between them */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <button
+          type="button"
+          onClick={() => { setShowInactive((v) => !v); setPage(0) }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '0 14px', height: 38, borderRadius: 999,
+            background: showInactive ? C.rBg : C.card,
+            border: `1px solid ${showInactive ? C.red : C.border}`,
+            color: showInactive ? C.red : C.tl, fontSize: 13.5, fontWeight: 600,
+          }}
+        >
+          {showInactive ? t.showActive : t.showInactive}
+          {!showInactive && inactiveCount > 0 && (
+            <span style={{ background: C.rBg, color: C.red, borderRadius: 999, padding: '1px 8px', fontSize: 12, fontWeight: 800 }}>
+              {inactiveCount}
+            </span>
+          )}
+        </button>
+        {showInactive && <span style={{ fontSize: 12.5, color: C.tl }}>{t.inactiveUsersHint}</span>}
+      </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <input
@@ -141,13 +179,13 @@ export default function Users() {
       {listLoading && rows.length === 0 ? (
         <Loader label={t.loading} />
       ) : rows.length === 0 ? (
-        <EmptyState icon="team" title={t.noData} />
+        <EmptyState icon="team" title={showInactive ? t.noInactiveUsers : t.noData} />
       ) : (
         <div style={{ display: 'grid', gap: 12, opacity: listLoading ? 0.6 : 1, transition: 'opacity .15s' }}>
           {rows.map((u) => {
             const tone = roleTone(u.role, C)
             return (
-              <Card key={u.id} onClick={() => setEditing(u)} style={{ cursor: 'pointer', borderLeft: `4px solid ${tone}`, opacity: u.is_active === false ? 0.6 : 1 }}>
+              <Card key={u.id} onClick={() => setEditing(u)} style={{ cursor: 'pointer', borderLeft: `4px solid ${tone}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -286,7 +324,10 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
   async function save() {
     if (!form.name.trim()) { setErr(`${t.fullName} ${t.isRequired}`); return }
     if (!form.username.trim()) { setErr(`${t.username} ${t.isRequired}`); return }
-    if (form.phone.trim() && !isValidPhone(form.phone)) { setErr(t.phoneRule); return }
+    // the phone IS a login credential (username or phone + PIN), so it is not
+    // optional any more — an account without one can only be reached one way
+    if (!form.phone.trim()) { setErr(`${t.phone} ${t.isRequired}`); return }
+    if (!isValidPhone(form.phone)) { setErr(t.phoneRule); return }
     if (!form.password) { setErr(t.pinRule || 'PIN must be exactly 4 digits'); return }
     // enforce a 4-digit PIN whenever it's newly set or changed (existing
     // non-PIN passwords keep working until the admin edits them)
@@ -306,7 +347,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
       property: form.property,
       department: form.department || null,
       designation: form.designation || null,
-      phone: normalizePhone(form.phone) || null, // canonical form so login matches any format
+      phone: normalizePhone(form.phone), // canonical form so login matches any format
       is_active: form.is_active,
       access: accessList,
     }
@@ -440,10 +481,24 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
           </Field></div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1 }}><Field label={t.phone} hint={t.phoneRule}><input style={inputStyle(C)} value={form.phone} type="tel" inputMode="numeric" maxLength={10} placeholder={t.phonePlaceholder} onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))} /></Field></div>
+      {/* Top-aligned, like every other pair on this form: the phone's hint sits
+          below its own input instead of pushing the Active toggle out of line. */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
-          <Field label={t.active}>
+          <Field label={t.phone} required hint={t.phoneRule}>
+            <input
+              style={inputStyle(C)}
+              value={form.phone}
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder={t.phonePlaceholder}
+              onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))}
+            />
+          </Field>
+        </div>
+        <div style={{ flex: 1 }}>
+          <Field label={t.active} hint={form.is_active ? t.canLogInHint : t.cannotLogInHint}>
             <button
               type="button"
               onClick={() => !isSelf && setForm((f) => ({ ...f, is_active: !f.is_active }))}
@@ -452,11 +507,12 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                 background: form.is_active ? C.gBg : C.cardAlt, color: form.is_active ? C.green : C.tl,
                 border: `1px solid ${form.is_active ? C.green : C.border}`, borderRadius: 10, padding: '11px 13px',
-                fontSize: 14, fontWeight: 600, opacity: isSelf ? 0.6 : 1, cursor: isSelf ? 'not-allowed' : 'pointer',
+                // matches inputStyle so the control lines up with the phone box
+                fontSize: 15, fontWeight: 600, opacity: isSelf ? 0.6 : 1, cursor: isSelf ? 'not-allowed' : 'pointer',
               }}
             >
               <Icon name={form.is_active ? 'check' : 'close'} size={16} color={form.is_active ? C.green : C.tl} />
-              {form.is_active ? 'Can log in' : 'Disabled'}
+              {form.is_active ? t.canLogIn : t.loginDisabled}
             </button>
           </Field>
         </div>

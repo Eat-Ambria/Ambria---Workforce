@@ -16,30 +16,36 @@ export const PROPERTY_MAP = PROPERTIES.reduce((m, p) => ({ ...m, [p.code]: p }),
 
 // Pickable departments (teams). "Admin" is a ROLE, not a department, so it's
 // intentionally not selectable here — filter/assign by role instead.
+// The four departments the venues actually run on. Admin is one of them here:
+// it is also a role, but people are posted to it as a team.
 export const DEPARTMENTS = [
+  { code: 'a', name: 'Admin', nameHi: 'एडमिन', color: '#7B1E2F' },
   { code: 'h', name: 'Horticulture', nameHi: 'बागवानी', color: '#16A34A' },
   { code: 'k', name: 'Housekeeping', nameHi: 'हाउसकीपिंग', color: '#2563EB' },
   { code: 's', name: 'Security', nameHi: 'सुरक्षा', color: '#6B21A8' },
-  { code: 'sales', name: 'Sales', nameHi: 'बिक्री', color: '#D97706' },
-  { code: 'tech', name: 'Technology', nameHi: 'तकनीक', color: '#0891B2' },
-  { code: 'ops', name: 'Operations', nameHi: 'संचालन', color: '#4F46E5' },
-  { code: 'hr', name: 'HR', nameHi: 'एचआर', color: '#D4537E' },
-  { code: 'finance', name: 'Finance', nameHi: 'वित्त', color: '#059669' },
-  { code: 'marketing', name: 'Marketing', nameHi: 'मार्केटिंग', color: '#DC2626' },
-  // Leadership groups. These behave like any other department — they scope what
-  // a person sees, receive repair requests and group the analytics — so a head
-  // put here is NOT inside Housekeeping or Security for filtering purposes.
-  { code: 'oh', name: 'Overall Head', nameHi: 'ओवरऑल हेड', color: '#7C3AED' },
-  { code: 'sth', name: 'Site Head', nameHi: 'साइट हेड', color: '#B45309' },
-  { code: 'sv', name: 'Supervisor', nameHi: 'सुपरवाइज़र', color: '#0E7490' },
-  { code: 'sech', name: 'Security Head', nameHi: 'सिक्योरिटी हेड', color: '#9D174D' },
 ]
 
-// Lookup incl. the legacy "Admin" department so any existing department='a'
-// records still render a readable name (mirrors how PROPERTY_MAP keeps 'all').
-export const DEPARTMENT_MAP = DEPARTMENTS.reduce((m, d) => ({ ...m, [d.code]: d }), {
-  a: { code: 'a', name: 'Admin', nameHi: 'एडमिन', color: '#7B1E2F' },
-})
+// Retired codes. NOT offered when choosing a department, but kept here so any
+// user or task still carrying one renders a readable name instead of a raw code
+// — history should not turn into gibberish because a list was shortened.
+const RETIRED_DEPARTMENTS = {
+  sales: { code: 'sales', name: 'Sales', nameHi: 'बिक्री', color: '#D97706' },
+  tech: { code: 'tech', name: 'Technology', nameHi: 'तकनीक', color: '#0891B2' },
+  ops: { code: 'ops', name: 'Operations', nameHi: 'संचालन', color: '#4F46E5' },
+  hr: { code: 'hr', name: 'HR', nameHi: 'एचआर', color: '#D4537E' },
+  finance: { code: 'finance', name: 'Finance', nameHi: 'वित्त', color: '#059669' },
+  marketing: { code: 'marketing', name: 'Marketing', nameHi: 'मार्केटिंग', color: '#DC2626' },
+  oh: { code: 'oh', name: 'Overall Head', nameHi: 'ओवरऑल हेड', color: '#7C3AED' },
+  sth: { code: 'sth', name: 'Site Head', nameHi: 'साइट हेड', color: '#B45309' },
+  sv: { code: 'sv', name: 'Supervisor', nameHi: 'सुपरवाइज़र', color: '#0E7490' },
+  sech: { code: 'sech', name: 'Security Head', nameHi: 'सिक्योरिटी हेड', color: '#9D174D' },
+}
+
+// Lookup: the four live departments plus every retired code, for display only.
+export const DEPARTMENT_MAP = DEPARTMENTS.reduce(
+  (m, d) => ({ ...m, [d.code]: d }),
+  { ...RETIRED_DEPARTMENTS }
+)
 
 // Localized department / property display name. `lang` = 'hi' | 'en'.
 export const deptName = (code, lang) => {
@@ -94,6 +100,20 @@ export const canSeeAllProperties = (user) =>
 // The single property this user is locked to, or null when they see all.
 export const scopedProperty = (user) =>
   canSeeAllProperties(user) ? null : (user?.property || null)
+
+// Every venue this person may see right now: their own posting plus any venue
+// they are covering today (staff_deployments, loaded into the session as
+// `cover`). Returns null for the all-venue roles, meaning "no filter".
+//
+// Cover is what makes a temporary posting real: without it a person lent to
+// another venue could be handed work there but could not see the venue's repair
+// board, so they had no idea what else was going on around them.
+export const scopedProperties = (user) => {
+  const own = scopedProperty(user)
+  if (!own) return null
+  const cover = Array.isArray(user?.cover) ? user.cover.filter(Boolean) : []
+  return [...new Set([own, ...cover])]
+}
 
 // The single department this user is locked to (e.g. Sandeep → security), or null.
 export const scopedDepartment = (user) =>

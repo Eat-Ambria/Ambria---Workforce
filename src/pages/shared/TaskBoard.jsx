@@ -5,9 +5,10 @@ import { nowISO, fmtDateTime, todayISO, fmtDate } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { DEPARTMENTS, isAdminRole, isSuperAdmin, scopedProperty, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, propName, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, isFlaggedPriority } from '../../constants/org'
+import { DEPARTMENTS, isAdminRole, isSuperAdmin, scopedProperty, scopedProperties, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, propName, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, isFlaggedPriority } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
+import HindiInput from '../../components/common/HindiInput'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import AudioPlayer from '../../components/common/AudioPlayer'
@@ -42,6 +43,12 @@ const statusLabel = (s, t) => ({
 }[s] || t.open)
 const prioLabel = (p, t) => ({ low: t.prioLow, normal: t.prioNormal, high: t.prioHigh, urgent: t.prioUrgent }[p] || p)
 
+// What the request says, in the reader's language. Written English and
+// auto-translated at creation, same as a task's title — and same fallback:
+// a request raised before the Hindi columns existed shows its English text.
+const fixTitle = (r, hi) => (hi && r?.title_hi ? r.title_hi : r?.title)
+const fixDesc = (r, hi) => (hi && r?.description_hi ? r.description_hi : r?.description)
+
 export default function TaskBoard() {
   const C = useColors()
   const t = useT()
@@ -59,16 +66,18 @@ export default function TaskBoard() {
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
   const [creating, setCreating] = useState(false)
   const [active, setActive] = useState(null)
+  const [editingRow, setEditingRow] = useState(null) // wording/Hindi fix from the list
 
   // react to a tab preset from navigation (e.g. dashboard "Overdue Repairs" tile)
   useEffect(() => { if (location.state?.tab) setTab(location.state.tab) }, [location.state])
 
   const load = useCallback(async () => {
     try {
-      const propScope = scopedProperty(user)   // null = every property (SA, Vicky, Sandeep)
+      // own venue + anything being covered today
+      const propScope = scopedProperties(user) // null = every property (SA, Vicky, Sandeep)
       const deptScope = scopedDepartment(user) // null = every department (Sandeep → security)
       let q = supabase.from('work_board').select('*').order('created_at', { ascending: false }).limit(300)
-      if (propScope) q = q.eq('property', propScope)
+      if (propScope) q = propScope.length > 1 ? q.in('property', propScope) : q.eq('property', propScope[0])
       if (deptScope) q = q.eq('department', deptScope)
       const { data } = await q
       let all = data || []
@@ -254,7 +263,7 @@ export default function TaskBoard() {
               <Card key={r.id} onClick={() => setActive(r)} style={{ cursor: 'pointer', borderLeft: `4px solid ${od ? '#EA580C' : pTone}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>{r.title}</div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{fixTitle(r, lang === 'hi')}</div>
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>{r.posted_by_name} · {fmtDateTime(r.created_at)}</div>
                     {r.assigned_to_name && (
                       <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -285,6 +294,19 @@ export default function TaskBoard() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexShrink: 0 }}>
                     <Badge color={C[st.tone]} bg={C[st.bg]}>{statusLabel(r.status, t)}</Badge>
+                    {/* fix the wording — above all the Hindi — without opening
+                        the whole request first. Stops the card's own click. */}
+                    {admin && (
+                      <button
+                        type="button"
+                        title={t.editText}
+                        aria-label={t.editText}
+                        onClick={(e) => { e.stopPropagation(); setEditingRow(r) }}
+                        style={{ background: 'transparent', padding: 4, lineHeight: 0, borderRadius: 8 }}
+                      >
+                        <Icon name="edit" size={15} color={C.tl} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -320,6 +342,13 @@ export default function TaskBoard() {
 
       {creating && <PostModal user={user} members={members} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load() }} />}
       {active && <DetailModal row={active} user={user} admin={admin} members={members} onClose={() => { setActive(null); load() }} onSaved={() => { setActive(null); load() }} />}
+      {editingRow && (
+        <EditTextModal
+          row={editingRow}
+          onClose={() => setEditingRow(null)}
+          onSaved={() => { setEditingRow(null); load() }}
+        />
+      )}
     </div>
   )
 }
@@ -371,7 +400,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const admin = isAdminRole(user?.role)          // admin + super admin can assign at creation
   const superAdmin = isSuperAdmin(user?.role)    // only super admin picks the property
   const [form, setForm] = useState({
-    title: '', description: '', priority: '', due_date: '', assignee: '',
+    title: '', title_hi: '', description: '', description_hi: '',
+    priority: '', due_date: '', assignee: '',
     property: user.property && user.property !== 'all' ? user.property : 'pp',
     dept: '',
   })
@@ -415,9 +445,14 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     setBusy(true); setErr('')
     const property = admin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp')
     const person = atProperty.find((m) => m.id === form.assignee)
+    // The Hindi shown to the staff who will do the work: auto-translated as the
+    // title is typed, corrected by hand if the machine got it wrong. Blank when
+    // the request was itself written in Hindi — the English column holds it.
     const { error } = await supabase.from('work_board').insert({
       title: form.title.trim(),
+      title_hi: form.title_hi.trim() || null,
       description: form.description || null,
+      description_hi: form.description_hi.trim() || null,
       category: 'other',
       // the venue the work has to be done at
       property,
@@ -444,7 +479,24 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     <Modal open onClose={onClose} title={t.taskBoard}
       footer={<><Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button><Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.submit}</Button></>}>
       <Field label={t.title} required error={fieldErr.title}><input ref={titleRef} style={inputStyle(C)} value={form.title} onChange={set('title')} /></Field>
+      {/* the staff doing the job read this one, so it is worth a look */}
+      <HindiInput
+        label={t.hindiTitle}
+        hint={t.hindiForStaffHint}
+        source={form.title}
+        value={form.title_hi}
+        onChange={(v) => setForm((f) => ({ ...f, title_hi: v }))}
+      />
       <Field label={`${t.description} (${t.optional})`}><textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.description} onChange={set('description')} /></Field>
+      {form.description.trim() && (
+        <HindiInput
+          label={t.hindiDescription}
+          rows={2}
+          source={form.description}
+          value={form.description_hi}
+          onChange={(v) => setForm((f) => ({ ...f, description_hi: v }))}
+        />
+      )}
       <Field label={`${t.voiceNote} (${t.optional})`} hint={t.voiceInsteadHint}>
         <VoiceRecorder folder="work-voice" value={voice} onChange={setVoice} />
       </Field>
@@ -497,6 +549,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const [note, setNote] = useState(row.resolution_note || '')
   const [resPhotos, setResPhotos] = useState(Array.isArray(row.resolution_photos) ? row.resolution_photos : [])
   const [reassigning, setReassigning] = useState(false) // admin editing the assignment
+  const [editingText, setEditingText] = useState(false) // fixing the wording / the Hindi
   const [rating, setRating] = useState(row.rating || 0)  // 1..5 stars given by admin
   const [viewing, setViewing] = useState(null)           // { photos, index } in the lightbox
 
@@ -562,6 +615,40 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     })
   }
 
+  // The assignee never finished it (or nobody was on it) and the job is done —
+  // an admin closes it out. Recorded with resolved_at like any other completion.
+  async function completeNow() {
+    if (!(await confirm({ message: t.repairMarkDoneConfirm, confirmLabel: t.markDone }))) return
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('work_board')
+      .update({ status: 'completed', resolved_at: nowISO() }).eq('id', row.id)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    if (row.assigned_to && row.assigned_to !== user.id) {
+      await supabase.from('notifications').insert({
+        type: 'fix_closed_by_admin', task_text: row.title, for_user: row.assigned_to,
+        property: row.property, entity_id: String(row.id),
+      })
+    }
+    onSaved()
+  }
+
+  // Closed by mistake. Goes back to whoever had it, or to Open if nobody did —
+  // and the rating is cleared, since it was given for work now unfinished.
+  async function reopen() {
+    if (!(await confirm({ message: t.reopenRepairConfirm, confirmLabel: t.reopen, danger: false }))) return
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('work_board').update({
+      status: row.assigned_to ? 'assigned' : 'open',
+      resolved_at: null,
+      rating: null,
+    }).eq('id', row.id)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    setRating(0)
+    onSaved()
+  }
+
   // admin gives / updates a 1–5 star rating on a finished fix (kept for staff history)
   async function rate(n) {
     if (!admin) return
@@ -593,11 +680,21 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         <Button variant="success" disabled={busy} onClick={() => setStatus('completed', { resolved_at: nowISO() })} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
       </>
     )
+  } else if (['approved', 'completed'].includes(s) && admin && !ownWork) {
+    // undo a completion that should not have happened
+    actions = (
+      <Button variant="ghost" disabled={busy} onClick={reopen} style={{ flex: 2 }}>
+        <Icon name="refresh" size={15} color={C.text} style={{ marginRight: 4 }} />{t.reopen}
+      </Button>
+    )
   }
+
+  // close it without waiting for the assignee — available on any unfinished repair
+  const canCloseNow = admin && !ownWork && ['open', 'assigned', 'in_progress'].includes(s)
   // (delete is handled by the always-available button in the footer below)
 
   return (
-    <Modal open onClose={onClose} title={row.title}
+    <Modal open onClose={onClose} title={fixTitle(row, lang === 'hi')}
       footer={(
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
@@ -605,6 +702,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {canDelete && (
             <Button variant="danger" disabled={busy} onClick={del} style={{ flex: 1 }}>
               <Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}
+            </Button>
+          )}
+          {canCloseNow && (
+            <Button variant="success" disabled={busy} onClick={completeNow} style={{ flexShrink: 0 }}>
+              <Icon name="check" size={15} color="#fff" style={{ marginRight: 4 }} />{t.markDone}
             </Button>
           )}
           {actions}
@@ -616,9 +718,20 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
         )}
         {row.category && row.category !== 'other' && <Badge>{row.category}</Badge>}
+        {/* A request raised in English is unreadable to the people who have to
+            do it. Anyone can fix the wording — or write the Hindi themselves. */}
+        {admin && !ownWork && (
+          <button
+            type="button"
+            onClick={() => setEditingText(true)}
+            style={{ background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0 }}
+          >
+            <Icon name="edit" size={13} color={C.maroon} /> {t.editText}
+          </button>
+        )}
       </div>
 
-      {row.description && <p style={{ fontSize: 14, color: C.tl, marginBottom: 12 }}>{row.description}</p>}
+      {row.description && <p style={{ fontSize: 14, color: C.tl, marginBottom: 12, whiteSpace: 'pre-line' }}>{fixDesc(row, lang === 'hi')}</p>}
       {row.voice_url && (
         <div style={{ marginBottom: 12 }}>
           <AudioPlayer src={row.voice_url} label={t.voiceNote} />
@@ -758,6 +871,85 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       )}
 
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 10 }}>{err}</div>}
+
+      {editingText && (
+        <EditTextModal
+          row={row}
+          onClose={() => setEditingText(false)}
+          onSaved={() => { setEditingText(false); onSaved() }}
+        />
+      )}
+    </Modal>
+  )
+}
+
+// Fix what a request says, in either language. The Hindi is what the staff read,
+// so it is the reason this exists: a machine translation that came out wrong, or
+// an older request raised before anything was translated at all.
+function EditTextModal({ row, onClose, onSaved }) {
+  const C = useColors()
+  const t = useT()
+  const [form, setForm] = useState({
+    title: row.title || '',
+    title_hi: row.title_hi || '',
+    description: row.description || '',
+    description_hi: row.description_hi || '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function save() {
+    if (!form.title.trim()) { setErr(`${t.title} ${t.isRequired}`); return }
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('work_board').update({
+      title: form.title.trim(),
+      title_hi: form.title_hi.trim() || null,
+      description: form.description.trim() || null,
+      description_hi: form.description_hi.trim() || null,
+    }).eq('id', row.id)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  return (
+    <Modal
+      open onClose={onClose} maxWidth={520} title={t.editText}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
+          <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button>
+        </>
+      )}
+    >
+      <Field label={t.title} required>
+        <input style={inputStyle(C)} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+      </Field>
+      <HindiInput
+        label={t.hindiTitle}
+        hint={t.hindiForStaffHint}
+        source={form.title}
+        value={form.title_hi}
+        onChange={(v) => setForm((f) => ({ ...f, title_hi: v }))}
+      />
+      <Field label={`${t.description} (${t.optional})`}>
+        <textarea
+          rows={3}
+          style={{ ...inputStyle(C), resize: 'vertical' }}
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+        />
+      </Field>
+      {form.description.trim() && (
+        <HindiInput
+          label={t.hindiDescription}
+          rows={3}
+          source={form.description}
+          value={form.description_hi}
+          onChange={(v) => setForm((f) => ({ ...f, description_hi: v }))}
+        />
+      )}
+      {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
     </Modal>
   )
 }

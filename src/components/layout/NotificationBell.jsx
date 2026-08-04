@@ -25,6 +25,9 @@ function meta(n, hi) {
     case 'task_sent_back': return { icon: 'warning', link: '/my-tasks', status: 'in_progress', title: hi ? 'टास्क वापस भेजा गया — दोबारा करें' : 'Task sent back — please redo', body: item }
     case 'task_approved': return { icon: 'check', link: '/my-tasks', status: 'completed', title: hi ? 'आपका काम मंज़ूर हुआ' : 'Your work was approved', body: item }
     case 'task_closed_by_admin': return { icon: 'check', link: '/my-tasks', status: 'completed', title: hi ? 'एडमिन ने आपका टास्क पूरा मार्क किया' : 'Admin marked your task complete', body: item }
+    // staff finished a task themselves — nothing to approve, but the admin is
+    // told so they can look and, if it will not do, send it back for a redo
+    case 'task_done': return { icon: 'check', link: '/tasks', tab: 'completed', title: hi ? 'स्टाफ ने टास्क पूरा किया' : 'Staff completed a task', body: item + who }
     case 'task_submitted': return { icon: 'inbox', link: '/tasks', tab: 'review', title: hi ? 'मंज़ूरी के लिए टास्क आया' : 'Task submitted for approval', body: item + who }
     case 'task_issue': return { icon: 'warning', link: '/tasks', tab: 'issues', title: hi ? 'स्टाफ ने समस्या बताई' : 'Staff reported an issue', body: item + who }
     case 'issue_working': return { icon: 'clock', link: '/my-tasks', issueStatus: 'issue_working', title: hi ? 'एडमिन आपकी समस्या पर काम कर रहा है' : 'Admin is working on your issue', body: item }
@@ -33,6 +36,7 @@ function meta(n, hi) {
     case 'fix_new': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'नया मरम्मत अनुरोध' : 'New repair request raised', body: item + who }
     case 'fix_approval': return { icon: 'inbox', link: '/task-board', title: hi ? 'मरम्मत मंज़ूरी के लिए' : 'Repair awaiting approval', body: item + who }
     case 'fix_approved': return { icon: 'check', link: '/task-board', title: hi ? 'आपका मरम्मत अनुरोध मंज़ूर हुआ' : 'Your repair was approved', body: item }
+    case 'fix_closed_by_admin': return { icon: 'check', link: '/task-board', title: hi ? 'एडमिन ने आपकी रिक्वेस्ट पूरी मार्क की' : 'Admin marked your repair complete', body: item }
     case 'valet_booking': return { icon: 'valet', link: '/valet', title: hi ? 'नई वैले बुकिंग' : 'New valet booking', body: item }
     case 'quiz_completed': return { icon: 'training', link: '/training', title: hi ? 'क्विज़ पूरा हुआ' : 'Quiz completed', body: item + who }
     case 'training_assigned': return { icon: 'training', link: '/training', title: hi ? 'नई ट्रेनिंग सौंपी गई' : 'New training assigned', body: item }

@@ -6,17 +6,37 @@ import { translateToHindi } from '../../lib/translate'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
-  TASK_STATUS, TASK_CATEGORIES, PROPERTIES, propName, deptName,
+  TASK_STATUS, TASK_CATEGORIES, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, propName, deptName,
   memberInProperty, personName,
 } from '../../constants/org'
-import { Button, Loader, FilterChip, inputStyle } from '../../components/common/UI'
+import { Button, Loader, Field, FilterChip, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
+import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 // A task's time window lives in the existing `time_block` column as free text.
 // Storing "09:00 - 10:00" keeps that column working everywhere it is already
 // displayed, while letting the roster edit it as two proper time inputs.
+// ISO weekdays, 1 = Monday. Weekly tasks carry one so a week's work spreads
+// across the week instead of all landing on Monday morning.
+const WEEK_DAYS = [
+  { v: 1, en: 'Monday', hi: 'सोमवार' },
+  { v: 2, en: 'Tuesday', hi: 'मंगलवार' },
+  { v: 3, en: 'Wednesday', hi: 'बुधवार' },
+  { v: 4, en: 'Thursday', hi: 'गुरुवार' },
+  { v: 5, en: 'Friday', hi: 'शुक्रवार' },
+  { v: 6, en: 'Saturday', hi: 'शनिवार' },
+  { v: 7, en: 'Sunday', hi: 'रविवार' },
+]
+const dayName = (v, lang) => {
+  const d = WEEK_DAYS.find((x) => x.v === Number(v))
+  return d ? (lang === 'hi' ? d.hi : d.en) : ''
+}
+
+// roster grid: time | task | photo | who | actions
+const COLS = '170px minmax(0,1fr) 74px minmax(0,1fr) 62px'
 const HHMM = /(\d{1,2}:\d{2})/g
 const parseRange = (block) => {
   const found = String(block || '').match(HHMM) || []
@@ -40,6 +60,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const t = useT()
   const { lang } = useLang()
   const confirm = useConfirm()
+  const wide = useMediaQuery('(min-width: 760px)')
 
   // several venues at once: the same daily round usually applies to more than
   // one, and setting it up venue by venue is how they drift apart
@@ -52,7 +73,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [bulk, setBulk] = useState('')        // "assign everything to…" picker
-  const [editingKey, setEditingKey] = useState(null)  // job whose title is being renamed
+  const [deptTab, setDeptTab] = useState('all')       // which department's round is shown
+  const [expandedKey, setExpandedKey] = useState(null) // row whose people picker is open
+  const [form, setForm] = useState(null)               // add/edit form, null = closed
 
   // staff of this venue — the only people a row may be handed to
   // Normally only the venue's own people are offered. Turning this on lists
@@ -104,16 +127,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     return [...out.values()]
   }, [rows, members])
 
-  const staff = useMemo(() => {
-    const base = anyVenue
-      ? members
-      : members.filter((m) => (
-        assignedHere.has(m.id)
-        || deployed.includes(m.id)
-        || props.some((code) => memberInProperty(m, code))
-      ))
-    return [...base, ...formerStaff]
-  }, [members, props, anyVenue, deployed, assignedHere, formerStaff])
+  // Everyone is listed, whichever venue they are based at — a job at one venue
+  // often has to go to someone from another, and hunting for a switch first was
+  // the slow part. Those from elsewhere are labelled with their own venue, and
+  // the cover dates below record the arrangement.
+  const staff = useMemo(() => [...members, ...formerStaff], [members, formerStaff])
 
   // someone on this roster who is not based at any of the selected venues
   const isVisiting = useCallback(
@@ -125,16 +143,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     setLoading(true)
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, category, property, assigned_to, assignee_name, area, time_block, status, started_at, before_photo, completion_photo')
+      .select('id, title, title_hi, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, status, started_at, before_photo, completion_photo')
       .in('property', props)
       .eq('category', category)
+      .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
     setRows(data || [])
     // one entry per distinct job; `people` is the set currently doing it
     const byTitle = new Map()
     ;(data || []).forEach((r) => {
       const key = `${r.property}||${r.title}||${r.area || ''}`
-      if (!byTitle.has(key)) byTitle.set(key, { key, property: r.property, title: r.title, title_hi: r.title_hi, area: r.area, time_block: r.time_block, rows: [] })
+      if (!byTitle.has(key)) byTitle.set(key, {
+        key, property: r.property, title: r.title, title_hi: r.title_hi, area: r.area,
+        time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
+        photoRequired: r.photo_required !== false, rows: [],
+      })
       byTitle.get(key).rows.push(r)
     })
     setGroups([...byTitle.values()].map((g) => ({
@@ -148,11 +171,69 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   useEffect(() => { load() }, [load])
 
+  // One small form for both adding and editing a row. Inline inputs inside a
+  // five-column grid were unusable on anything narrow, and a row being edited
+  // looked nothing like a row being read.
+  const openAdd = () => setForm({
+    mode: 'add', dept: deptTab === 'all' ? '' : deptTab,
+    title: '', from: '', to: '', photoRequired: true, people: [], weekDay: '',
+  })
+  const openEdit = (g) => setForm({
+    mode: 'edit', key: g.key, dept: g.department || '',
+    title: g.title, from: g.from || '', to: g.to || '',
+    photoRequired: g.photoRequired !== false, people: g.people, weekDay: g.weekDay || '',
+  })
+
+  function applyForm(v) {
+    if (v.mode === 'draft') {
+      setDrafts((prev) => prev.map((d) => (d.key !== v.key ? d : {
+        ...d, title: v.title, from: v.from, to: v.to, weekDay: v.weekDay,
+        photoRequired: v.photoRequired, dept: v.dept, people: v.people,
+      })))
+      setForm(null)
+      return
+    }
+    if (v.mode === 'add') {
+      setDrafts((prev) => [...prev, {
+        key: `d${Date.now()}${prev.length}`,
+        title: v.title, from: v.from, to: v.to, weekDay: v.weekDay,
+        photoRequired: v.photoRequired, dept: v.dept, people: v.people,
+      }])
+    } else {
+      setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
+        ...g, title: v.title, from: v.from, to: v.to, weekDay: v.weekDay,
+        photoRequired: v.photoRequired, people: v.people,
+      })))
+    }
+    setForm(null)
+  }
+
   const renameGroup = (key, title) =>
     setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, title } : g)))
 
   const setGroupTime = (key, patch) =>
     setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, ...patch } : g)))
+
+  // which department's round is on screen; 'all' reads straight down the day
+  const shownGroups = useMemo(
+    () => (deptTab === 'all' ? groups : groups.filter((g) => g.department === deptTab)),
+    [groups, deptTab]
+  )
+
+  // On the "All" tab the rows are grouped under a department heading, so the day
+  // reads as four rounds rather than one long mixed list.
+  const sections = useMemo(() => {
+    const order = DEPARTMENTS.map((d) => d.code)
+    const by = new Map()
+    shownGroups.forEach((g) => {
+      const key = g.department || '_'
+      if (!by.has(key)) by.set(key, [])
+      by.get(key).push(g)
+    })
+    return [...by.entries()]
+      .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      .map(([dept, rows]) => ({ dept, rows }))
+  }, [shownGroups])
 
   // removes the job from EVERY person at this venue, not just one of them
   async function deleteGroup(g) {
@@ -189,12 +270,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const spare = g.rows.find((r) => !r.assigned_to)
     const renamed = g.title.trim() && g.title.trim() !== g.rows[0]?.title
     const retimed = fmtRange(g.from, g.to) !== (g.rows[0]?.time_block || '')
-    return { g, added, dropped, spare, renamed, retimed }
+    const rephotoed = g.photoRequired !== (g.rows[0]?.photo_required !== false)
+    const redayed = String(g.weekDay || '') !== String(g.rows[0]?.week_day || '')
+    return { g, added, dropped, spare, renamed, retimed, rephotoed, redayed }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
   const dropCount = plan.reduce((n, x) => n + x.dropped.length, 0)
-  const renameCount = plan.filter((x) => x.renamed || x.retimed).length
+  const renameCount = plan.filter((x) => x.renamed || x.retimed || x.rephotoed || x.redayed).length
   const filledDrafts = drafts.filter((d) => d.title.trim())
   const nothingToSave = addCount + dropCount + renameCount + filledDrafts.length === 0
 
@@ -213,15 +296,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         try { return await translateToHindi(title) } catch { return null }
       }
 
-      for (const { g, added, dropped, spare, renamed, retimed } of plan) {
-        // a rename or a new time window applies to every person's copy of the job
-        if (renamed || retimed) {
+      for (const { g, added, dropped, spare, renamed, retimed, rephotoed, redayed } of plan) {
+        // a rename, a new window, a photo rule or a new day applies to every copy
+        if (renamed || retimed || rephotoed || redayed) {
           const patch = {}
           if (renamed) {
             patch.title = g.title.trim()
             patch.title_hi = await hiFor(patch.title)
           }
           if (retimed) patch.time_block = fmtRange(g.from, g.to) || null
+          if (rephotoed) patch.photo_required = g.photoRequired
+          if (redayed) patch.week_day = g.weekDay ? Number(g.weekDay) : null
           const { error } = await supabase.from('tasks')
             .update(patch)
             .in('id', g.rows.map((r) => r.id))
@@ -308,6 +393,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             title,
             title_hi,
             time_block: fmtRange(d.from, d.to) || null,
+            photo_required: d.photoRequired !== false,
+            week_day: category === 'weekly' && d.weekDay ? Number(d.weekDay) : null,
+            department: d.dept || user.department || 'k',
             priority: 'medium',
             assigned_to: id || null,
             assignee_name: person?.name || null,
@@ -327,8 +415,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     }
   }
 
-  const addDraftRow = () => setDrafts((prev) => [...prev, { key: `d${Date.now()}${prev.length}`, title: '', from: '', to: '', people: [] }])
-  const setDraft = (key, patch) => setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)))
   const removeDraft = (key) => setDrafts((prev) => prev.filter((d) => d.key !== key))
 
   // Person toggles rather than a dropdown: several people per job is the normal
@@ -372,7 +458,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   return (
     <Modal
-      open onClose={onClose} maxWidth={840}
+      open onClose={onClose} maxWidth={1040}
       title={t.roster}
       footer={(
         <>
@@ -385,28 +471,34 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     >
       {/* venue + recurrence pickers */}
       {canSeeAllProps && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          {PROPERTIES.map((p) => {
-            const on = props.includes(p.code)
-            return (
-              <FilterChip
-                key={p.code}
-                check
-                active={on}
-                onClick={() => setProps((prev) => (
-                  // never leave the roster with no venue selected
-                  on ? (prev.length > 1 ? prev.filter((c) => c !== p.code) : prev) : [...prev, p.code]
-                ))}
-              >
-                {propName(p.code, lang)}
-              </FilterChip>
-            )
-          })}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, maxWidth: 340 }}>
+          <Icon name="pin" size={16} color={C.tl} />
+          <MultiSelect
+            C={C}
+            placeholder={t.properties}
+            options={PROPERTIES.map((p) => ({ value: p.code, label: propName(p.code, lang) }))}
+            selected={props}
+            // never leave the roster with nothing selected — it would show an
+            // empty table with no way to tell why
+            onChange={(next) => setProps(next.length ? next : props)}
+          />
         </div>
       )}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         {TASK_CATEGORIES.map((c) => (
           <FilterChip key={c} active={category === c} onClick={() => setCategory(c)}>{t[c]}</FilterChip>
+        ))}
+      </div>
+      {/* Whose round: a roster is written and read one department at a time.
+          Only departments that actually have work here are offered. */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        <FilterChip active={deptTab === 'all'} onClick={() => setDeptTab('all')}>{t.all}</FilterChip>
+        {/* every department, not only those that already have work — a round
+            has to be startable for a department with nothing on it yet */}
+        {DEPARTMENTS.map((d) => (
+          <FilterChip key={d.code} dot={d.color} active={deptTab === d.code} onClick={() => setDeptTab(d.code)}>
+            {deptName(d.code, lang)}
+          </FilterChip>
         ))}
       </div>
 
@@ -426,7 +518,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         <Button variant="soft" onClick={assignAllUnassigned} disabled={!bulk} style={{ padding: '8px 14px', fontSize: 13 }}>
           {t.fillEmptyRows}
         </Button>
-        <Button variant="primary" onClick={addDraftRow} style={{ padding: '8px 14px', fontSize: 13 }}>
+        <Button variant="primary" onClick={openAdd} style={{ padding: '8px 14px', fontSize: 13 }}>
           <Icon name="plus" size={14} color="#fff" style={{ marginRight: 4 }} />{t.addTaskRow}
         </Button>
       </div>
@@ -441,7 +533,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: C.tl, cursor: 'pointer' }}>
             <input type="checkbox" checked={anyVenue} onChange={(e) => setAnyVenue(e.target.checked)} />
-            {t.includeOtherVenues}
+            {t.recordCover}
           </label>
           {onDetailed && (
             <button
@@ -473,133 +565,172 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
       {loading ? <Loader label={t.loading} /> : (
         <>
-          {groups.length === 0 && drafts.length === 0 ? (
+          {shownGroups.length === 0 && drafts.length === 0 ? (
             <div style={{ fontSize: 13.5, color: C.tl, padding: '14px 2px' }}>{t.rosterEmpty}</div>
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
               {/* blank rows for work that isn't in the list yet */}
+              {/* Rows added but not saved yet. Read-only here — the form is where
+                  they are edited — so a pending row looks like a real one and the
+                  table stays scannable. */}
               {drafts.map((d) => (
-                <div key={d.key} style={{ padding: '10px 12px', borderRadius: 10, background: C.card, border: `1px dashed ${C.borderStrong || C.border}` }}>
-                  {/* Title on its own line, then the time window below it. Four
-                      controls in one row collapsed the title to a couple of
-                      characters on a phone, and a native time input shows only
-                      "--:--" with no way to hint what it is for — hence the
-                      labels rather than placeholders. */}
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                    <input
-                      style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13.5, flex: 1, minWidth: 0 }}
-                      value={d.title}
-                      placeholder={t.newTaskTitle}
-                      onChange={(e) => setDraft(d.key, { title: e.target.value })}
-                    />
-                    <button type="button" onClick={() => removeDraft(d.key)} aria-label={t.delete} title={t.delete} style={{ background: 'transparent', color: C.tl, display: 'grid', placeItems: 'center', width: 34, flexShrink: 0 }}>
-                      <Icon name="close" size={16} color={C.tl} />
+                <div
+                  key={d.key}
+                  style={{
+                    display: 'grid', gridTemplateColumns: wide ? COLS : '1fr', gap: wide ? 0 : 6,
+                    alignItems: 'center', padding: '9px 10px', borderRadius: 10,
+                    background: C.card, border: `1px dashed ${C.maroon}`,
+                  }}
+                >
+                  <div style={{ fontSize: 13, color: C.text, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Icon name="clock" size={12} color={C.faint} />
+                    {fmtRange(d.from, d.to) || <span style={{ color: C.faint }}>—</span>}
+                  </div>
+                  <div style={{ minWidth: 0, paddingRight: 10 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{d.title}</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: C.tl, marginTop: 2 }}>
+                      <span style={{ color: C.maroon, fontWeight: 700 }}>{t.notSavedYet}</span>
+                      {d.dept && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: DEPARTMENT_MAP[d.dept]?.color || C.tl }} />
+                          {deptName(d.dept, lang)}
+                        </span>
+                      )}
+                      {props.length > 1 && <span>{t.createdInProperties.replace('{n}', props.length)}</span>}
+                    </div>
+                  </div>
+                  <span style={{ justifySelf: wide ? 'start' : 'stretch', display: 'inline-flex', alignItems: 'center', gap: 5, color: d.photoRequired !== false ? C.maroon : C.faint, fontSize: 12, fontWeight: 600 }}>
+                    <Icon name={d.photoRequired !== false ? 'camera' : 'close'} size={13} color={d.photoRequired !== false ? C.maroon : C.faint} />
+                    {d.photoRequired !== false ? t.yes : t.no}
+                  </span>
+                  <span style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: d.people?.length ? C.text : C.faint }}>
+                    <Icon name="team" size={13} color={C.tl} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.people?.length
+                        ? d.people.map((id) => personName(staff.find((m) => m.id === id) || {}, lang)).filter(Boolean).join(', ')
+                        : t.unassigned}
+                    </span>
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'end' }}>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ mode: 'draft', key: d.key, dept: d.dept || '', title: d.title, from: d.from || '', to: d.to || '', photoRequired: d.photoRequired !== false, people: d.people || [] })}
+                      title={t.edit} aria-label={t.edit}
+                      style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 2 }}
+                    >
+                      <Icon name="edit" size={14} color={C.tl} />
+                    </button>
+                    <button type="button" onClick={() => removeDraft(d.key)} title={t.delete} aria-label={t.delete} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 2 }}>
+                      <Icon name="close" size={15} color={C.tl} />
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                    <label style={{ flex: '1 1 130px', minWidth: 130 }}>
-                      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>
-                        {`${t.fromTime} (${t.optional})`}
-                      </span>
-                      <input
-                        type="time"
-                        style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13 }}
-                        value={d.from || ''}
-                        onChange={(e) => setDraft(d.key, { from: e.target.value })}
-                      />
-                    </label>
-                    <label style={{ flex: '1 1 130px', minWidth: 130 }}>
-                      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>
-                        {`${t.toTime} (${t.optional})`}
-                      </span>
-                      <input
-                        type="time"
-                        style={{ ...inputStyle(C), padding: '8px 10px', fontSize: 13 }}
-                        value={d.to || ''}
-                        onChange={(e) => setDraft(d.key, { to: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  {props.length > 1 && (
-                    <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 6 }}>
-                      {t.createdInProperties.replace('{n}', props.length)}
-                    </div>
-                  )}
-                  <PeoplePicker
-                    chosen={d.people || []}
-                    onToggle={(id) => setDraft(d.key, {
-                      people: (d.people || []).includes(id)
-                        ? d.people.filter((x) => x !== id)
-                        : [...(d.people || []), id],
-                    })}
-                  />
                 </div>
               ))}
 
-              {groups.map((g) => {
+              {/* Table, not cards: a roster is read down columns — who is on at
+                  09:00, which rows need a photo — and cards make that a hunt.
+                  The people picker opens under the row it belongs to, so the
+                  grid stays tight while still allowing several people per job. */}
+              {wide && (
+                <div style={{ display: 'grid', gridTemplateColumns: COLS, padding: '0 10px 6px', fontSize: 11, fontWeight: 700, color: C.tl, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  <span>{t.timeBlock}</span>
+                  <span>{t.title}</span>
+                  <span>{t.photoRequired}</span>
+                  <span>{t.members}</span>
+                  <span />
+                </div>
+              )}
+
+              {sections.map(({ dept, rows: deptRows }) => (
+                <div key={dept} style={{ display: 'grid', gridTemplateColumns: wide ? '150px minmax(0,1fr)' : '1fr', gap: wide ? 12 : 6, alignItems: 'start' }}>
+                  {/* department name down the left, once per round */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingTop: wide ? 12 : 0 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: DEPARTMENT_MAP[dept]?.color || C.tl }} />
+                    <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>
+                      {dept === '_' ? t.unassigned : deptName(dept, lang)}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: C.faint }}>{deptRows.length}</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 6 }}>
+              {deptRows.map((g) => {
                 const before = g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to)
                 const renamed = g.title.trim() && g.title.trim() !== g.rows[0]?.title
                 const edited = renamed || g.people.length !== before.length || g.people.some((id) => !before.includes(id))
+                const open = expandedKey === g.key
+                const names = g.people
+                  .map((id) => staff.find((m) => m.id === id))
+                  .filter(Boolean)
+                  .map((m) => personName(m, lang))
                 return (
                   <div
                     key={g.key}
                     style={{
-                      padding: '10px 12px', borderRadius: 10,
+                      borderRadius: 10,
                       background: edited ? C.maroonSoft : C.card,
                       border: `1px solid ${edited ? C.maroon : C.border}`,
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        {editingKey === g.key ? (
-                          // renaming changes the job for everyone doing it, so it
-                          // is applied on Save with the rest, not instantly
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <input
-                              autoFocus
-                              style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13.5, flex: '1 1 100%', minWidth: 0 }}
-                              value={g.title}
-                              onChange={(e) => renameGroup(g.key, e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingKey(null) }}
-                            />
-                            <label style={{ flex: '1 1 130px', minWidth: 130 }}>
-                              <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>{t.fromTime}</span>
-                              <input
-                                type="time"
-                                style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13 }}
-                                value={g.from || ''}
-                                onChange={(e) => setGroupTime(g.key, { from: e.target.value })}
-                              />
-                            </label>
-                            <label style={{ flex: '1 1 130px', minWidth: 130 }}>
-                              <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.tl, marginBottom: 3 }}>{t.toTime}</span>
-                              <input
-                                type="time"
-                                style={{ ...inputStyle(C), padding: '7px 10px', fontSize: 13 }}
-                                value={g.to || ''}
-                                onChange={(e) => setGroupTime(g.key, { to: e.target.value })}
-                              />
-                            </label>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : '1fr', gap: wide ? 0 : 6, alignItems: 'center', padding: '9px 10px' }}>
+                      <div style={{ fontSize: 13, color: C.text, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <>
+                            <Icon name="clock" size={12} color={C.faint} />
+                            {fmtRange(g.from, g.to) || <span style={{ color: C.faint }}>—</span>}
+                          </>
+                      </div>
+
+                      <div style={{ minWidth: 0, paddingRight: 10 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>
                             {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
                           </div>
-                        )}
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2, fontSize: 12, color: C.tl }}>
-                          <span>{[props.length > 1 ? propName(g.property, lang) : null, g.area].filter(Boolean).join(' · ')}</span>
-                          {editingKey !== g.key && fmtRange(g.from, g.to) && (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: C.tl, marginTop: 2 }}>
+                          {category === 'weekly' && (
+                            <span style={{ fontWeight: 700, color: C.maroon }}>
+                              {dayName(g.weekDay || 1, lang)}
+                            </span>
+                          )}
+                          {props.length > 1 && <span>{propName(g.property, lang)}</span>}
+                          {g.area && <span>{g.area}</span>}
+                          {deptTab === 'all' && g.department && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <Icon name="clock" size={12} color={C.tl} /> {fmtRange(g.from, g.to)}
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: DEPARTMENT_MAP[g.department]?.color || C.tl }} />
+                              {deptName(g.department, lang)}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: g.people.length ? C.maroon : C.faint, whiteSpace: 'nowrap' }}>
-                          {g.people.length ? `${g.people.length} ${t.people}` : t.unassigned}
+
+                      <button
+                        type="button"
+                        onClick={() => setGroupTime(g.key, { photoRequired: !g.photoRequired })}
+                        title={t.photoRequiredHint}
+                        style={{
+                          justifySelf: wide ? 'start' : 'stretch',
+                          display: 'inline-flex', alignItems: 'center', gap: 5, background: 'transparent', padding: 0,
+                          color: g.photoRequired ? C.maroon : C.faint, fontSize: 12, fontWeight: 600,
+                        }}
+                      >
+                        <Icon name={g.photoRequired ? 'camera' : 'close'} size={13} color={g.photoRequired ? C.maroon : C.faint} />
+                        {g.photoRequired ? t.yes : t.no}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setExpandedKey(open ? null : g.key)}
+                        style={{
+                          textAlign: 'left', background: 'transparent', padding: 0, minWidth: 0,
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          color: names.length ? C.text : C.faint, fontSize: 12.5, fontWeight: 600,
+                        }}
+                      >
+                        <Icon name="team" size={13} color={C.tl} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {names.length ? names.join(', ') : t.unassigned}
                         </span>
-                        <button type="button" onClick={() => setEditingKey(g.key)} title={t.edit} aria-label={t.edit} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 2 }}>
+                      </button>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'end' }}>
+                        <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 2 }}>
                           <Icon name="edit" size={14} color={C.tl} />
                         </button>
                         <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={{ background: 'transparent', display: 'grid', placeItems: 'center', padding: 2 }}>
@@ -607,17 +738,144 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                         </button>
                       </div>
                     </div>
-                    <PeoplePicker chosen={g.people} onToggle={(id) => togglePerson(g.key, id)} />
+
+                    {open && (
+                      <div style={{ padding: '10px', borderTop: `1px solid ${C.border}` }}>
+                        <PeoplePicker chosen={g.people} onToggle={(id) => togglePerson(g.key, id)} />
+                      </div>
+                    )}
                   </div>
                 )
               })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
 
+          {form && (
+            <JobForm
+              value={form}
+              category={category}
+              staff={staff}
+              onChange={setForm}
+              onCancel={() => setForm(null)}
+              onSubmit={applyForm}
+            />
+          )}
+
           {err && <div style={{ color: C.red, fontSize: 13, marginTop: 10 }}>{err}</div>}
         </>
       )}
+    </Modal>
+  )
+}
+
+// One row's worth of fields, as a small form. Used for both adding a job and
+// editing one — the same shape either way, so there is nothing new to learn the
+// second time. Nothing is written here: it hands the values back and the roster's
+// Save applies them with everything else.
+function JobForm({ value, category, staff, onChange, onCancel, onSubmit }) {
+  const C = useColors()
+  const t = useT()
+  const { lang } = useLang()
+  const set = (patch) => onChange({ ...value, ...patch })
+  const valid = value.title.trim() && value.dept
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      maxWidth={520}
+      title={value.mode === 'add' ? t.addTaskRow : t.edit}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onCancel} style={{ flex: 1 }}>{t.cancel}</Button>
+          <Button variant="primary" onClick={() => onSubmit(value)} disabled={!valid} style={{ flex: 2 }}>
+            {value.mode === 'add' ? t.addTaskRow : t.save}
+          </Button>
+        </>
+      )}
+    >
+      <Field label={t.title} required>
+        <input
+          autoFocus
+          style={inputStyle(C)}
+          value={value.title}
+          placeholder={t.newTaskTitle}
+          onChange={(e) => set({ title: e.target.value })}
+        />
+      </Field>
+
+      <Field label={t.department} required>
+        <select style={inputStyle(C)} value={value.dept} onChange={(e) => set({ dept: e.target.value })}>
+          <option value="">— {t.department} —</option>
+          {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
+        </select>
+      </Field>
+
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 140px' }}>
+          <Field label={`${t.fromTime} (${t.optional})`}>
+            <input type="time" style={inputStyle(C)} value={value.from} onChange={(e) => set({ from: e.target.value })} />
+          </Field>
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          <Field label={`${t.toTime} (${t.optional})`}>
+            <input type="time" style={inputStyle(C)} min={value.from} value={value.to} onChange={(e) => set({ to: e.target.value })} />
+          </Field>
+        </div>
+      </div>
+
+      {/* only weekly work has a day to choose; daily is every day and monthly
+          resets on the 1st */}
+      {category === 'weekly' && (
+        <Field label={t.dayOfWeek} hint={t.dayOfWeekHint}>
+          <select style={inputStyle(C)} value={value.weekDay || ''} onChange={(e) => set({ weekDay: e.target.value })}>
+            <option value="">{dayName(1, lang)} ({t.defaultLabel})</option>
+            {WEEK_DAYS.map((d) => <option key={d.v} value={d.v}>{lang === 'hi' ? d.hi : d.en}</option>)}
+          </select>
+        </Field>
+      )}
+
+      <Field label={t.photoRequired} hint={t.photoRequiredHint}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: C.text, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={value.photoRequired !== false}
+            onChange={(e) => set({ photoRequired: e.target.checked })}
+          />
+          {value.photoRequired !== false ? t.yes : t.no}
+        </label>
+      </Field>
+
+      <Field label={`${t.members} (${t.optional})`}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {staff.map((m) => {
+            const on = value.people.includes(m.id)
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => set({
+                  people: on ? value.people.filter((x) => x !== m.id) : [...value.people, m.id],
+                })}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '5px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
+                  border: `1.5px solid ${on ? C.maroon : C.border}`,
+                  background: on ? C.maroon : C.card,
+                  color: on ? '#fff' : C.tl,
+                }}
+              >
+                {on && <Icon name="check" size={12} color="#fff" />}
+                {personName(m, lang)}
+              </button>
+            )
+          })}
+        </div>
+      </Field>
     </Modal>
   )
 }

@@ -4,6 +4,7 @@ import { fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
 import { PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { hindiFor } from '../lib/translate'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs } from '../components/common/UI'
 import PhotoCapture from '../components/common/PhotoCapture'
 import VoiceRecorder from '../components/common/VoiceRecorder'
@@ -221,7 +222,7 @@ function RequestCard({ C, hi, r, isMine }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>
-            {r.title}
+            {hi && r.title_hi ? r.title_hi : r.title}
             {isMine && (
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>
                 {hi ? 'आपका' : 'You'}
@@ -277,18 +278,29 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
 
     setBusy(true); setError('')
     const issue = form.issue.trim()
-    const description = [
-      issue, '',
-      hi ? '— सार्वजनिक लिंक से भेजा गया —' : '— Reported via public link —',
-      `${hi ? 'नाम' : 'Name'}: ${form.name.trim()}`,
-      `${hi ? 'फ़ोन' : 'Phone'}: ${form.phone}`,
-      form.location.trim() ? `${hi ? 'स्थान' : 'Location'}: ${form.location.trim()}` : null,
+    // the same block in either language — the labels are ours, only the reported
+    // text has to be translated
+    const block = (issueText, inHindi) => [
+      issueText, '',
+      inHindi ? '— सार्वजनिक लिंक से भेजा गया —' : '— Reported via public link —',
+      `${inHindi ? 'नाम' : 'Name'}: ${form.name.trim()}`,
+      `${inHindi ? 'फ़ोन' : 'Phone'}: ${form.phone}`,
+      form.location.trim() ? `${inHindi ? 'स्थान' : 'Location'}: ${form.location.trim()}` : null,
     ].filter((l) => l !== null).join('\n')
+    const description = block(issue, hi)
     const title = issue.split('\n')[0].slice(0, 70) + (issue.length > 70 ? '…' : '')
+
+    // A visitor writing in English leaves the venue's Hindi-reading staff with
+    // an English request. Translate it for them. Someone who filled the form in
+    // Hindi needs nothing: hindiFor leaves Devanagari alone and the English
+    // columns already hold the Hindi text.
+    const { hi: title_hi, hiDesc } = await hindiFor(title, issue)
 
     const { data, error: err } = await supabase.from('work_board').insert({
       title,
+      title_hi,
       description,
+      description_hi: hiDesc ? block(hiDesc, true) : null,
       category: 'other',
       property: form.property,
       posted_by: 'public',

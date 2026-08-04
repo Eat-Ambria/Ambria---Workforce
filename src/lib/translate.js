@@ -88,6 +88,23 @@ export async function translateToHindi(text, signal) {
   throw new Error('translation failed')
 }
 
+// A title and its optional description, translated together for the `_hi`
+// columns. Never throws and never blocks a save: whatever fails comes back
+// null, and the reader falls back to the English text.
+//
+// Text already written in Devanagari is left alone — passing Hindi through an
+// en->hi translator is how "साफ़ करें" comes back mangled.
+export async function hindiFor(title, description) {
+  const one = async (s) => {
+    const q = (s || '').trim()
+    if (!q) return null
+    if (!hasLatin(q)) return null   // already Hindi; the English column holds it
+    try { return (await translateToHindi(q)) || null } catch { return null }
+  }
+  const [hi, hiDesc] = await Promise.all([one(title), one(description)])
+  return { hi, hiDesc }
+}
+
 // Transliterate Roman/Hinglish -> Devanagari using Google Input Tools.
 // Use this when the source is Hindi typed in English letters (e.g. "theek hai"
 // -> "ठीक है") — translation would mangle it. Already-Devanagari text passes

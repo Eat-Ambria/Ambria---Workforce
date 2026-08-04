@@ -8,13 +8,15 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, isSuperAdmin, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import RosterModal from './RosterModal'
+import CoverPanel from './CoverPanel'
+import MyTasks from '../employee/MyTasks'
 import PhotoViewer from '../../components/common/PhotoViewer'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 import VoiceRecorder from '../../components/common/VoiceRecorder'
@@ -55,6 +57,7 @@ export default function AdminTasks() {
   const [creating, setCreating] = useState(false)
   const [deptFilter, setDeptFilter] = useState('all')  // narrow the list to one department
   const [prioFilter, setPrioFilter] = useState(presetPriority || 'all')
+  const [scope, setScope] = useState('all')    // 'all' = everyone's work | 'mine' = my own
   const [roster, setRoster] = useState(false)  // bulk assignment table
   // the detailed form can be opened FROM the roster; remember that so closing
   // it puts you back where you were instead of dumping you on the task list
@@ -187,7 +190,9 @@ export default function AdminTasks() {
     { key: 'pending', label: `${t.pending}${c('pending')}` },
     { key: 'inprogress', label: `${t.inProgress}${c('inprogress')}` },
     { key: 'completed', label: `${t.completed}${c('completed')}` },
-    { key: 'review', label: `${t.reviewQueue}${c('review')}` },
+    // Nothing enters the approval queue any more — staff close their own tasks.
+    // The tab only appears while rows from the old flow are still sitting in it.
+    ...(counts.review || tab === 'review' ? [{ key: 'review', label: `${t.reviewQueue}${c('review')}` }] : []),
   ]
 
   if (loading) return <Loader label={t.loading} />
@@ -197,6 +202,21 @@ export default function AdminTasks() {
 
   return (
     <div>
+      {/* Everyone's work vs my own. The "mine" side renders the staff screen
+          itself rather than a copy, because an admin doing their own task needs
+          the worker flow — before photo, start, submit — not the review one.
+          Cover sits here too: lending someone to another venue is a decision
+          about the same rounds this screen hands out. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
+        <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
+        {isSuperAdmin(user?.role) && (
+          <PropChip C={C} full active={scope === 'cover'} onClick={() => setScope('cover')}>{t.coverTitle}</PropChip>
+        )}
+      </div>
+
+      {scope === 'cover' ? <CoverPanel /> : scope === 'mine' ? <MyTasks /> : (
+      <>
       <SectionTitle
         right={(
           <Button variant="primary" onClick={() => setRoster(true)}>
@@ -401,6 +421,8 @@ export default function AdminTasks() {
         </div>
       )}
 
+      </>
+      )}
       {review && (
         <ReviewModal
           task={review}
@@ -495,7 +517,10 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
   const isc = task.issue_status ? statusColors(task.issue_status, C) : null
   const beforePhotos = Array.isArray(task.before_photo) ? task.before_photo : []
   const photos = Array.isArray(task.completion_photo) ? task.completion_photo : []
+  // Staff now finish their own tasks, so this is the state an admin reviews.
+  // isQueue only ever matches rows left over from the old approval flow.
   const isQueue = task.status === TASK_STATUS.COMPLETION_REQUESTED
+  const isDone = task.status === TASK_STATUS.COMPLETED
 
   // time the staff spent: started_at -> submitted/completed
   const startMs = task.started_at ? new Date(task.started_at).getTime() : null
@@ -563,10 +588,27 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
     if (voiceUrl) deleteStorageFile(voiceUrl)
     onSaved()
   }
+  // Send it back to be done again. Reachable from a finished task as well as
+  // from the (now legacy) approval queue: the work is reopened In Progress and
+  // the after-work proof is cleared, so the photos on the task always belong to
+  // the attempt being looked at. The before photo and the timer's start stay —
+  // the job was begun, and the completion already went into task_completions.
   async function sendBack() {
     if (!rejectNote.trim() && !rejectVoice) return
     const prevVoice = task.rejection_voice_url // an earlier send-back's note, if any — replace it
-    if (await update({ status: TASK_STATUS.IN_PROGRESS, rejection_note: rejectNote || null, rejection_voice_url: rejectVoice || null })) {
+    const ok = await update({
+      status: TASK_STATUS.IN_PROGRESS,
+      rejection_note: rejectNote || null,
+      rejection_voice_url: rejectVoice || null,
+      completion_photo: null,
+      completion_note: null,
+      completion_requested_at: null,
+      completed_at: null,
+      completed_by: null,
+      approved_by: null,
+      approved_at: null,
+    })
+    if (ok) {
       if (prevVoice && prevVoice !== rejectVoice) deleteStorageFile(prevVoice)
       onSaved()
     }
@@ -614,10 +656,12 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
   return (
     <Modal
       open onClose={onClose} title={task.title}
-      footer={isQueue && rejectMode ? (
+      footer={rejectMode ? (
         <>
           <Button variant="ghost" onClick={() => setRejectMode(false)} style={{ flex: 1 }}>{t.cancel}</Button>
-          <Button variant="danger" onClick={sendBack} disabled={busy || (!rejectNote.trim() && !rejectVoice)} style={{ flex: 2 }}>{t.reject}</Button>
+          <Button variant="danger" onClick={sendBack} disabled={busy || (!rejectNote.trim() && !rejectVoice)} style={{ flex: 2 }}>
+            {isDone ? t.sendForRedo : t.reject}
+          </Button>
         </>
       ) : (
         // Close + the status-specific action(s) + Delete, available on any task
@@ -630,6 +674,12 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
               <Button variant="ghost" onClick={() => setRejectMode(true)} style={{ flex: 1 }}>{t.reject}</Button>
               <Button variant="success" onClick={approve} disabled={busy} style={{ flex: 2 }}>{t.approve}</Button>
             </>
+          )}
+          {/* the work is finished; the admin's remaining call is "do it again" */}
+          {isDone && !ownWork && (
+            <Button variant="ghost" onClick={() => setRejectMode(true)} disabled={busy} style={{ flex: 2 }}>
+              <Icon name="refresh" size={15} color={C.text} style={{ marginRight: 4 }} />{t.sendForRedo}
+            </Button>
           )}
           {isIssue && !ownWork && (
             <>
@@ -707,7 +757,7 @@ function ReviewModal({ task, user, assigneeName, onEdit, onClose, onSaved }) {
 
       {rejectMode && (
         <>
-          <Field label={t.rejectionNote}>
+          <Field label={isDone ? t.redoReason : t.rejectionNote} hint={isDone ? t.redoReasonHint : undefined}>
             <textarea rows={3} style={{ ...inputStyle(C), resize: 'vertical' }} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} autoFocus />
           </Field>
           <Field label={`${t.voiceNote} (${t.optional})`}>

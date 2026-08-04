@@ -6,7 +6,9 @@ export const NAV_ITEMS = [
   // admins get this too — work can be assigned to them, and this is where an
   // assignee does it (/tasks stays the org-wide management view). Not the super
   // admin, who oversees rather than carries out work.
-  { path: '/my-tasks', key: 'myTasks', icon: 'myTasks', roles: ['a', 'e'] },
+  // Employees only. An admin's own work is a tab inside /tasks instead, so the
+  // same list is not reachable from two places in their sidebar.
+  { path: '/my-tasks', key: 'myTasks', icon: 'myTasks', roles: ['e'] },
   { path: '/tasks', key: 'tasks', icon: 'tasks', roles: ['sa', 'a'] },
   { path: '/task-board', key: 'taskBoard', icon: 'taskBoard', roles: ['sa', 'a', 'e'] },
   { path: '/training', key: 'training', icon: 'training', roles: ['sa', 'a', 'e'] },
