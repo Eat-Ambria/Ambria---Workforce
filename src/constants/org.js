@@ -28,6 +28,12 @@ export const DEPARTMENTS = [
   { code: 'h', name: 'Horticulture', nameHi: 'बागवानी', color: '#15803D', ink: '#166534' },
   { code: 'k', name: 'Housekeeping', nameHi: 'हाउसकीपिंग', color: '#2563EB', ink: '#1D4ED8' },
   { code: 's', name: 'Security', nameHi: 'सुरक्षा', color: '#6B21A8', ink: '#6B21A8' },
+  // Added for repair requests — kitchen faults go to their own person. It has no
+  // roster work yet; the band simply reads 0 until some is written.
+  // Code 'kt' because 'k' has meant Housekeeping since the first schema.
+  // Orange sits furthest from the other four under colour-blind simulation
+  // (worst-case ΔE 17.6 against them, well clear of the 8 floor).
+  { code: 'kt', name: 'Kitchen', nameHi: 'रसोई', color: '#9A3412', ink: '#9A3412' },
 ]
 
 // Retired codes. NOT offered when choosing a department, but kept here so any
@@ -129,6 +135,13 @@ export const scopedDepartment = (user) =>
 // department heads and admins do fieldwork too. Super admins are included so
 // work can be handed "up", and so an admin can assign something to themselves.
 export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.SUPER_ADMIN]
+
+// Whose output Analytics reports on. Admins are in: they are given tasks and
+// they close repairs, so leaving them out under-reported the venue. The super
+// admin is not: they are the person reading the page and the one everyone else
+// reports to, so their own row is noise on their own report. They can still be
+// assigned work — this governs measurement, not assignment.
+export const MEASURED_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN]
 
 // An "all properties" user (property='all', e.g. Vicky / Sandeep / the super
 // admin) belongs to every venue, so they stay assignable whichever property is

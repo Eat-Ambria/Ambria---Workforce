@@ -43,6 +43,28 @@ const statusLabel = (s, t) => ({
 }[s] || t.open)
 const prioLabel = (p, t) => ({ low: t.prioLow, normal: t.prioNormal, high: t.prioHigh, urgent: t.prioUrgent }[p] || p)
 
+// What broke, not who fixes it. 'other' is every request ever written before the
+// kitchen split, so it stays the default and means "general".
+const FIX_CATEGORIES = ['other', 'kitchen']
+const fixCatLabel = (c, t) => ({ other: t.fixCatGeneral, kitchen: t.fixCatKitchen }[c] || t.fixCatGeneral)
+const FIX_CAT_TONE = { other: 'blue', kitchen: 'accent' }
+const KITCHEN_DEPT = 'kt'
+
+// Who may take this request. A kitchen fault goes to the kitchen team, so those
+// are the only names offered — picking a gardener for a broken oven is a mistake
+// the list should not make available.
+//
+// The exception is an empty Kitchen department: nobody is in it yet, and a picker
+// with no names would simply block the assignment. Then everyone is offered and
+// the hint says why, rather than leaving the admin stuck at a blank list.
+function assignableFor(category, members) {
+  if ((category || 'other') !== 'kitchen') return { people: members, restricted: false }
+  const kitchen = members.filter((m) => m.department === KITCHEN_DEPT)
+  return kitchen.length
+    ? { people: kitchen, restricted: true }
+    : { people: members, restricted: false }
+}
+
 // What the request says, in the reader's language. Written English and
 // auto-translated at creation, same as a task's title — and same fallback:
 // a request raised before the Hindi columns existed shows its English text.
@@ -62,6 +84,7 @@ export default function TaskBoard() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState(location.state?.tab || 'all')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
+  const [catFilter, setCatFilter] = useState('all')       // all | other (general) | kitchen
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
   const [creating, setCreating] = useState(false)
@@ -137,12 +160,21 @@ export default function TaskBoard() {
   // what the board shows:
   //  - admin: everything in scope, optionally narrowed to one staff member
   //  - staff: either work assigned to them, or requests they raised
-  const visibleRows = useMemo(() => {
+  // Everything this person may see, before the kitchen/general split. The chips
+  // count from HERE, so their numbers match the list you land in.
+  const scopedRows = useMemo(() => {
     if (admin) return memberFilter === 'all' ? rows : rows.filter((r) => r.assigned_to === memberFilter)
     return scope === 'posted'
       ? rows.filter((r) => r.posted_by === user.id)
       : rows.filter((r) => r.assigned_to === user.id)
   }, [rows, memberFilter, admin, scope, user.id])
+
+  const visibleRows = useMemo(() => (
+    // a row written before the kitchen split has no category at all — it is general
+    catFilter === 'all'
+      ? scopedRows
+      : scopedRows.filter((r) => (r.category || 'other') === catFilter)
+  ), [scopedRows, catFilter])
 
   // repair rows keep the assignee name from assignment time; swap in the Hindi
   // name when the UI is Hindi and we know the person
@@ -218,6 +250,19 @@ export default function TaskBoard() {
         </div>
       )}
 
+      {/* Kitchen or the rest. Counted from every row in scope, not from the
+          filtered list, so the number on a tab still says how much is behind it. */}
+      <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
+        <ScopeChip C={C} active={catFilter === 'all'} onClick={() => setCatFilter('all')}>
+          {t.all} ({scopedRows.length})
+        </ScopeChip>
+        {FIX_CATEGORIES.map((c) => (
+          <ScopeChip key={c} C={C} active={catFilter === c} onClick={() => setCatFilter(c)}>
+            {fixCatLabel(c, t)} ({scopedRows.filter((r) => (r.category || 'other') === c).length})
+          </ScopeChip>
+        ))}
+      </div>
+
       {/* name-wise filter — show only the requests assigned to one staff member */}
       {admin && memberOptions.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, maxWidth: 340, marginLeft: 'auto' }}>
@@ -280,6 +325,13 @@ export default function TaskBoard() {
                     {r.due_date && (
                       <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: od ? '#EA580C' : C.tl, fontWeight: od ? 700 : 400 }}>
                         <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? '#EA580C' : C.tl} /> {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(r.due_date)}
+                      </div>
+                    )}
+                    {(r.category || 'other') !== 'other' && (
+                      <div style={{ marginTop: 6 }}>
+                        <Badge color={C[FIX_CAT_TONE[r.category] || 'blue']} bg={C.cardAlt}>
+                          {fixCatLabel(r.category, t)}
+                        </Badge>
                       </div>
                     )}
                     {isFlaggedPriority(r.priority) && (
@@ -401,7 +453,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   const superAdmin = isSuperAdmin(user?.role)    // only super admin picks the property
   const [form, setForm] = useState({
     title: '', title_hi: '', description: '', description_hi: '',
-    priority: '', due_date: '', assignee: '',
+    priority: '', due_date: '', assignee: '', category: 'other',
     property: user.property && user.property !== 'all' ? user.property : 'pp',
     dept: '',
   })
@@ -420,9 +472,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     setFieldErr((fe) => (fe[k] ? { ...fe, [k]: undefined } : fe))
   }
 
-  // everyone at the chosen venue — the picker narrows it by kind + department
-  // everyone assignable, in one list — the venue does not narrow it
-  const atProperty = members
+  // A kitchen request narrows the names the moment the kind is chosen.
+  const { people: atProperty, restricted: kitchenOnly } = assignableFor(form.category, members)
 
   async function save() {
     // validate per-field so the message appears next to the field, not at the bottom
@@ -453,7 +504,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       title_hi: form.title_hi.trim() || null,
       description: form.description || null,
       description_hi: form.description_hi.trim() || null,
-      category: 'other',
+      category: form.category || 'other',
       // the venue the work has to be done at
       property,
       posted_by: user.id,
@@ -487,6 +538,11 @@ function PostModal({ user, members = [], onClose, onSaved }) {
         value={form.title_hi}
         onChange={(v) => setForm((f) => ({ ...f, title_hi: v }))}
       />
+      <Field label={t.requestType} hint={t.requestTypeHint}>
+        <select style={inputStyle(C)} value={form.category} onChange={set('category')}>
+          {FIX_CATEGORIES.map((c) => <option key={c} value={c}>{fixCatLabel(c, t)}</option>)}
+        </select>
+      </Field>
       <Field label={`${t.description} (${t.optional})`}><textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.description} onChange={set('description')} /></Field>
       {form.description.trim() && (
         <HindiInput
@@ -516,7 +572,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       {/* Straight to a person. Everyone at the chosen venue is listed, with
           their department beside the name so the right one is easy to spot. */}
       {admin && (
-        <Field label={t.assignedTo} required error={fieldErr.assignee} hint={t.assigneeAnyVenueHint}>
+        <Field label={t.assignedTo} required error={fieldErr.assignee} hint={kitchenOnly ? t.kitchenStaffOnly : t.assigneeAnyVenueHint}>
           <PersonPicker
             ref={assigneeRef}
             C={C} t={t} lang={lang}
@@ -549,6 +605,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const assigneeName = personName(members.find((m) => m.id === row.assigned_to) || {}, lang)
     || row.assigned_to_name
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
+  // kitchen requests only offer the kitchen team — unless nobody is in it yet
+  const assignPool = assignableFor(row.category, members)
   const [propFilter, setPropFilter] = useState(row.property || 'pp') // property to assign within (super admin)
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
   const [note, setNote] = useState(row.resolution_note || '')
@@ -736,7 +794,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         {isFlaggedPriority(row.priority) && (
           <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
         )}
-        {row.category && row.category !== 'other' && <Badge>{row.category}</Badge>}
+        {(row.category || 'other') !== 'other' && (
+          <Badge color={C[FIX_CAT_TONE[row.category] || 'blue']} bg={C.cardAlt}>{fixCatLabel(row.category, t)}</Badge>
+        )}
         {/* A request raised in English is unreadable to the people who have to
             do it. Anyone can fix the wording — or write the Hindi themselves. */}
         {admin && !ownWork && (
@@ -804,10 +864,10 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {/* Straight to a person — every assignable name, searchable. The
               department is taken from whoever is picked, so routing still works
               without anyone choosing a team first. */}
-          <Field label={t.assignedTo} required hint={t.assigneeAnyVenueHint}>
+          <Field label={t.assignedTo} required hint={assignPool.restricted ? t.kitchenStaffOnly : t.assigneeAnyVenueHint}>
             <PersonPicker
               C={C} t={t} lang={lang}
-              people={members}
+              people={assignPool.people}
               value={assignTo}
               onChange={setAssignTo}
             />

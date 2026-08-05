@@ -221,6 +221,11 @@ function RequestCard({ C, hi, r, isMine }) {
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C[s.tone]}`, borderRadius: 14, padding: 14, boxShadow: C.shadow }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
+          {(r.category || 'other') === 'kitchen' && (
+            <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.accent, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px', marginBottom: 5 }}>
+              {hi ? 'रसोई / किचन' : 'Kitchen'}
+            </span>
+          )}
           <div style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>
             {hi && r.title_hi ? r.title_hi : r.title}
             {isMine && (
@@ -256,7 +261,7 @@ function RequestCard({ C, hi, r, isMine }) {
 // ---- the Add Request form (name + phone required, phone capped at 10 digits) ----
 function RequestForm({ C, hi, onBack, onSubmitted }) {
   const lang = hi ? 'hi' : 'en'
-  const [form, setForm] = useState({ name: '', phone: '', property: 'pp', location: '', issue: '' })
+  const [form, setForm] = useState({ name: '', phone: '', property: 'pp', location: '', issue: '', category: 'other' })
   const [photos, setPhotos] = useState([])
   const [voice, setVoice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -301,7 +306,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       title_hi,
       description,
       description_hi: hiDesc ? block(hiDesc, true) : null,
-      category: 'other',
+      category: form.category || 'other',
       property: form.property,
       posted_by: 'public',
       posted_by_name: `${form.name.trim()} · ${hi ? 'बाहरी' : 'External'}`,
@@ -375,6 +380,16 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
               {propName(p.code, lang)} · {hi && p.areaHi ? p.areaHi : p.area}
             </option>
           ))}
+        </select>
+      </div>
+
+      {/* Kitchen faults go to a different person, so the visitor says which
+          kind it is rather than an admin guessing from the description. */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={fieldLabel}>{hi ? 'किस चीज़ की मरम्मत?' : 'What kind of repair?'}</label>
+        <select style={inputStyle(C)} value={form.category} onChange={set('category')}>
+          <option value="other">{hi ? 'सामान्य मरम्मत' : 'General repair'}</option>
+          <option value="kitchen">{hi ? 'रसोई / किचन' : 'Kitchen'}</option>
         </select>
       </div>
 

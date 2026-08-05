@@ -7,14 +7,16 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
   TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, propName, deptName,
-  memberInProperty, personName,
+  memberInProperty, personName, PRIORITIES,
   TASK_FREQUENCIES, FREQUENCY_MAP, taskFrequency, frequencyLabel,
   WEEK_DAYS, dayName, scheduleText, staffingLabel,
 } from '../../constants/org'
 import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
+import Toast from '../../components/common/Toast'
 import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
+import HindiInput from '../../components/common/HindiInput'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 
@@ -35,7 +37,7 @@ const draftSchedule = (d) => ({
 //   # | Frequency | Task | Time | Assigned | SOP / Instructions | (actions)
 // The sheet has no photo column; that lives in the actions cell as a toggle, so
 // the six columns people read stay exactly the six they are used to.
-const COLS = '38px 132px minmax(0,1.25fr) 104px 112px minmax(0,1.5fr) 66px'
+const COLS = '38px 132px minmax(0,1.25fr) 104px 112px minmax(0,1.5fr) 92px'
 // Phone: no row number, no frequency column (it moves into the task cell), and
 // the task column pins to the left while the rest scrolls.
 // last column fits three 34px touch targets plus their gaps (34*3 + 6*2 = 114);
@@ -112,7 +114,7 @@ const normRange = (block) => fmtRange(...Object.values(parseRange(block)))
 // Removing someone DELETES their row only while it is untouched (still pending,
 // no photos, never started). Once there is work recorded against it the row is
 // merely unassigned, because deleting would throw away that history.
-export default function RosterModal({ user, members, canSeeAllProps, defaultProperty, inline, onClose, onSaved, onDetailed }) {
+export default function RosterModal({ user, members, canSeeAllProps, defaultProperty, inline, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -120,7 +122,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const wide = useMediaQuery('(min-width: 760px)')
   // A 13px icon with 1px of padding is a mouse target. A finger needs ~34px, so
   // the row actions grow on a phone instead of asking for a precise tap.
-  const iconSize = wide ? 14 : 18
+  const iconSize = wide ? 17 : 18
   const today = todayISO()
   // How far down the sticky filter bar has to sit. The app header is sticky at
   // top: 0, so anything else pinned to 0 disappears behind it — and its height
@@ -137,7 +139,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const todayDow = new Date().getDay() === 0 ? 7 : new Date().getDay()
   const tapTarget = {
     background: 'transparent', display: 'grid', placeItems: 'center',
-    padding: wide ? 1 : 0, width: wide ? 'auto' : 34, height: wide ? 'auto' : 34,
+    width: wide ? 26 : 34, height: wide ? 26 : 34,
     borderRadius: 8, flexShrink: 0,
   }
 
@@ -154,6 +156,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [deptTab, setDeptTab] = useState('all')       // which department's round is shown
   const [expandedKey, setExpandedKey] = useState(null) // row whose people picker is open
   const [form, setForm] = useState(null)               // add/edit form, null = closed
+  const [saved, setSaved] = useState(false)            // the 'changes saved' toast
 
   const [deployed, setDeployed] = useState([])        // user ids on cover here today
 
@@ -216,7 +219,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // meant four separate reads of what is one document.
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, month_week, skip_sunday, staffing, status, started_at, before_photo, completion_photo')
+      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, month_week, skip_sunday, staffing, priority, due_date, status, started_at, before_photo, completion_photo')
       .in('property', props)
       .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
@@ -233,6 +236,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         category: r.category, sop: r.description || '', staffing: r.staffing || '',
         time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
         monthWeek: r.month_week || '', skipSunday: !!r.skip_sunday,
+        priority: r.priority || 'medium', dueDate: r.due_date || '',
         photoRequired: r.photo_required !== false, rows: [],
       })
       byTitle.get(key).rows.push(r)
@@ -253,23 +257,26 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // looked nothing like a row being read.
   const openAdd = () => setForm({
     mode: 'add', dept: deptTab === 'all' ? '' : deptTab,
-    title: '', from: '', to: '', photoRequired: true, people: [], weekDay: '',
+    title: '', titleHi: '', from: '', to: '', photoRequired: true, people: [], weekDay: '',
     // a new row states its own frequency now that the roster shows them all at once
     freq: freqFilter === 'all' ? 'daily' : freqFilter, monthWeek: '', sop: '', staffing: '',
+    priority: 'medium', dueDate: '',
   })
   const openEdit = (g) => setForm({
     mode: 'edit', key: g.key, dept: g.department || '',
-    title: g.title, from: g.from || '', to: g.to || '',
+    title: g.title, titleHi: g.title_hi || '', from: g.from || '', to: g.to || '',
     photoRequired: g.photoRequired !== false, people: g.people, weekDay: g.weekDay || '',
     freq: freqOf(g), monthWeek: g.monthWeek || '', sop: g.sop || '', staffing: g.staffing || '',
+    priority: g.priority || 'medium', dueDate: g.dueDate || '',
   })
 
   function applyForm(v) {
     if (v.mode === 'draft') {
       setDrafts((prev) => prev.map((d) => (d.key !== v.key ? d : {
-        ...d, title: v.title, from: v.from, to: v.to, weekDay: v.weekDay,
+        ...d, title: v.title, titleHi: v.titleHi, from: v.from, to: v.to, weekDay: v.weekDay,
         photoRequired: v.photoRequired, dept: v.dept, people: v.people,
         freq: v.freq, monthWeek: v.monthWeek, sop: v.sop, staffing: v.staffing,
+        priority: v.priority, dueDate: v.dueDate,
       })))
       setForm(null)
       return
@@ -277,15 +284,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     if (v.mode === 'add') {
       setDrafts((prev) => [...prev, {
         key: `d${Date.now()}${prev.length}`,
-        title: v.title, from: v.from, to: v.to, weekDay: v.weekDay,
+        title: v.title, titleHi: v.titleHi, from: v.from, to: v.to, weekDay: v.weekDay,
         photoRequired: v.photoRequired, dept: v.dept, people: v.people,
         freq: v.freq, monthWeek: v.monthWeek, sop: v.sop, staffing: v.staffing,
+        priority: v.priority, dueDate: v.dueDate,
       }])
     } else {
       setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
-        ...g, title: v.title, from: v.from, to: v.to,
+        ...g, title: v.title, title_hi: v.titleHi, from: v.from, to: v.to,
         photoRequired: v.photoRequired, people: v.people,
         sop: v.sop, staffing: v.staffing, monthWeek: v.monthWeek,
+        priority: v.priority, dueDate: v.dueDate,
         ...freqSpec(v.freq, v.weekDay),
       })))
     }
@@ -412,6 +421,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // a job nobody is on keeps one spare row rather than vanishing entirely
     const spare = g.rows.find((r) => !r.assigned_to)
     const renamed = g.title.trim() && g.title.trim() !== g.rows[0]?.title
+    // the Hindi can change on its own — a correction to the machine's guess
+    const rehindied = (g.title_hi || '') !== (g.rows[0]?.title_hi || '')
+    const reprioed = (g.priority || 'medium') !== (g.rows[0]?.priority || 'medium')
+    const redued = (g.dueDate || '') !== (g.rows[0]?.due_date || '')
     const retimed = fmtRange(g.from, g.to) !== normRange(g.rows[0]?.time_block)
     const rephotoed = g.photoRequired !== (g.rows[0]?.photo_required !== false)
     const redayed = String(g.weekDay || '') !== String(g.rows[0]?.week_day || '')
@@ -420,12 +433,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       || String(g.monthWeek || '') !== String(g.rows[0]?.month_week || '')
     const resopped = (g.sop || '') !== (g.rows[0]?.description || '')
       || (g.staffing || '') !== (g.rows[0]?.staffing || '')
-    return { g, added, dropped, spare, renamed, retimed, rephotoed, redayed, refreqed, resopped }
+    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
   const dropCount = plan.reduce((n, x) => n + x.dropped.length, 0)
-  const renameCount = plan.filter((x) => x.renamed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped).length
+  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped).length
   const filledDrafts = drafts.filter((d) => d.title.trim())
   const nothingToSave = addCount + dropCount + renameCount + filledDrafts.length === 0
 
@@ -436,17 +449,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         try { return await translateToHindi(title) } catch { return null }
       }
 
-      for (const { g, added, dropped, spare, renamed, retimed, rephotoed, redayed, refreqed, resopped } of plan) {
+      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
         // frequency or SOP — applies to every copy of it
-        if (renamed || retimed || rephotoed || redayed || refreqed || resopped) {
+        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued) {
           const patch = {}
-          if (renamed) {
-            patch.title = g.title.trim()
-            patch.title_hi = await hiFor(patch.title)
+          if (renamed) patch.title = g.title.trim()
+          // What is in the box is what gets saved. Only fall back to translating
+          // here if the box is empty — otherwise a hand-corrected Hindi title
+          // would be overwritten by the machine on every rename.
+          if (renamed || rehindied) {
+            patch.title_hi = (g.title_hi || '').trim() || await hiFor(g.title.trim())
           }
           if (retimed) patch.time_block = fmtRange(g.from, g.to) || null
           if (rephotoed) patch.photo_required = g.photoRequired
+          if (reprioed) patch.priority = g.priority || 'medium'
+          if (redued) patch.due_date = g.dueDate || null
           if (redayed) patch.week_day = g.weekDay ? Number(g.weekDay) : null
           if (refreqed) {
             patch.category = g.category
@@ -495,7 +513,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               // job split across two frequency bands
               category: g.category,
               title: g.title,
-              title_hi: g.title_hi || await hiFor(g.title),
+              title_hi: (g.title_hi || '').trim() || await hiFor(g.title),
               description: g.sop?.trim() || null,
               staffing: g.staffing?.trim() || null,
               area: g.area || null,
@@ -504,7 +522,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               month_week: g.category === 'monthly' && g.monthWeek ? Number(g.monthWeek) : null,
               skip_sunday: !!g.skipSunday,
               photo_required: g.photoRequired !== false,
-              priority: 'medium',
+              priority: g.priority || 'medium',
+              due_date: g.dueDate || null,
               assigned_to: id,
               assignee_name: person?.name || null,
               status: TASK_STATUS.PENDING,
@@ -541,7 +560,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // or a single unassigned row when nobody is picked yet
       for (const d of filledDrafts) {
         const title = d.title.trim()
-        const title_hi = await hiFor(title)
+        const title_hi = (d.titleHi || '').trim() || await hiFor(title)
         const people = d.people?.length ? d.people : [null]
         // one row per person PER SELECTED VENUE
         const combos = props.flatMap((prop) => people.map((id) => ({ prop, id })))
@@ -576,7 +595,15 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         if (error) throw error
       }
 
-      onSaved()
+      // Re-read from the database rather than trusting what is in memory: the
+      // save has just rewritten these rows, and a stale count on the button is
+      // how you end up saving the same change twice.
+      setDrafts([])
+      setForm(null)
+      setExpandedKey(null)
+      await load()
+      setSaved(true)
+      onSaved?.()
     } catch (e) {
       setErr(e.message || String(e))
     } finally {
@@ -778,15 +805,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           was covering where nor end it. Lending someone to another venue's round
           still records the cover automatically — see save(). */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
-        {onDetailed && (
-          <button
-            type="button"
-            onClick={onDetailed}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', color: C.maroon, fontSize: 12.5, fontWeight: 700, padding: 0, whiteSpace: 'nowrap' }}
-          >
-            <Icon name="edit" size={13} color={C.maroon} /> {t.detailedTask}
-          </button>
-        )}
         <Button variant="primary" onClick={openAdd} style={{ padding: '8px 14px', fontSize: 13 }}>
           <Icon name="plus" size={14} color="#fff" style={{ marginRight: 4 }} />{t.addTaskRow}
         </Button>
@@ -961,14 +979,47 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 <button
                                   type="button"
                                   onClick={() => setExpandedKey(open ? null : g.key)}
-                                  style={{ ...tdCell, textAlign: 'left', background: 'transparent', minWidth: 0, display: 'block' }}
+                                  title={t.tapToAssign}
+                                  aria-expanded={open}
+                                  style={{ ...tdCell, textAlign: 'left', background: 'transparent', minWidth: 0, display: 'block', cursor: 'pointer' }}
                                 >
+                                  {/* the roster's rule — plain text, not a control */}
                                   {g.staffing && (
                                     <span style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: C.text }}>{staffingLabel(g.staffing, lang)}</span>
                                   )}
-                                  <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: names.length ? C.maroon : C.faint, marginTop: g.staffing ? 2 : 0, overflowWrap: 'anywhere' }}>
-                                    {names.length ? names.join(', ') : t.unassigned}
-                                  </span>
+                                  {/* The names ARE the button. "Unassigned" in grey
+                                      text read as a status nobody could act on, so an
+                                      empty job now wears an outlined "+ Assign" slot
+                                      and a filled one wears its names as a pill you
+                                      can see is pressable. */}
+                                  {names.length ? (
+                                    <span
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: g.staffing ? 3 : 0,
+                                        maxWidth: '100%', padding: '3px 8px', borderRadius: 999,
+                                        background: open ? C.maroon : C.maroonSoft,
+                                        color: open ? '#fff' : C.maroon,
+                                        border: `1px solid ${open ? C.maroon : 'transparent'}`,
+                                        fontSize: 11.5, fontWeight: 700,
+                                      }}
+                                    >
+                                      <span style={{ overflowWrap: 'anywhere' }}>{names.join(', ')}</span>
+                                      <Icon name="edit" size={11} color={open ? '#fff' : C.maroon} />
+                                    </span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: g.staffing ? 3 : 0,
+                                        padding: '3px 9px 3px 6px', borderRadius: 999,
+                                        border: `1px dashed ${open ? C.maroon : C.borderStrong}`,
+                                        background: open ? C.maroonSoft : 'transparent',
+                                        color: open ? C.maroon : C.tl, fontSize: 11.5, fontWeight: 700,
+                                      }}
+                                    >
+                                      <Icon name="plus" size={12} color={open ? C.maroon : C.tl} />
+                                      {t.assign}
+                                    </span>
+                                  )}
                                 </button>
                                 <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>
                                   {g.sop || '—'}
@@ -1049,6 +1100,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     return (
       <div>
         {body}
+        {saved && <Toast message={t.changesSaved} onDone={() => setSaved(false)} />}
         <div
           style={{
             position: 'sticky', bottom: 0, zIndex: 5, display: 'flex', gap: 10,
@@ -1065,6 +1117,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   return (
     <Modal open onClose={onClose} maxWidth={1240} title={t.roster} footer={footer}>
       {body}
+      {saved && <Toast message={t.changesSaved} onDone={() => setSaved(false)} />}
     </Modal>
   )
 }
@@ -1189,6 +1242,17 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
         />
       </Field>
 
+      {/* The staff who do this work read Hindi. It was already being translated
+          at save time, invisibly — this is the same translation, shown while
+          there is still a chance to correct it. */}
+      <HindiInput
+        label={t.hindiTitle}
+        hint={t.hindiForStaffHint}
+        source={value.title}
+        value={value.titleHi}
+        onChange={(v) => set({ titleHi: v })}
+      />
+
       <Field label={t.department} required>
         <select style={inputStyle(C)} value={value.dept} onChange={(e) => set({ dept: e.target.value })}>
           <option value="">— {t.department} —</option>
@@ -1240,6 +1304,25 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
 
       {/* how many and which kind, in the roster's own words. The names are ticked
           below; this is the rule they are ticked against. */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 140px' }}>
+          <Field label={t.priority}>
+            <select style={inputStyle(C)} value={value.priority || 'medium'} onChange={(e) => set({ priority: e.target.value })}>
+              {PRIORITIES.map((pr) => (
+                <option key={pr} value={pr}>{t[`priority${pr[0].toUpperCase()}${pr.slice(1)}`] || pr}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          {/* Recurring work rarely has one — it comes back on its own schedule.
+              It is here for the odd job that must be finished by a date. */}
+          <Field label={`${t.dueDate} (${t.optional})`} hint={t.dueDateRosterHint}>
+            <input type="date" style={inputStyle(C)} value={value.dueDate || ''} onChange={(e) => set({ dueDate: e.target.value })} />
+          </Field>
+        </div>
+      </div>
+
       <Field label={`${t.assigned} (${t.optional})`} hint={t.staffingHint}>
         <input
           style={inputStyle(C)}

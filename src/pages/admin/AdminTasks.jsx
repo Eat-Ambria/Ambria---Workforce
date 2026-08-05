@@ -57,9 +57,6 @@ export default function AdminTasks() {
   const [deptFilter, setDeptFilter] = useState('all')  // narrow the list to one department
   const [prioFilter, setPrioFilter] = useState(presetPriority || 'all')
   const [scope, setScope] = useState('all')    // 'all' = everyone's work | 'mine' = my own
-  // the detailed form can be opened FROM the roster; remember that so closing
-  // it puts you back where you were instead of dumping you on the task list
-  const [cameFromRoster, setCameFromRoster] = useState(false)
 
   const today = todayISO()
   // collapse the status tabs into a dropdown once the row gets tight (≤1073px)
@@ -220,7 +217,6 @@ export default function AdminTasks() {
           canSeeAllProps={canSeeAllProps}
           defaultProperty={propFilter !== 'all' ? propFilter : (user.property !== 'all' ? user.property : undefined)}
           onSaved={() => load()}
-          onDetailed={() => { setCameFromRoster(true); setCreating(true) }}
         />
       ) : scope === 'mine' ? <MyTasks /> : (
       <>
@@ -437,12 +433,10 @@ export default function AdminTasks() {
           user={user}
           members={members}
           record={creating === true ? null : creating}
-          onClose={() => { setCreating(false); if (cameFromRoster) { setCameFromRoster(false); setScope('roster') } }}
+          onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false)
             load()
-            // back to the roster tab, which re-reads and shows the new task
-            if (cameFromRoster) { setCameFromRoster(false); setScope('roster') }
           }}
         />
       )}
