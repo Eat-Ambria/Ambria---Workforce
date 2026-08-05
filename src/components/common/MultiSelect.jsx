@@ -11,7 +11,7 @@ import Icon from './Icon'
 // this one. A native <select> would have done the job, but its option list is
 // drawn by the operating system — unstyleable — so sitting next to this component
 // the two looked like they came from different applications.
-export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false, single = false }) {
+export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false, single = false, minWidth = 150 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -53,7 +53,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
     : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
 
   return (
-    <div ref={ref} style={{ position: 'relative', flex: 1, minWidth: 150 }}>
+    <div ref={ref} style={{ position: 'relative', flex: 1, minWidth }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

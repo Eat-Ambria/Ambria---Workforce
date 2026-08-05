@@ -37,12 +37,14 @@ const draftSchedule = (d) => ({
 //   # | Frequency | Task | Time | Assigned | SOP / Instructions | (actions)
 // The sheet has no photo column; that lives in the actions cell as a toggle, so
 // the six columns people read stay exactly the six they are used to.
-const COLS = '38px 132px minmax(0,1.25fr) 104px 112px minmax(0,1.5fr) 92px'
+// no FREQUENCY column: the band strip above each group states it once
+const COLS = '38px minmax(0,1.3fr) 116px 136px minmax(0,1.5fr) 96px'
 // Phone: no row number, no frequency column (it moves into the task cell), and
 // the task column pins to the left while the rest scrolls.
 // last column fits three 34px touch targets plus their gaps (34*3 + 6*2 = 114);
 // it was 92px, and the department card clips overflow, so the bin disappeared
-const COLS_NARROW = '164px 104px 120px minmax(0,1.4fr) 118px'
+// phone: Task (with its SOP beneath) | Time | Assigned | actions
+const COLS_NARROW = '190px 104px 128px 118px'
 
 // The seven bands and the category/skip_sunday/week_day mapping live in
 // constants/org.js — the staff task list and the dashboard label tasks from the
@@ -81,15 +83,24 @@ const sumCell = { padding: '12px 9px', fontSize: 14, textAlign: 'center' }
 // one grid for the head, the rows and the totals — three different template
 // strings is how a table quietly stops lining up
 const SUM_GRID = '138px repeat(5, minmax(0,1fr)) 68px'
+const SUM_GRID_NARROW = '104px repeat(5, 56px) 52px'
+// the same five buckets, named short enough to fit a phone column
+const SUM_SHORT = {
+  daily:     { en: 'DAILY', hi: 'रोज़' },
+  sunday:    { en: 'SUN',   hi: 'रवि' },
+  alternate: { en: 'ALT',   hi: 'बदल' },
+  weekly:    { en: 'WEEK',  hi: 'हफ़्ता' },
+  monthly:   { en: 'MON',   hi: 'माह' },
+}
 // The first column pins itself while the rest scrolls sideways. It needs a solid
 // background of its own: a transparent sticky cell lets the scrolling numbers
 // slide underneath it.
 const stickyCell = (bg) => ({ position: 'sticky', left: 0, zIndex: 1, background: bg })
 const thCell = {
-  padding: '9px 8px', fontSize: 9.5, fontWeight: 700, color: '#94A3B8',
-  textTransform: 'uppercase', letterSpacing: '0.11em',
+  padding: '11px 10px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
+  textTransform: 'uppercase', letterSpacing: '0.1em',
 }
-const tdCell = { padding: '8px' }
+const tdCell = { padding: '12px 10px' }
 
 const HHMM = /(\d{1,2}:\d{2})/g
 const parseRange = (block) => {
@@ -123,6 +134,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // A 13px icon with 1px of padding is a mouse target. A finger needs ~34px, so
   // the row actions grow on a phone instead of asking for a precise tap.
   const iconSize = wide ? 17 : 18
+  const sumGrid = wide ? SUM_GRID : SUM_GRID_NARROW
+  const sumLabel = (k) => (wide ? freqLabel(k, lang) : (lang === 'hi' ? SUM_SHORT[k].hi : SUM_SHORT[k].en))
   const today = todayISO()
   // How far down the sticky filter bar has to sit. The app header is sticky at
   // top: 0, so anything else pinned to 0 disappears behind it — and its height
@@ -651,8 +664,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         </div>
         {/* Summary: the whole roster's weight per department, per frequency */}
         <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: wide ? 520 : 430 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: SUM_GRID, background: C.card }}>
+          <div style={{ minWidth: wide ? 520 : 496 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: sumGrid, background: C.card }}>
               <span style={{ ...sumHead, ...stickyCell(C.card), color: C.faint, textAlign: 'left' }}>
                 {t.department}
                 <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', color: C.faint, fontWeight: 600, marginTop: 2 }}>
@@ -663,7 +676,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                   the column to its chips and its rows; not enough to shout. */}
               {SUMMARY_COLS.map((k) => (
                 <span key={k} style={{ ...sumHead, color: C.tl, boxShadow: `inset 0 -2px 0 ${FREQ_MAP[k].ink}` }}>
-                  {freqLabel(k, lang)}
+                  {sumLabel(k)}
                 </span>
               ))}
               <span style={{ ...sumHead, color: C.faint, boxShadow: `inset 0 -2px 0 ${C.maroon}` }}>{t.total}</span>
@@ -682,7 +695,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                   aria-pressed={on}
                   onClick={() => pickDept(on ? 'all' : d.code)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDept(on ? 'all' : d.code) } }}
-                  style={{ display: 'grid', gridTemplateColumns: SUM_GRID, borderTop: `1px solid ${C.border}`, background: rowBg, cursor: 'pointer' }}
+                  style={{ display: 'grid', gridTemplateColumns: sumGrid, borderTop: `1px solid ${C.border}`, background: rowBg, cursor: 'pointer' }}
                 >
                   {/* the department's colour as a slim bar; the name itself stays
                       plain dark text, because a coloured bar AND coloured text AND
@@ -717,7 +730,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               tabIndex={0}
               onClick={() => pickDept('all')}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDept('all') } }}
-              style={{ display: 'grid', gridTemplateColumns: SUM_GRID, borderTop: `1px solid ${C.borderStrong}`, background: deptTab === 'all' ? C.maroonSoft : C.cardAlt, cursor: 'pointer' }}
+              style={{ display: 'grid', gridTemplateColumns: sumGrid, borderTop: `1px solid ${C.borderStrong}`, background: deptTab === 'all' ? C.maroonSoft : C.cardAlt, cursor: 'pointer' }}
             >
               <span style={{ ...sumCell, ...stickyCell(deptTab === 'all' ? C.maroonSoft : C.cardAlt), textAlign: 'left', paddingLeft: 23, fontWeight: 700, color: deptTab === 'all' ? C.maroon : C.tl, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.1em' }}>
                 {t.totalPerProperty}
@@ -749,14 +762,19 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       <div
         ref={barRef}
         style={{
-          position: 'sticky', top: headerH, zIndex: 20,
-          background: C.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8,
-          borderBottom: `1px solid ${C.border}`,
+          position: 'sticky', top: headerH, zIndex: 60,
+          // opaque, not the page tint: rows scroll underneath this and any
+          // translucency reads as a rendering fault
+          background: C.card,
+          padding: '10px 12px',
+          margin: '0 -12px 10px',
+          borderBottom: `1px solid ${C.borderStrong}`,
+          boxShadow: '0 6px 12px -8px rgba(15,23,42,0.18)',
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {canSeeAllProps && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: '1 1 190px', minWidth: 170 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: wide ? '1 1 190px' : '1 1 100%', minWidth: 0 }}>
               <Icon name="pin" size={15} color={C.tl} />
               <MultiSelect
                 C={C}
@@ -772,9 +790,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
           {/* Selects, not chips: ten chips over two sideways-scrolling rows took a
               third of a phone screen and still hid half of themselves. */}
-          <div style={{ flex: '1 1 150px', minWidth: 135 }}>
+          <div style={{ flex: wide ? '1 1 150px' : '1 1 calc(50% - 4px)', minWidth: 0 }}>
             <MultiSelect
               single
+              minWidth={wide ? 150 : 0}
               C={C}
               placeholder={t.allFrequencies}
               options={[{ value: 'all', label: t.allFrequencies }, ...FILTER_BANDS.map((k) => ({ value: k, label: freqLabel(k, lang) }))]}
@@ -786,9 +805,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           {/* The summary above narrows by department in one tap; this is where the
               active one stays visible once the summary has scrolled away — which
               is exactly when you need to know what is filtered. */}
-          <div style={{ flex: '1 1 150px', minWidth: 135 }}>
+          <div style={{ flex: wide ? '1 1 150px' : '1 1 calc(50% - 4px)', minWidth: 0 }}>
             <MultiSelect
               single
+              minWidth={wide ? 150 : 0}
               C={C}
               placeholder={t.allDepts}
               options={[{ value: 'all', label: t.allDepts }, ...DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) }))]}
@@ -870,7 +890,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             : t.unassigned}
                         </span>
                       </div>
-                      <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>{d.sop || '—'}</span>
+                      {wide && <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>{d.sop || '—'}</span>}
                       <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: wide ? 4 : 6, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
                         <span title={`${t.photoRequired}: ${d.photoRequired !== false ? t.yes : t.no}`} style={tapTarget}>
                           <Icon name={d.photoRequired !== false ? 'camera' : 'cameraOff'} size={iconSize} color={d.photoRequired !== false ? C.maroon : C.faint} />
@@ -898,33 +918,57 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                   # / Frequency / Task / Time / Assigned / SOP — and the photo rule
                   sits with the row actions so it does not add a seventh. */}
               <div ref={listRef} style={{ overflowX: 'auto' }}>
-              <div style={{ minWidth: wide ? 960 : 620, display: 'grid', gap: 14 }}>
+              <div style={{ minWidth: wide ? 1030 : 548, display: 'grid', gap: 14 }}>
               {sections.map(({ dept, count, bands }) => (
                 <div key={dept} style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
                   {/* department band, the sheet's full-width colour bar */}
                   <div style={{ background: C.card, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ width: 3, height: 18, borderRadius: 2, background: dept === '_' ? C.tl : (DEPARTMENT_MAP[dept]?.color || C.tl), flexShrink: 0 }} />
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, letterSpacing: '0.01em' }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: '0.01em' }}>
                       {dept === '_' ? t.unassigned : deptName(dept, lang)}
                     </span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
                   </div>
 
-                  {bands.map(({ fk, rows: bandRows }) => {
+                  {/* One header row for the whole department. It used to repeat
+                      per band, which put two of them on screen at once. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
+                    {wide && <span style={thCell}>#</span>}
+                    <span style={{ ...thCell, ...(wide ? null : stickyCell(C.cardAlt)) }}>{t.task}</span>
+                    <span style={thCell}>{t.time}</span>
+                    <span style={thCell}>{t.assigned}</span>
+                    {wide && <span style={thCell}>{t.sopColumn}</span>}
+                    <span style={thCell} />
+                  </div>
+
+                  {bands.map(({ fk, rows: bandRows }, bandIndex) => {
                     const f = FREQ_MAP[fk] || FREQ_MAP.daily
+                    // numbering runs straight down the department, as the printed
+                    // sheet numbers it — restarting at 1 per band read as an error
+                    const startNo = bands.slice(0, bandIndex).reduce((n, b) => n + b.rows.length, 0)
                     return (
                       <div key={fk}>
-                        {/* the sheet's column header, repeated per band. Always
-                            shown — on a phone the list is a scrolling table, not a
-                            stack of cards, so it needs its headings. */}
-                        <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
-                          {wide && <span style={thCell}>#</span>}
-                          {wide && <span style={thCell}>{t.frequency}</span>}
-                          <span style={{ ...thCell, ...(wide ? null : stickyCell(C.cardAlt)) }}>{t.task}</span>
-                          <span style={thCell}>{t.time}</span>
-                          <span style={thCell}>{t.assigned}</span>
-                          <span style={thCell}>{t.sopColumn}</span>
-                          <span style={thCell} />
+                        {/* the frequency, said once for the group it applies to */}
+                        <div
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '12px 14px 11px', background: C.card,
+                            borderTop: `1px solid ${C.border}`,
+                            boxShadow: `inset 3px 0 0 ${f.ink}`,
+                          }}
+                        >
+                          <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: f.ink }}>
+                            {freqLabel(fk, lang)}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                            {bandRows.length}
+                          </span>
+                          {/* when it comes round, once for the band instead of on every row */}
+                          {scheduleText(bandRows[0], lang) && (
+                            <span style={{ fontSize: 12, fontWeight: 600, color: C.tl }}>
+                              {scheduleText(bandRows[0], lang)}
+                            </span>
+                          )}
                         </div>
 
                         {bandRows.map((g, i) => {
@@ -944,22 +988,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card), boxShadow: `inset 3px 0 0 ${f.ink}` }}>
                               <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, alignItems: 'start' }}>
                                 {wide && (
-                                  <span style={{ ...tdCell, color: C.tl, fontWeight: 700, textAlign: 'center' }}>{i + 1}</span>
-                                )}
-                                {wide && (
-                                  <span style={{ ...tdCell, fontSize: 11, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                                    {freqLabel(fk, lang)}
+                                  <span style={{ ...tdCell, color: C.faint, fontWeight: 600, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+                                    {startNo + i + 1}
                                   </span>
                                 )}
                                 <div style={{ ...tdCell, minWidth: 0, ...(wide ? null : stickyCell(edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card))) }}>
-                                  {!wide && (
-                                    <div style={{ fontSize: 9.5, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
-                                      {freqLabel(fk, lang)}
-                                    </div>
-                                  )}
-                                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>
+                                  <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, lineHeight: 1.4 }}>
                                     {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
                                   </div>
+                                  {!wide && g.sop && (
+                                    <div style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.45, marginTop: 4 }}>{g.sop}</div>
+                                  )}
                                   {(props.length > 1 || g.area) && (
                                     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', fontSize: 11, color: C.tl, marginTop: 2 }}>
                                       {props.length > 1 && <span>{propName(g.property, lang)}</span>}
@@ -967,11 +1006,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                     </div>
                                   )}
                                 </div>
-                                <span style={{ ...tdCell, fontSize: 11.5, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.4 }}>
-                                  {when && (
-                                    <span style={{ display: 'block', fontWeight: 800, color: f.ink }}>{when}</span>
+                                <span style={{ ...tdCell, fontSize: 13, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.45 }}>
+                                  <span style={{ display: 'block', color: C.text }}>{clock || '—'}</span>
+                                  {/* only when this row differs from the band's own schedule */}
+                                  {when && when !== scheduleText(bandRows[0], lang) && (
+                                    <span style={{ display: 'block', fontWeight: 700, color: f.ink, fontSize: 10.5 }}>{when}</span>
                                   )}
-                                  <span style={{ display: 'block', color: when ? C.tl : C.text }}>{clock || '—'}</span>
                                 </span>
                                 {/* Assigned: the roster's rule on top, the actual
                                     names under it. The sheet only ever said "Any 2";
@@ -985,7 +1025,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 >
                                   {/* the roster's rule — plain text, not a control */}
                                   {g.staffing && (
-                                    <span style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: C.text }}>{staffingLabel(g.staffing, lang)}</span>
+                                    <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.faint }}>{staffingLabel(g.staffing, lang)}</span>
                                   )}
                                   {/* The names ARE the button. "Unassigned" in grey
                                       text read as a status nobody could act on, so an
@@ -1000,7 +1040,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                         background: open ? C.maroon : C.maroonSoft,
                                         color: open ? '#fff' : C.maroon,
                                         border: `1px solid ${open ? C.maroon : 'transparent'}`,
-                                        fontSize: 11.5, fontWeight: 700,
+                                        fontSize: 12.5, fontWeight: 700,
                                       }}
                                     >
                                       <span style={{ overflowWrap: 'anywhere' }}>{names.join(', ')}</span>
@@ -1013,7 +1053,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                         padding: '3px 9px 3px 6px', borderRadius: 999,
                                         border: `1px dashed ${open ? C.maroon : C.borderStrong}`,
                                         background: open ? C.maroonSoft : 'transparent',
-                                        color: open ? C.maroon : C.tl, fontSize: 11.5, fontWeight: 700,
+                                        color: open ? C.maroon : C.tl, fontSize: 12.5, fontWeight: 700,
                                       }}
                                     >
                                       <Icon name="plus" size={12} color={open ? C.maroon : C.tl} />
@@ -1021,9 +1061,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                     </span>
                                   )}
                                 </button>
-                                <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>
-                                  {g.sop || '—'}
-                                </span>
+                                {wide && (
+                                  <span style={{ ...tdCell, fontSize: 12.5, color: C.tl, lineHeight: 1.5 }}>
+                                    {g.sop || '—'}
+                                  </span>
+                                )}
                                 <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: wide ? 4 : 6, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
                                   <button
                                     type="button"
