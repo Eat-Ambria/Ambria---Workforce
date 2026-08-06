@@ -1,3 +1,20 @@
+# Build the app and publish it to the `gh-pages` branch.
+#
+# This used to go through actions/upload-pages-artifact + actions/deploy-pages,
+# which hands the build to GitHub's Pages deployment API and waits for it to
+# publish. That wait went from 8 seconds to minutes and then stopped completing
+# at all: runs #144-#147 all died on "Timeout reached, aborting!" with a 0.47 MB
+# artifact and a build that passed in 22 seconds every time. Worse, each timeout
+# left its deployment holding the Pages lock, so the NEXT run failed instantly
+# with "in progress deployment" until it was cancelled by hand.
+#
+# Branch-based publishing does not touch that API. The workflow pushes the built
+# files to a branch and GitHub serves them. Same URL, no queue to wait in.
+#
+# ONE-TIME SETUP, required before this works:
+#   Settings -> Pages -> Build and deployment -> Source: "Deploy from a branch"
+#   Branch: gh-pages   Folder: / (root)
+
 name: Deploy to GitHub Pages
 
 on:
@@ -6,23 +23,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write        # to push the gh-pages branch
 
 concurrency:
   group: pages
-  # NOT cancel-in-progress. Killing a run while actions/deploy-pages is waiting
-  # on GitHub can leave that deployment pending, and the next run then waits on
-  # the stuck one until it hits its own 10-minute timeout. Two pushes close
-  # together is all it takes. GitHub's own starter workflow sets this to false
-  # for the same reason; a queued deploy costs a minute, a wedged one costs ten.
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10          # it takes ~20s; anything near this is a hang
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,37 +52,29 @@ jobs:
           # work in production. Safe to expose (it ships in the client bundle).
           # Prefer a secret/variable; falls back to this literal if unset.
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || 'BMV038-UnoWkekRm7pIbko36dT0cuzlm1rbhz4tVj4FSYI_M1wtX_xVhfLlJi6y2NmMxyNdUWilmIXXFq2p22JE' }}
+
       # SPA fallback: GitHub Pages serves 404.html for unknown paths. Making it a
       # copy of index.html lets deep links (e.g. /fix-request) load the app so
       # React Router can handle the route instead of showing a 404.
       - run: cp dist/index.html dist/404.html
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    # comfortably above the action own 15-minute wait below, so the action gets
-    # to finish or report rather than being cut off mid-sentence by the runner
-    timeout-minutes: 20
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
-        with:
-          # Wait a long time on purpose. This step used to finish in under 20
-          # seconds; the publish queue for this repo now runs at 4-6 minutes
-          # (run #143 took 255s and succeeded, #146 was still going at 5m).
-          # The artifact has been 0.47 MB throughout, so the delay is GitHub's.
-          #
-          # Failing fast is the wrong instinct here: when this step gives up, the
-          # deployment it started keeps holding the Pages lock, and EVERY later
-          # run then dies on "in progress deployment" until someone clears it by
-          # hand. Waiting fifteen minutes costs wall-clock. Timing out costs a
-          # wedge. So: wait.
-          timeout: 900000
-          # ride out a transient error rather than failing the whole run on one
-          error_count: 10
+      # Without this, Pages runs the output through Jekyll, which silently drops
+      # files and folders whose names begin with an underscore.
+      - run: touch dist/.nojekyll
+
+      - name: Push dist to gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd dist
+          git init -q -b gh-pages
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "deploy ${GITHUB_SHA}"
+          # A fresh single-commit history every time, force-pushed. The branch is
+          # build output, not source: keeping its history would grow the repo by
+          # a full copy of the bundle on every deploy.
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo "Published ${GITHUB_SHA} to gh-pages"
