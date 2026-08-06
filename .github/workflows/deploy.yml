@@ -53,7 +53,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # comfortably above the action own 15-minute wait below, so the action gets
+    # to finish or report rather than being cut off mid-sentence by the runner
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -61,11 +63,16 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
         with:
-          # This step normally finishes in under 20 seconds. It has been seen at
-          # 255s and then hit the built-in 10-minute ceiling — with a 0.47 MB
-          # artifact each time, so that is GitHub's publish queue, not us.
-          # 5 minutes fails fast on a bad day, and re-running beats waiting out
-          # a ten-minute timeout.
-          timeout: 300000
+          # Wait a long time on purpose. This step used to finish in under 20
+          # seconds; the publish queue for this repo now runs at 4-6 minutes
+          # (run #143 took 255s and succeeded, #146 was still going at 5m).
+          # The artifact has been 0.47 MB throughout, so the delay is GitHub's.
+          #
+          # Failing fast is the wrong instinct here: when this step gives up, the
+          # deployment it started keeps holding the Pages lock, and EVERY later
+          # run then dies on "in progress deployment" until someone clears it by
+          # hand. Waiting fifteen minutes costs wall-clock. Timing out costs a
+          # wedge. So: wait.
+          timeout: 900000
           # ride out a transient error rather than failing the whole run on one
           error_count: 10
