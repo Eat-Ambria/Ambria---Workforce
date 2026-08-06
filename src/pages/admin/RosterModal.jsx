@@ -39,12 +39,16 @@ const draftSchedule = (d) => ({
 // the six columns people read stay exactly the six they are used to.
 // no FREQUENCY column: the band strip above each group states it once
 const COLS = '38px minmax(0,1.3fr) 116px 136px minmax(0,1.5fr) 96px'
+// same tracks with a checkbox in front — used only while picking, so the sheet
+// keeps its normal width the rest of the time
+const COLS_PICK = '34px 38px minmax(0,1.3fr) 116px 136px minmax(0,1.5fr) 96px'
 // Phone: no row number, no frequency column (it moves into the task cell), and
 // the task column pins to the left while the rest scrolls.
 // last column fits three 34px touch targets plus their gaps (34*3 + 6*2 = 114);
 // it was 92px, and the department card clips overflow, so the bin disappeared
 // phone: Task (with its SOP beneath) | Time | Assigned | actions
 const COLS_NARROW = '190px 104px 128px 118px'
+const COLS_NARROW_PICK = '34px 170px 104px 128px 118px'
 
 // The seven bands and the category/skip_sunday/week_day mapping live in
 // constants/org.js — the staff task list and the dashboard label tasks from the
@@ -102,12 +106,62 @@ const thCell = {
 }
 const tdCell = { padding: '12px 10px' }
 
-const HHMM = /(\d{1,2}:\d{2})/g
-const parseRange = (block) => {
-  const found = String(block || '').match(HHMM) || []
-  return { from: found[0] || '', to: found[1] || '' }
+// The sheet writes 12-hour times — "4:30-5:00 PM", "9:00 AM-5:00 PM" — while
+// <input type="time"> speaks 24-hour. Dropping the meridiem, as this used to,
+// turned the evening report into 4:30 in the morning. So: parse to 24-hour,
+// display back in 12-hour with AM/PM, which is what an admin reads anyway.
+const TIME_PART = /(\d{1,2}):(\d{2})\s*([AaPp][Mm]?)?/g
+
+const to24 = (hh, mm, mer) => {
+  let h = Number(hh)
+  if (mer) {
+    const pm = mer[0].toLowerCase() === 'p'
+    if (h === 12) h = pm ? 12 : 0        // 12 AM is midnight, 12 PM is noon
+    else if (pm) h += 12
+  }
+  return `${String(h).padStart(2, '0')}:${mm}`
 }
-const fmtRange = (from, to) => (from && to ? `${from} - ${to}` : (from || ''))
+
+const parseRange = (block) => {
+  const parts = [...String(block || '').matchAll(TIME_PART)]
+  if (!parts.length) return { from: '', to: '' }
+  // one meridiem written at the end governs both halves: "4:30-5:00 PM"
+  const trailing = parts.map((m) => m[3]).filter(Boolean).pop() || ''
+  const at = (i) => (parts[i] ? to24(parts[i][1], parts[i][2], parts[i][3] || trailing) : '')
+  let from = at(0)
+  const to = at(1)
+  // ...except where that reads backwards. "10:30-12:00 PM" is a morning round
+  // ending at noon, not a night one. Two rows in the seed depend on this.
+  if (from && to && from > to && !parts[0][3]) {
+    const h = Number(from.slice(0, 2))
+    from = `${String(h >= 12 ? h - 12 : h + 12).padStart(2, '0')}${from.slice(2)}`
+  }
+  return { from, to }
+}
+
+const fmt12 = (hhmm) => {
+  const h = Number(hhmm.slice(0, 2))
+  return `${h % 12 === 0 ? 12 : h % 12}:${hhmm.slice(3)} ${h >= 12 ? 'PM' : 'AM'}`
+}
+const fmtRange = (from, to) => (from && to ? `${fmt12(from)} - ${fmt12(to)}` : (from ? fmt12(from) : ''))
+
+// Quarter hours from 5am to 11pm. Every real time in the roster falls on one,
+// and the range covers a security shift at either end of the day.
+const TIME_SLOTS = (() => {
+  const out = []
+  for (let h = 5; h <= 23; h++) for (let m = 0; m < 60; m += 15) out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+  return out
+})()
+
+const minutesOf = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))
+const spanLabel = (from, to, t) => {
+  if (!from || !to) return ''
+  const n = minutesOf(to) - minutesOf(from)
+  if (n <= 0) return ''
+  const h = Math.floor(n / 60)
+  const m = n % 60
+  return [h ? `${h} ${t.hourShort}` : null, m ? `${m} ${t.minuteShort}` : null].filter(Boolean).join(' ')
+}
 // What the stored text becomes once it has been through the two time inputs.
 // The roster sheet writes "9:00-10:00 AM"; the inputs give back "9:00 - 10:00".
 // Comparing the new value against the RAW text called every row an edit, so a
@@ -162,9 +216,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [freqFilter, setFreqFilter] = useState('all')  // which frequency band is shown
   const [rows, setRows] = useState([])        // every task row for these venues
   const [groups, setGroups] = useState([])    // one per distinct job, with its chosen people
-  const [drafts, setDrafts] = useState([])    // brand-new tasks typed into the blank rows
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  // group keys ticked for bulk deletion; `picking` shows the checkbox column
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState(() => new Set())
   const [err, setErr] = useState('')
   const [deptTab, setDeptTab] = useState('all')       // which department's round is shown
   const [expandedKey, setExpandedKey] = useState(null) // row whose people picker is open
@@ -260,7 +316,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       ...parseRange(g.time_block),
       people: g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to),
     })))
-    setDrafts([])
     setLoading(false)
   }, [props])
 
@@ -275,6 +330,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // a new row states its own frequency now that the roster shows them all at once
     freq: freqFilter === 'all' ? 'daily' : freqFilter, monthWeek: '', sop: '', staffing: '',
     priority: 'medium', dueDate: '', weekDays: null,
+    // a common task ignores the property filter and lands at every venue
+    allProps: false,
   })
   const openEdit = (g) => setForm({
     mode: 'edit', key: g.key, dept: g.department || '',
@@ -285,34 +342,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     weekDays: g.weekDays || null,
   })
 
-  function applyForm(v) {
-    if (v.mode === 'draft') {
-      setDrafts((prev) => prev.map((d) => (d.key !== v.key ? d : {
-        ...d, title: v.title, titleHi: v.titleHi, from: v.from, to: v.to, weekDay: v.weekDay,
-        photoRequired: v.photoRequired, dept: v.dept, people: v.people,
-        freq: v.freq, monthWeek: v.monthWeek, sop: v.sop, staffing: v.staffing,
-        priority: v.priority, dueDate: v.dueDate,
-      })))
-      setForm(null)
+  // A new job is written now; an edit to an existing one still goes through the
+  // roster's Save with the rest of the pending changes. Different actions: one
+  // creates a thing, the other amends a sheet you are part-way through editing.
+  async function applyForm(v) {
+    if (v.mode === 'add') {
+      // the dialog stays open on failure, so nothing typed is lost
+      if (await createJob(v)) setForm(null)
       return
     }
-    if (v.mode === 'add') {
-      setDrafts((prev) => [...prev, {
-        key: `d${Date.now()}${prev.length}`,
-        title: v.title, titleHi: v.titleHi, from: v.from, to: v.to, weekDay: v.weekDay,
-        photoRequired: v.photoRequired, dept: v.dept, people: v.people,
-        freq: v.freq, monthWeek: v.monthWeek, sop: v.sop, staffing: v.staffing,
-        priority: v.priority, dueDate: v.dueDate, weekDays: v.weekDays,
-      }])
-    } else {
-      setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
-        ...g, title: v.title, title_hi: v.titleHi, from: v.from, to: v.to,
-        photoRequired: v.photoRequired, people: v.people,
-        sop: v.sop, staffing: v.staffing, monthWeek: v.monthWeek,
-        priority: v.priority, dueDate: v.dueDate, weekDays: v.weekDays,
-        ...freqSpec(v.freq, v.weekDay),
-      })))
-    }
+    setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
+      ...g, title: v.title, title_hi: v.titleHi, from: v.from, to: v.to,
+      photoRequired: v.photoRequired, people: v.people,
+      sop: v.sop, staffing: v.staffing, monthWeek: v.monthWeek,
+      priority: v.priority, dueDate: v.dueDate, weekDays: v.weekDays,
+      ...freqSpec(v.freq, v.weekDay),
+    })))
     setForm(null)
   }
 
@@ -417,6 +462,50 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     load()
   }
 
+  const togglePick = (key) => setPicked((prev) => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+
+  // Ticks are kept across filter changes, and resolved against the WHOLE roster:
+  // tick four rows, switch department, tick two more, delete six. Scoping this to
+  // shownGroups instead would silently drop the first four when the filter moved,
+  // and a selection that shrinks on its own is worse than one that persists.
+  // ("Select all" below is a different matter — that one only ever takes what is
+  // on screen.)
+  const pickedGroups = useMemo(
+    () => groups.filter((g) => picked.has(g.key)),
+    [groups, picked]
+  )
+  const pickedTaskCount = useMemo(
+    () => pickedGroups.reduce((n, g) => n + g.rows.length, 0),
+    [pickedGroups]
+  )
+  const allShownPicked = shownGroups.length > 0 && shownGroups.every((g) => picked.has(g.key))
+
+  // leaving selection mode must not leave a hidden selection armed
+  const stopPicking = () => { setPicking(false); setPicked(new Set()) }
+
+  async function deletePicked() {
+    if (!pickedGroups.length) return
+    const ok = await confirm({
+      message: t.deleteJobsConfirm.replace('{n}', pickedGroups.length).replace('{r}', pickedTaskCount),
+      detail: pickedGroups.slice(0, 6).map((g) => g.title).join(', ')
+        + (pickedGroups.length > 6 ? ` +${pickedGroups.length - 6}` : ''),
+      confirmLabel: t.delete,
+    })
+    if (!ok) return
+    setBusy(true); setErr('')
+    const ids = pickedGroups.flatMap((g) => g.rows.map((r) => r.id))
+    const { error } = await supabase.from('tasks').delete().in('id', ids)
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    stopPicking()
+    load()
+  }
+
   const togglePerson = (key, id) =>
     setGroups((prev) => prev.map((g) => (g.key !== key ? g : {
       ...g,
@@ -456,8 +545,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
   const dropCount = plan.reduce((n, x) => n + x.dropped.length, 0)
   const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped).length
-  const filledDrafts = drafts.filter((d) => d.title.trim())
-  const nothingToSave = addCount + dropCount + renameCount + filledDrafts.length === 0
+  const nothingToSave = addCount + dropCount + renameCount === 0
 
   async function save() {
     setBusy(true); setErr('')
@@ -558,7 +646,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // without the "other venues" switch. Dates are optional: no end date
       // means until further notice.
       const visitors = [...new Set(
-        plan.flatMap(({ added }) => added).concat(filledDrafts.flatMap((d) => d.people || []))
+        plan.flatMap(({ added }) => added)
       )].filter((id) => isVisiting(staff.find((m) => m.id === id)))
       if (visitors.length) {
         const rows = visitors.flatMap((id) => props.map((prop) => ({
@@ -575,50 +663,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           .upsert(rows, { onConflict: 'user_id,property,from_date' })
       }
 
-      // brand-new jobs typed into the blank rows — one task per chosen person,
-      // or a single unassigned row when nobody is picked yet
-      for (const d of filledDrafts) {
-        const title = d.title.trim()
-        const title_hi = (d.titleHi || '').trim() || await hiFor(title)
-        const people = d.people?.length ? d.people : [null]
-        // one row per person PER SELECTED VENUE
-        const combos = props.flatMap((prop) => people.map((id) => ({ prop, id })))
-        // the row states its own frequency; sunday-only becomes weekly on day 7
-        const spec = freqSpec(d.freq || 'daily', d.weekDay)
-        const inserts = combos.map(({ prop, id }) => {
-          const person = staff.find((m) => m.id === id)
-          return {
-            id: newId('t_'),
-            property: prop,
-            // the department the WORK belongs to, which is not always the
-            // department of whoever happens to be covering it
-            department: d.dept || person?.department || user.department || 'k',
-            category: spec.category,
-            title,
-            title_hi,
-            description: d.sop?.trim() || null,
-            staffing: d.staffing?.trim() || null,
-            time_block: fmtRange(d.from, d.to) || null,
-            photo_required: d.photoRequired !== false,
-            week_day: spec.category === 'weekly' ? Number(spec.weekDay || 1) : null,
-            week_days: spec.category === 'alternate' && d.weekDays?.length ? d.weekDays : null,
-            month_week: spec.category === 'monthly' && d.monthWeek ? Number(d.monthWeek) : null,
-            skip_sunday: !!spec.skipSunday,
-            priority: 'medium',
-            assigned_to: id || null,
-            assignee_name: person?.name || null,
-            status: TASK_STATUS.PENDING,
-            task_date: todayISO(),
-          }
-        })
-        const { error } = await supabase.from('tasks').insert(inserts)
-        if (error) throw error
-      }
-
       // Re-read from the database rather than trusting what is in memory: the
       // save has just rewritten these rows, and a stale count on the button is
       // how you end up saving the same change twice.
-      setDrafts([])
       setForm(null)
       setExpandedKey(null)
       await load()
@@ -631,11 +678,100 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     }
   }
 
-  const removeDraft = (key) => setDrafts((prev) => prev.filter((d) => d.key !== key))
+  // Writes one new job straight to the database — called from the Add dialog,
+  // not from save(). Creating is a complete action on its own; leaving it half
+  // done in a pending row is what made it look like it had failed.
+  async function createJob(d) {
+    setBusy(true); setErr('')
+    try {
+      const title = d.title.trim()
+      const title_hi = (d.titleHi || '').trim() || await hiFor(title)
+      // A common task goes everywhere; a normal one follows the sheet's filter.
+      const venues = d.allProps ? PROPERTIES.map((pp) => pp.code) : props
+      const chosen = d.people?.length ? d.people : []
+      const combos = venues.flatMap((prop) => {
+        if (!chosen.length) return [{ prop, id: null }]
+        // People belong to venues. Copying the whole picked list to all five
+        // would put a Pushpanjali gardener on the Restro round; each person
+        // only lands where they actually work. (Someone on 'all' — Sandeep —
+        // matches every venue, which is correct.)
+        const here = d.allProps
+          ? chosen.filter((id) => memberInProperty(staff.find((m) => m.id === id), prop))
+          : chosen
+        // no one picked for this venue: leave a row for its admin to fill,
+        // rather than skipping the venue and calling it common
+        return here.length ? here.map((id) => ({ prop, id })) : [{ prop, id: null }]
+      })
+      // the row states its own frequency; sunday-only becomes weekly on day 7
+      const spec = freqSpec(d.freq || 'daily', d.weekDay)
+      const inserts = combos.map(({ prop, id }) => {
+        const person = staff.find((m) => m.id === id)
+        return {
+          id: newId('t_'),
+          property: prop,
+          // the department the WORK belongs to, which is not always the
+          // department of whoever happens to be covering it
+          department: d.dept || person?.department || user.department || 'k',
+          category: spec.category,
+          title,
+          title_hi,
+          description: d.sop?.trim() || null,
+          staffing: d.staffing?.trim() || null,
+          time_block: fmtRange(d.from, d.to) || null,
+          photo_required: d.photoRequired !== false,
+          week_day: spec.category === 'weekly' ? Number(spec.weekDay || 1) : null,
+          week_days: spec.category === 'alternate' && d.weekDays?.length ? d.weekDays : null,
+          month_week: spec.category === 'monthly' && d.monthWeek ? Number(d.monthWeek) : null,
+          skip_sunday: !!spec.skipSunday,
+          priority: 'medium',
+          assigned_to: id || null,
+          assignee_name: person?.name || null,
+          status: TASK_STATUS.PENDING,
+          task_date: todayISO(),
+        }
+      })
+      const { error } = await supabase.from('tasks').insert(inserts)
+      if (error) throw error
+      await load()
+      setSaved(true)
+      onSaved?.()
+      return true
+    } catch (e) {
+      setErr(e.message || String(e))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
 
   // Discarding is not "close" when there is nothing to close: on the tab it
   // means throw away the unsaved edits and re-read the roster.
-  const discard = () => { setDrafts([]); setForm(null); setExpandedKey(null); load() }
+  const discard = () => { setForm(null); setExpandedKey(null); load() }
+
+  // one source of truth for the row tracks, so a checkbox column can never
+  // appear in the header and not in the rows
+  const gridCols = picking
+    ? (wide ? COLS_PICK : COLS_NARROW_PICK)
+    : (wide ? COLS : COLS_NARROW)
+
+  // Replaces the save footer while picking. Two bars stacked would put Save and
+  // "Delete selected" side by side, and they are not the same kind of action.
+  const pickBar = (
+    <>
+      <Button variant="ghost" onClick={stopPicking} style={{ flex: 1 }}>{t.cancel}</Button>
+      <Button
+        variant="danger"
+        onClick={deletePicked}
+        disabled={busy || pickedGroups.length === 0}
+        style={{ flex: 2 }}
+      >
+        <Icon name="trash" size={15} color="#fff" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+        {pickedGroups.length === 0
+          ? t.deleteSelected
+          : `${t.deleteSelected} (${pickedGroups.length})`}
+      </Button>
+    </>
+  )
 
   const footer = (
     <>
@@ -643,7 +779,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         {inline ? t.discardChanges : t.cancel}
       </Button>
       <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
-        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + filledDrafts.length})`}
+        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount})`}
       </Button>
     </>
   )
@@ -780,6 +916,24 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Off by default: this sheet is read far more than it is pruned, and a
+              standing column of checkboxes beside a delete icon invites a slip. */}
+          <button
+            type="button"
+            onClick={() => (picking ? stopPicking() : setPicking(true))}
+            aria-pressed={picking}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '8px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+              background: picking ? C.maroon : C.card,
+              color: picking ? '#fff' : C.tl,
+              border: `1px solid ${picking ? C.maroon : C.borderStrong}`,
+              cursor: 'pointer',
+            }}
+          >
+            <Icon name={picking ? 'close' : 'check'} size={14} color={picking ? '#fff' : C.tl} />
+            {picking ? t.cancel : t.selectRows}
+          </button>
           {canSeeAllProps && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: wide ? '1 1 190px' : '1 1 100%', minWidth: 0 }}>
               <Icon name="pin" size={15} color={C.tl} />
@@ -841,84 +995,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
       {loading ? <Loader label={t.loading} /> : (
         <>
-          {shownGroups.length === 0 && drafts.length === 0 ? (
+          {shownGroups.length === 0 ? (
             <div style={{ fontSize: 13.5, color: C.tl, padding: '14px 2px' }}>{t.rosterEmpty}</div>
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
-              {/* blank rows for work that isn't in the list yet */}
-              {/* Rows added but not saved yet. Read-only here — the form is where
-                  they are edited — so a pending row looks like a real one and the
-                  table stays scannable. */}
-              {drafts.map((d) => {
-                const f = FREQ_MAP[d.freq || 'daily'] || FREQ_MAP.daily
-                const dWhen = scheduleText(draftSchedule(d), lang)
-                return (
-                  <div
-                    key={d.key}
-                    style={{
-                      border: `1px dashed ${C.maroon}`, borderRadius: 10, background: C.card,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, alignItems: 'start' }}>
-                      {wide && <span style={{ ...tdCell, color: C.maroon, fontWeight: 800, textAlign: 'center' }}>+</span>}
-                      {wide && (
-                        <span style={{ ...tdCell, fontSize: 11, fontWeight: 800, color: f.ink, textTransform: 'uppercase' }}>
-                          {freqLabel(d.freq || 'daily', lang)}
-                        </span>
-                      )}
-                      <div style={{ ...tdCell, minWidth: 0, ...(wide ? null : stickyCell(C.card)) }}>
-                        {!wide && (
-                          <div style={{ fontSize: 9.5, fontWeight: 800, color: f.ink, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
-                            {freqLabel(d.freq || 'daily', lang)}
-                          </div>
-                        )}
-                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>{d.title}</div>
-                        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', fontSize: 11, marginTop: 2 }}>
-                          <span style={{ color: C.maroon, fontWeight: 700 }}>{t.notSavedYet}</span>
-                          {d.dept && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.tl }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: DEPARTMENT_MAP[d.dept]?.color || C.tl }} />
-                              {deptName(d.dept, lang)}
-                            </span>
-                          )}
-                          {props.length > 1 && <span style={{ color: C.tl }}>{t.createdInProperties.replace('{n}', props.length)}</span>}
-                        </div>
-                      </div>
-                      <span style={{ ...tdCell, fontSize: 11.5, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.4 }}>
-                        {dWhen && <span style={{ display: 'block', fontWeight: 800, color: f.ink }}>{dWhen}</span>}
-                        <span style={{ display: 'block', color: dWhen ? C.tl : C.text }}>{fmtRange(d.from, d.to) || '—'}</span>
-                      </span>
-                      <div style={{ ...tdCell, minWidth: 0 }}>
-                        {d.staffing && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: C.text }}>{staffingLabel(d.staffing, lang)}</span>}
-                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: d.people?.length ? C.maroon : C.faint, overflowWrap: 'anywhere' }}>
-                          {d.people?.length
-                            ? d.people.map((id) => personName(staff.find((m) => m.id === id) || {}, lang)).filter(Boolean).join(', ')
-                            : t.unassigned}
-                        </span>
-                      </div>
-                      {wide && <span style={{ ...tdCell, fontSize: 11, color: C.tl, lineHeight: 1.45 }}>{d.sop || '—'}</span>}
-                      <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: wide ? 4 : 6, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
-                        <span title={`${t.photoRequired}: ${d.photoRequired !== false ? t.yes : t.no}`} style={tapTarget}>
-                          <Icon name={d.photoRequired !== false ? 'camera' : 'cameraOff'} size={iconSize} color={d.photoRequired !== false ? C.maroon : C.faint} />
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setForm({ mode: 'draft', ...d })}
-                          title={t.edit} aria-label={t.edit}
-                          style={tapTarget}
-                        >
-                          <Icon name="edit" size={iconSize} color={C.tl} />
-                        </button>
-                        <button type="button" onClick={() => removeDraft(d.key)} title={t.delete} aria-label={t.delete} style={tapTarget}>
-                          <Icon name="close" size={iconSize + 1} color={C.tl} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-
               {/* The Master Task List, in the sheet's shape: a coloured band per
                   department, and inside it one numbered block per frequency with
                   its own header row. The six columns are the sheet's six —
@@ -939,7 +1019,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
                   {/* One header row for the whole department. It used to repeat
                       per band, which put two of them on screen at once. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: gridCols, background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
+                    {picking && (
+                      <span style={{ ...thCell, display: 'grid', placeItems: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={allShownPicked}
+                          onChange={() => setPicked((prev) => {
+                            const next = new Set(prev)
+                            shownGroups.forEach((g) => (allShownPicked ? next.delete(g.key) : next.add(g.key)))
+                            return next
+                          })}
+                          aria-label={t.selectAllShown}
+                          style={{ width: 16, height: 16, accentColor: C.maroon, cursor: 'pointer' }}
+                        />
+                      </span>
+                    )}
                     {wide && <span style={thCell}>#</span>}
                     <span style={{ ...thCell, ...(wide ? null : stickyCell(C.cardAlt)) }}>{t.task}</span>
                     <span style={thCell}>{t.time}</span>
@@ -996,7 +1091,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           const clock = fmtRange(g.from, g.to)
                           return (
                             <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card), boxShadow: `inset 3px 0 0 ${f.ink}` }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: wide ? COLS : COLS_NARROW, alignItems: 'start' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'start' }}>
+                                {picking && (
+                                  <span
+                                    style={{ ...tdCell, display: 'grid', placeItems: 'center' }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={picked.has(g.key)}
+                                      onChange={() => togglePick(g.key)}
+                                      aria-label={g.title}
+                                      style={{ width: 16, height: 16, accentColor: C.maroon, cursor: 'pointer' }}
+                                    />
+                                  </span>
+                                )}
                                 {wide && (
                                   <span style={{ ...tdCell, color: C.faint, fontWeight: 600, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
                                     {startNo + i + 1}
@@ -1138,6 +1247,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               onChange={setForm}
               onCancel={() => setForm(null)}
               onSubmit={applyForm}
+              busy={busy}
             />
           )}
 
@@ -1162,14 +1272,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             background: C.bg, borderTop: `1px solid ${C.border}`,
           }}
         >
-          {footer}
+          {picking ? pickBar : footer}
         </div>
       </div>
     )
   }
 
   return (
-    <Modal open onClose={onClose} maxWidth={1240} title={t.roster} footer={footer}>
+    <Modal open onClose={onClose} maxWidth={1240} title={t.roster} footer={picking ? pickBar : footer}>
       {body}
       {saved && <Toast message={t.changesSaved} onDone={() => setSaved(false)} />}
     </Modal>
@@ -1260,11 +1370,30 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   )
 }
 
+// A time as one tap. `after` drops everything at or before the start, so an end
+// time can never land before its beginning — the old inputs let you type one.
+function TimeSelect({ C, t, value, after, onChange }) {
+  const slots = useMemo(() => {
+    const list = after ? TIME_SLOTS.filter((x) => x > after) : TIME_SLOTS
+    // A row saved with the old free-typed picker can hold 09:34, which is on no
+    // quarter hour. Keep it in the list or opening the form would silently
+    // change the time to blank.
+    return value && !list.includes(value) ? [...list, value].sort() : list
+  }, [value, after])
+
+  return (
+    <select style={inputStyle(C)} value={value || ''} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{t.pickTime}</option>
+      {slots.map((x) => <option key={x} value={x}>{fmt12(x)}</option>)}
+    </select>
+  )
+}
+
 // One row's worth of fields, as a small form. Used for both adding a job and
 // editing one — the same shape either way, so there is nothing new to learn the
 // second time. Nothing is written here: it hands the values back and the roster's
 // Save applies them with everything else.
-function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
+function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -1280,7 +1409,7 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
       footer={(
         <>
           <Button variant="ghost" onClick={onCancel} style={{ flex: 1 }}>{t.cancel}</Button>
-          <Button variant="primary" onClick={() => onSubmit(value)} disabled={!valid} style={{ flex: 2 }}>
+          <Button variant="primary" onClick={() => onSubmit(value)} disabled={!valid || busy} style={{ flex: 2 }}>
             {value.mode === 'add' ? t.addTaskRow : t.save}
           </Button>
         </>
@@ -1314,6 +1443,39 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
         </select>
       </Field>
 
+      {/* Only on a new job. Editing one changes the rows that already exist;
+          it cannot retro-fit copies at venues that never had it, and a switch
+          that silently does nothing is worse than no switch. */}
+      {value.mode === 'add' && (
+        <Field label={t.commonTask} hint={t.commonTaskHint.replace('{n}', PROPERTIES.length)}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { on: false, label: t.thisVenueOnly },
+              { on: true, label: t.commonTaskOn },
+            ].map((opt) => {
+              const active = !!value.allProps === opt.on
+              return (
+                <button
+                  key={String(opt.on)}
+                  type="button"
+                  onClick={() => set({ allProps: opt.on })}
+                  aria-pressed={active}
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                    fontSize: 13.5, fontWeight: 700,
+                    background: active ? C.maroonSoft : C.card,
+                    color: active ? C.maroon : C.tl,
+                    border: `1.5px solid ${active ? C.maroon : C.border}`,
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+      )}
+
       {/* Frequency first: it decides whether a day, a week of the month, or
           neither is worth asking for. "(Mon-Sat)" is the Sunday rule; "Sunday
           only" is the light work done while clients walk the property. */}
@@ -1326,12 +1488,20 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 140px' }}>
           <Field label={`${t.fromTime} (${t.optional})`}>
-            <input type="time" style={inputStyle(C)} value={value.from} onChange={(e) => set({ from: e.target.value })} />
+            <TimeSelect
+              C={C} t={t}
+              value={value.from}
+              // moving the start past the end would leave a negative block
+              onChange={(v) => set({ from: v, to: value.to && v && v >= value.to ? '' : value.to })}
+            />
           </Field>
         </div>
         <div style={{ flex: '1 1 140px' }}>
-          <Field label={`${t.toTime} (${t.optional})`}>
-            <input type="time" style={inputStyle(C)} min={value.from} value={value.to} onChange={(e) => set({ to: e.target.value })} />
+          <Field
+            label={`${t.toTime} (${t.optional})`}
+            hint={spanLabel(value.from, value.to, t) ? `${t.blockLength}: ${spanLabel(value.from, value.to, t)}` : undefined}
+          >
+            <TimeSelect C={C} t={t} value={value.to} after={value.from} onChange={(v) => set({ to: v })} />
           </Field>
         </div>
       </div>
@@ -1442,7 +1612,7 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
       </Field>
 
       {/* the same searchable picker as the table rows — one list, one behaviour */}
-      <Field label={`${t.assignedTo} (${t.optional})`}>
+      <Field label={`${t.assignedTo} (${t.optional})`} hint={value.allProps ? t.commonTaskAssignHint : undefined}>
         <PeoplePicker
           C={C} t={t} lang={lang} staff={staff}
           chosen={value.people}

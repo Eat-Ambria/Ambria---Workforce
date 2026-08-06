@@ -16,6 +16,7 @@ export default function Vendors() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all') // all | fixed | new
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(null)  // vendor open for editing
 
@@ -27,11 +28,31 @@ export default function Vendors() {
 
   useEffect(() => { load() }, [load])
 
-  const visible = useMemo(() => {
+  // Counts come from the same array the list is built from. Deriving a count
+  // from `rows` next to a list built from `visible` is how a chip ends up
+  // claiming 5 above a list of 2.
+  const searched = useMemo(() => {
     const s = search.trim().toLowerCase()
     if (!s) return rows
     return rows.filter((r) => [r.name, r.company, r.category, r.phone].filter(Boolean).some((f) => f.toLowerCase().includes(s)))
   }, [rows, search])
+
+  const visible = useMemo(() => {
+    const list = typeFilter === 'all' ? searched : searched.filter((r) => vendorType(r) === typeFilter)
+    // fixed first — a directory that buries the default vendor is not answering
+    // the question it exists to answer
+    return [...list].sort((a, b) => {
+      const av = vendorType(a) === 'fixed' ? 0 : 1
+      const bv = vendorType(b) === 'fixed' ? 0 : 1
+      return av - bv || (a.name || '').localeCompare(b.name || '')
+    })
+  }, [searched, typeFilter])
+
+  const counts = useMemo(() => ({
+    all: searched.length,
+    fixed: searched.filter((r) => vendorType(r) === 'fixed').length,
+    new: searched.filter((r) => vendorType(r) === 'new').length,
+  }), [searched])
 
   if (loading) return <Loader label={t.loading} />
 
@@ -46,17 +67,61 @@ export default function Vendors() {
         <input style={{ ...inputStyle(C), paddingLeft: 40 }} placeholder={t.search} value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        {[
+          { key: 'all', label: t.all, n: counts.all },
+          { key: 'fixed', label: t.vendorFixed, n: counts.fixed },
+          { key: 'new', label: t.vendorNew, n: counts.new },
+        ].map((f) => {
+          const on = typeFilter === f.key
+          return (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setTypeFilter(f.key)}
+              aria-pressed={on}
+              style={{
+                padding: '8px 15px', borderRadius: 999, fontSize: 13.5, fontWeight: 700,
+                background: on ? C.maroon : C.card,
+                color: on ? '#fff' : C.tl,
+                border: `1px solid ${on ? C.maroon : C.border}`,
+                cursor: 'pointer',
+              }}
+            >
+              {f.label} ({f.n})
+            </button>
+          )
+        })}
+      </div>
+
       {visible.length === 0 ? <EmptyState icon={null} title={t.noData} /> : (
         <div style={{ display: 'grid', gap: 10 }}>
           {visible.map((v) => (
-            <Card key={v.id} onClick={() => setEditing(v)} style={{ cursor: 'pointer' }}>
+            <Card
+              key={v.id}
+              onClick={() => setEditing(v)}
+              style={{
+                cursor: 'pointer',
+                // the accent bar below is positioned against this, and clipped
+                // by the card's own 14px radius so it ends square, not curved
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {vendorType(v) === 'fixed' && (
+                <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: C.maroon }} />
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700 }}>{v.name}</div>
-                  <div style={{ fontSize: 13, color: C.tl }}>{v.category}{v.company ? ` · ${v.company}` : ''}</div>
-                  <div style={{ fontSize: 13, color: C.tl }}>{v.phone}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
+                  <div style={{ fontSize: 13, color: C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.category}{v.company ? ` · ${v.company}` : ''}</div>
+                  <div style={{ fontSize: 13, color: C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.phone}</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {/* The badge rides with the buttons rather than the name: it is
+                    one right-hand group, centred as a unit, so the badge sits on
+                    the buttons' line and on the same x on every card. */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                  <TypeBadge C={C} t={t} type={vendorType(v)} />
                   {/* stopPropagation: calling someone must never open the editor */}
                   <a href={`tel:${v.phone}`} onClick={(e) => e.stopPropagation()} style={iconLink(C, C.green)} aria-label={t.call}><Icon name="phone" size={18} color="#fff" /></a>
                   <a href={`https://wa.me/${(v.phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={iconLink(C, '#25D366')} aria-label={t.whatsapp}>
@@ -93,6 +158,33 @@ export default function Vendors() {
 
 const iconLink = (C, bg) => ({ width: 38, height: 38, borderRadius: 10, background: bg, display: 'grid', placeItems: 'center' })
 
+// Rows written before the column existed read as 'new' from the DB default, but
+// the migration backfills them to 'fixed'. This guard is for the gap between
+// deploying the app and running the SQL — without it every vendor silently
+// becomes "New" for however long that takes.
+const vendorType = (v) => (v?.vendor_type === 'fixed' ? 'fixed' : 'new')
+
+// Filled versus outlined, not two colours: "which one do I call" has to survive
+// a colour-blind eye and a phone in sunlight.
+function TypeBadge({ C, t, type }) {
+  const fixed = type === 'fixed'
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '2px 9px', borderRadius: 999,
+        fontSize: 11.5, fontWeight: 800, letterSpacing: '0.03em',
+        background: fixed ? C.maroon : 'transparent',
+        color: fixed ? '#fff' : C.tl,
+        border: `1px solid ${fixed ? C.maroon : C.borderStrong}`,
+      }}
+    >
+      {fixed && <Icon name="check" size={12} color="#fff" />}
+      {fixed ? t.vendorFixed : t.vendorNew}
+    </span>
+  )
+}
+
 function VendorModal({ user, record, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
@@ -104,6 +196,7 @@ function VendorModal({ user, record, onClose, onSaved }) {
     phone: record?.phone || '',
     category: record?.category || '',
     notes: record?.notes || '',
+    vendorType: record ? vendorType(record) : 'new',
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -117,6 +210,7 @@ function VendorModal({ user, record, onClose, onSaved }) {
     const payload = {
       name: form.name.trim(), company: form.company || null, phone: form.phone.trim(),
       category: form.category.trim(), notes: form.notes || null,
+      vendor_type: form.vendorType,
     }
     const { error } = editing
       ? await supabase.from('vendors').update(payload).eq('id', record.id)
@@ -151,6 +245,45 @@ function VendorModal({ user, record, onClose, onSaved }) {
       <Field label={t.fullName}><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
       <Field label={t.phone}><input style={inputStyle(C)} value={form.phone} type="tel" inputMode="numeric" maxLength={10} placeholder={t.phonePlaceholder} onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))} /></Field>
       <Field label={t.category}><input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder="e.g. Electrician, Florist" /></Field>
+      <Field label={t.vendorType}>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {[
+            { key: 'fixed', label: t.vendorFixed, hint: t.vendorFixedHint },
+            { key: 'new', label: t.vendorNew, hint: t.vendorNewHint },
+          ].map((opt) => {
+            const on = form.vendorType === opt.key
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, vendorType: opt.key }))}
+                aria-pressed={on}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left',
+                  padding: '11px 13px', borderRadius: 10, cursor: 'pointer',
+                  background: on ? C.maroonSoft : C.card,
+                  border: `1.5px solid ${on ? C.maroon : C.border}`,
+                }}
+              >
+                <span
+                  style={{
+                    width: 17, height: 17, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                    border: `2px solid ${on ? C.maroon : C.borderStrong}`,
+                    background: on ? C.maroon : 'transparent',
+                    display: 'grid', placeItems: 'center',
+                  }}
+                >
+                  {on && <Icon name="check" size={11} color="#fff" />}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: on ? C.maroon : C.text }}>{opt.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: C.tl, marginTop: 1 }}>{opt.hint}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </Field>
       <Field label={`${t.company} (${t.optional})`}><input style={inputStyle(C)} value={form.company} onChange={set('company')} /></Field>
       <Field label={`${t.notes} (${t.optional})`}>
         <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.notes} onChange={set('notes')} />

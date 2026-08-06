@@ -3,9 +3,11 @@ import { supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
-import { PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName, DEPARTMENTS, deptName, personName } from '../constants/org'
+import { assigneesQuery } from '../lib/assignees'
 import { hindiFor } from '../lib/translate'
-import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs } from '../components/common/UI'
+import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs, Field } from '../components/common/UI'
+import HindiInput from '../components/common/HindiInput'
 import PhotoCapture from '../components/common/PhotoCapture'
 import VoiceRecorder from '../components/common/VoiceRecorder'
 import Icon from '../components/common/Icon'
@@ -261,45 +263,87 @@ function RequestCard({ C, hi, r, isMine }) {
 // ---- the Add Request form (name + phone required, phone capped at 10 digits) ----
 function RequestForm({ C, hi, onBack, onSubmitted }) {
   const lang = hi ? 'hi' : 'en'
-  const [form, setForm] = useState({ name: '', phone: '', property: 'pp', location: '', issue: '', category: 'other' })
+  const [form, setForm] = useState({
+    name: '', phone: '', property: 'pp', location: '',
+    title: '', titleHi: '', issue: '', descHi: '', category: 'other',
+    department: '', assignee: '',
+  })
+  const [people, setPeople] = useState([])
   const [photos, setPhotos] = useState([])
   const [voice, setVoice] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
+  // Loaded once and filtered in the browser: switching department should not
+  // cost a round trip on a phone at the gate.
+  useEffect(() => { assigneesQuery().then(({ data }) => setPeople(data || [])) }, [])
+
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  // By department, not by venue. The venue is already on the request; who fixes
+  // a broken pipe is a trade, and the plumber may well be based elsewhere.
+  const inDept = useMemo(
+    () => (form.department ? people.filter((m) => m.department === form.department) : []),
+    [people, form.department]
+  )
+
+  // Changing department must not leave the previous person selected — that is
+  // how a request ends up assigned to someone the picker no longer even lists.
+  const setDept = (e) => setForm((f) => ({ ...f, department: e.target.value, assignee: '' }))
+
+  // A kitchen fault is a kitchen job. Pre-fill it rather than making the visitor
+  // say the same thing twice; they can still change it.
+  const setCategory = (e) => setForm((f) => ({
+    ...f,
+    category: e.target.value,
+    ...(e.target.value === 'kitchen' && !f.department ? { department: 'kt', assignee: '' } : null),
+  }))
   // phone: keep digits only, never longer than 10
   const setPhone = (e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))
 
-  // a voice note counts as describing the problem, so typing is not required
-  const canSubmit = !!form.name.trim() && form.phone.length === 10 && (!!form.issue.trim() || !!voice) && !busy
+  // The title is what the request IS; the description only elaborates. That
+  // matches the admin form, where the description is optional too.
+  const canSubmit = !!form.name.trim() && form.phone.length === 10 && !!form.title.trim() && !busy
 
   async function onSubmit(e) {
     e.preventDefault()
     if (!form.name.trim()) { setError(hi ? 'नाम भरना ज़रूरी है।' : 'Name is required.'); return }
     if (form.phone.length !== 10) { setError(hi ? 'फ़ोन नंबर 10 अंकों का होना चाहिए।' : 'Phone number must be exactly 10 digits.'); return }
-    if (!form.issue.trim()) { setError(hi ? 'समस्या बताना ज़रूरी है।' : 'Please describe the issue.'); return }
+    if (!form.title.trim()) { setError(hi ? 'शीर्षक भरना ज़रूरी है।' : 'A title is required.'); return }
 
     setBusy(true); setError('')
     const issue = form.issue.trim()
     // the same block in either language — the labels are ours, only the reported
     // text has to be translated
+    // the description is optional now, so it must not leave a blank first line
     const block = (issueText, inHindi) => [
-      issueText, '',
+      issueText ? issueText : null,
+      issueText ? '' : null,
       inHindi ? '— सार्वजनिक लिंक से भेजा गया —' : '— Reported via public link —',
       `${inHindi ? 'नाम' : 'Name'}: ${form.name.trim()}`,
       `${inHindi ? 'फ़ोन' : 'Phone'}: ${form.phone}`,
       form.location.trim() ? `${inHindi ? 'स्थान' : 'Location'}: ${form.location.trim()}` : null,
     ].filter((l) => l !== null).join('\n')
     const description = block(issue, hi)
-    const title = issue.split('\n')[0].slice(0, 70) + (issue.length > 70 ? '…' : '')
+    const title = form.title.trim()
+    // resolved from the loaded list, never trusted from the select's value alone
+    const assignee = inDept.find((m) => m.id === form.assignee) || null
 
-    // A visitor writing in English leaves the venue's Hindi-reading staff with
-    // an English request. Translate it for them. Someone who filled the form in
-    // Hindi needs nothing: hindiFor leaves Devanagari alone and the English
-    // columns already hold the Hindi text.
-    const { hi: title_hi, hiDesc } = await hindiFor(title, issue)
+    // Whatever the reporter left in the Hindi boxes wins — those boxes show the
+    // machine's attempt and let it be corrected, so overwriting it here would
+    // throw away the only human judgement in the loop. Only what is still blank
+    // gets translated. (hindiFor leaves Devanagari alone, so a form filled in
+    // Hindi needs nothing either way.)
+    const typedTitleHi = form.titleHi.trim()
+    const typedDescHi = form.descHi.trim()
+    let title_hi = typedTitleHi
+    let hiDesc = typedDescHi
+    if (!title_hi || (issue && !hiDesc)) {
+      const auto = await hindiFor(title, issue)
+      title_hi = title_hi || auto.hi
+      hiDesc = hiDesc || auto.hiDesc
+    }
 
     const { data, error: err } = await supabase.from('work_board').insert({
       title,
@@ -308,12 +352,19 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       description_hi: hiDesc ? block(hiDesc, true) : null,
       category: form.category || 'other',
       property: form.property,
+      // Without this a department-scoped admin never sees the request: the board
+      // filters on department and a NULL matches nothing.
+      department: form.department || null,
       posted_by: 'public',
       posted_by_name: `${form.name.trim()} · ${hi ? 'बाहरी' : 'External'}`,
       priority: 'normal',
       photos,
       voice_url: voice || null,
-      status: 'open',
+      assigned_to: assignee?.id || null,
+      assigned_to_name: assignee?.name || null,
+      // naming someone at submit skips the open -> assigned hop, same as the
+      // admin form does
+      status: assignee ? 'assigned' : 'open',
     }).select('id').single()
 
     setBusy(false)
@@ -383,15 +434,66 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
         </select>
       </div>
 
+      {/* Same two fields the admin form opens with. The title used to be sliced
+          off the first line of the description, which produced titles cut
+          mid-word; and the Hindi was generated at submit where nobody could see
+          it, let alone fix it. */}
+      <Field label={hi ? 'शीर्षक' : 'Title'} required>
+        <input
+          style={inputStyle(C)}
+          value={form.title}
+          onChange={set('title')}
+          placeholder={hi ? 'जैसे: गेट 2 की लाइट खराब' : 'e.g. Gate 2 light not working'}
+        />
+      </Field>
+
+      <HindiInput
+        label={hi ? 'शीर्षक हिंदी में' : 'Title in Hindi'}
+        hint={hi ? 'स्टाफ यही पढ़ता है। अनुवाद गलत हो तो ठीक कर दें।' : 'This is what the staff read. Correct it if the translation is off.'}
+        source={form.title}
+        value={form.titleHi}
+        onChange={(v) => setForm((f) => ({ ...f, titleHi: v }))}
+      />
+
       {/* Kitchen faults go to a different person, so the visitor says which
           kind it is rather than an admin guessing from the description. */}
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'किस चीज़ की मरम्मत?' : 'What kind of repair?'}</label>
-        <select style={inputStyle(C)} value={form.category} onChange={set('category')}>
+        <select style={inputStyle(C)} value={form.category} onChange={setCategory}>
           <option value="other">{hi ? 'सामान्य मरम्मत' : 'General repair'}</option>
           <option value="kitchen">{hi ? 'रसोई / किचन' : 'Kitchen'}</option>
         </select>
       </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={fieldLabel}>{hi ? 'किस डिपार्टमेंट का काम?' : 'Which department?'}</label>
+        <select style={inputStyle(C)} value={form.department} onChange={setDept}>
+          <option value="">{hi ? '— चुनें (वैकल्पिक) —' : '— Select (optional) —'}</option>
+          {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
+        </select>
+        <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
+          {hi
+            ? 'इससे तय होता है कि किस डिपार्टमेंट का एडमिन यह अनुरोध देखेगा।'
+            : 'This decides which department\u2019s admin sees the request.'}
+        </span>
+      </div>
+
+      {/* Only once a department is chosen — a list of every member of staff is
+          not a choice, it is a scroll. */}
+      {form.department && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={fieldLabel}>{hi ? 'किसे सौंपें (वैकल्पिक)' : 'Assign to (optional)'}</label>
+          <select style={inputStyle(C)} value={form.assignee} onChange={set('assignee')}>
+            <option value="">{hi ? '— कोई नहीं, एडमिन तय करेगा —' : '\u2014 Leave it to the admin \u2014'}</option>
+            {inDept.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
+          </select>
+          <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
+            {inDept.length === 0
+              ? (hi ? 'इस डिपार्टमेंट में अभी कोई नहीं है।' : 'Nobody is in this department yet.')
+              : (hi ? 'जगह से नहीं, डिपार्टमेंट से नाम दिख रहे हैं।' : 'Names are listed by department, not by venue.')}
+          </span>
+        </div>
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'जगह / एरिया (कहाँ है समस्या?)' : 'Location / area (where is it?)'}</label>
@@ -402,9 +504,20 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'समस्या बताएँ' : 'Describe the issue'} <span style={{ color: C.red }}>*</span></label>
+        <label style={fieldLabel}>{hi ? 'ब्यौरा (वैकल्पिक)' : 'Description (optional)'}</label>
         <textarea rows={4} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.issue} onChange={set('issue')} placeholder={hi ? 'क्या ठीक करना है?' : 'What needs to be fixed?'} />
       </div>
+
+      {/* only worth showing once there is something to translate */}
+      {form.issue.trim() && (
+        <HindiInput
+          label={hi ? 'ब्यौरा हिंदी में' : 'Description in Hindi'}
+          rows={3}
+          source={form.issue}
+          value={form.descHi}
+          onChange={(v) => setForm((f) => ({ ...f, descHi: v }))}
+        />
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'या बोलकर बताएँ (वैकल्पिक)' : 'Or record it instead (optional)'}</label>
