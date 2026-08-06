@@ -1,0 +1,56 @@
+# Cancel a Pages deployment that GitHub has left "in progress".
+#
+# When actions/deploy-pages gives up waiting, the deployment it started keeps
+# holding the lock on its own. Every later run then fails with:
+#
+#   Deployment request failed for <new sha> due to in progress deployment.
+#   Please cancel <old sha> first or wait for it to complete.
+#
+# Waiting does not reliably clear it. The documented fix is the Pages cancel
+# endpoint, which needs `pages: write` — and the workflow's own GITHUB_TOKEN can
+# be granted exactly that, so no personal access token is involved.
+#
+# Run it from: Actions -> Unstick Pages -> Run workflow -> paste the SHA the
+# error names. Then re-run the deploy that failed.
+
+name: Unstick Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full commit SHA of the stuck deployment (the one the error says to cancel)'
+        required: true
+        type: string
+
+permissions:
+  pages: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel the stuck deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          echo "Cancelling Pages deployment $SHA in $REPO"
+          # -w writes the status code on its own line after the body, so a
+          # silent 404/403 cannot pass for success
+          code=$(curl -sS -o /tmp/out.txt -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$REPO/pages/deployments/$SHA/cancel")
+          echo "HTTP $code"
+          cat /tmp/out.txt
+          echo
+          case "$code" in
+            20*) echo "Cancelled. Re-run the deploy that was blocked." ;;
+            404) echo "No deployment found for that SHA — check you pasted the full 40-character SHA."; exit 1 ;;
+            *)   echo "Cancel refused."; exit 1 ;;
+          esac
