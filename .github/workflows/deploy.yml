@@ -12,11 +12,17 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # NOT cancel-in-progress. Killing a run while actions/deploy-pages is waiting
+  # on GitHub can leave that deployment pending, and the next run then waits on
+  # the stuck one until it hits its own 10-minute timeout. Two pushes close
+  # together is all it takes. GitHub's own starter workflow sets this to false
+  # for the same reason; a queued deploy costs a minute, a wedged one costs ten.
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10          # it takes ~20s; anything near this is a hang
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,9 +53,19 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # This step normally finishes in under 20 seconds. It has been seen at
+          # 255s and then hit the built-in 10-minute ceiling — with a 0.47 MB
+          # artifact each time, so that is GitHub's publish queue, not us.
+          # 5 minutes fails fast on a bad day, and re-running beats waiting out
+          # a ten-minute timeout.
+          timeout: 300000
+          # ride out a transient error rather than failing the whole run on one
+          error_count: 10
