@@ -6,7 +6,7 @@ import { statusColors } from '../../constants/status'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
-  MEASURED_ROLES, roleTag, isAdminRole, canSeeAllProperties, scopedDepartment, DEPARTMENTS,
+  MEASURED_ROLES, roleTag, expectedOccurrences, isAdminRole, canSeeAllProperties, scopedDepartment, DEPARTMENTS,
   PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName, TASK_STATUS,
   FREQUENCY_MAP, frequencyLabel, dayName,
 } from '../../constants/org'
@@ -15,6 +15,7 @@ import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { pct, fmtDur, avgOf, sumBy, rateTone } from './analyticsUtils'
 import { Headline, StatusChip, MetricGuide } from './AnalyticsParts'
+import MissedWork from './MissedWork'
 
 // --- period windows ----------------------------------------------------------
 // All windows are half-open [from, to) in local time, converted to ISO for the
@@ -105,7 +106,7 @@ export default function Analytics() {
     try {
       // every figure is aggregated server-side; these responses are one row per
       // person (or per property+department), never one row per task
-      const [users, byAssignee, repairs, open, prevAssignee, prevRepairs, byDay, personDay] = await Promise.all([
+      const [users, byAssignee, repairs, open, prevAssignee, prevRepairs, byDay, personDay, allTasks, comps] = await Promise.all([
         supabase.from('users')
           .select('id, name, name_hi, role, property, department, designation')
           .eq('is_active', true).order('name'),
@@ -116,6 +117,16 @@ export default function Analytics() {
         supabase.rpc('analytics_repairs', prevArgs),
         supabase.rpc('analytics_by_day', args),
         supabase.rpc('analytics_person_day', args),
+        // recurring work and the completions it earned — everything else on this
+        // page comes from completions alone, which cannot show an absence
+        supabase.from('tasks')
+          .select('id, title, title_hi, category, week_day, week_days, skip_sunday, month_week, property, department, assignee_name')
+          .limit(2000),
+        supabase.from('task_completions')
+          .select('task_id, task_date')
+          .gte('task_date', from.slice(0, 10))
+          .lte('task_date', to.slice(0, 10))
+          .limit(20000),
       ])
       const firstError = [users, byAssignee, repairs, open].find((r) => r.error)
       if (firstError) throw firstError.error
@@ -130,6 +141,9 @@ export default function Analytics() {
         // yet still gets every other figure instead of an error page
         byDay: byDay.error ? [] : (byDay.data || []),
         personDay: personDay.error ? [] : (personDay.data || []),
+        allTasks: allTasks.error ? [] : (allTasks.data || []),
+        comps: comps.error ? [] : (comps.data || []),
+        range: { from, to },
       })
     } catch (e) {
       // these are created by SUPABASE-MIGRATION-TASK-HISTORY.sql
@@ -172,6 +186,42 @@ export default function Analytics() {
   // The same completions, crossed the other way: one row per person, one column
   // per day. Days ascend left to right because a week is read that way; people
   // are ordered by how much they closed, so the grid opens on who is carrying it.
+  // Owed vs credited, per recurring job. Anything with a shortfall is a miss —
+  // and a job with zero completions and a real expectation is the loudest kind.
+  const missedRows = useMemo(() => {
+    if (!data?.range) return []
+    const from = new Date(data.range.from)
+    const to = new Date(data.range.to)
+    // `to` is exclusive in periodRange; step back a day so the last day is not
+    // counted as owed when it has not happened yet
+    to.setDate(to.getDate() - 1)
+
+    const doneBy = new Map()
+    ;(data.comps || []).forEach((c) => {
+      if (!doneBy.has(c.task_id)) doneBy.set(c.task_id, new Set())
+      doneBy.get(c.task_id).add(c.task_date)
+    })
+
+    return (data.allTasks || [])
+      .filter((task) => inViewScope(task, viewScope))
+      .map((task) => {
+        const expected = expectedOccurrences(task, from, to)
+        // distinct DATES, not rows: a task completed twice on one day was still
+        // only owed once that day
+        const done = Math.min(doneBy.get(task.id)?.size || 0, expected)
+        return { task, expected, done, missed: expected - done }
+      })
+      .filter((r) => r.expected > 0)
+      .sort((a, b) => b.missed - a.missed
+        || (a.task.title || '').localeCompare(b.task.title || ''))
+  }, [data, viewScope])
+
+  // the tab counts JOBS that fell short, not every recurring row
+  const missedCount = useMemo(
+    () => missedRows.filter((r) => r.missed > 0).length,
+    [missedRows]
+  )
+
   const personGrid = useMemo(() => {
     // The rows come straight from completions, which know an id but not a role —
     // so the same MEASURED_ROLES rule has to be applied here by looking the
@@ -471,10 +521,20 @@ export default function Analytics() {
               { key: 'staff', label: `${lang === 'hi' ? 'स्टाफ़' : 'Staff'} (${staffRows.length})` },
               { key: 'byDay', label: `${lang === 'hi' ? 'दिन-वार' : 'By day'} (${dayRows.length})` },
               { key: 'byPerson', label: `${lang === 'hi' ? 'कौन, किस दिन' : 'Who, which day'} (${personGrid.people.length})` },
+              { key: 'missed', label: `${lang === 'hi' ? 'नहीं हुआ' : 'Not done'} (${missedCount})` },
             ]}
             active={tab}
             onChange={setTab}
           />
+
+          {tab === 'missed' && (
+            missedCount === 0
+              ? <EmptyState icon={null} title={lang === 'hi' ? 'सब कुछ समय पर हुआ' : 'Nothing was missed'}
+                  hint={lang === 'hi'
+                    ? 'इस अवधि में हर दोहराने वाला काम अपनी बार पूरा हुआ।'
+                    : 'Every recurring job was completed as often as it was due in this period.'} />
+              : <MissedWork lang={lang} t={t} rows={missedRows} periodLabel={periodLabel} />
+          )}
 
           {tab === 'byPerson' && (
             personGrid.people.length === 0

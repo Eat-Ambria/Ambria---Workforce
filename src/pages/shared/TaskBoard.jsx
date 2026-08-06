@@ -116,10 +116,13 @@ export default function TaskBoard() {
       setRows(all)
 
       if (admin) {
-        // staff *and* fellow admins can take a repair request
-        // no propScope: a repair can be handed to anyone, whichever venue they
-        // are based at — the request's property is where the work happens
-        const { data: mem } = await assigneesQuery({ deptScope })
+        // staff *and* fellow admins can take a repair request.
+        // Neither propScope nor deptScope applies here. A department scope says
+        // which requests this admin is responsible FOR; it must not say who they
+        // may hand one to. A broken camera is a security request and an
+        // electrician's job — Sandeep could only ever pick other guards.
+        // (The one real restriction is the kitchen rule, in assignableFor.)
+        const { data: mem } = await assigneesQuery()
         setMembers(mem || [])
       }
     } catch {

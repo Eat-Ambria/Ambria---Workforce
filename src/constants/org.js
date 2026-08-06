@@ -323,7 +323,18 @@ export const dayShort = (v, lang) => {
 // shifts — and nobody can answer "is it on today?" without checking history.
 // Anchored, it is always Mon / Wed / Fri, plus Sunday when Sunday is a working
 // day for that job.
+// The default when nobody has chosen: Monday-anchored, and Sunday only where
+// Sunday is a working day for that job.
 export const alternateDays = (skipSunday) => (skipSunday ? [1, 3, 5] : [1, 3, 5, 7])
+
+// The days a task actually repeats on. An explicit choice wins over the default
+// AND over skip_sunday — picking Sunday is a decision, and a flag set months ago
+// should not quietly overrule it.
+export function taskDays(task) {
+  const chosen = task?.week_days ?? task?.weekDays
+  if (Array.isArray(chosen) && chosen.length) return [...chosen].map(Number).sort((a, b) => a - b)
+  return alternateDays(task?.skip_sunday ?? task?.skipSunday)
+}
 
 // Which date of the month a monthly task falls on: week 1 = the 1st, week 2 the
 // 8th, week 3 the 15th, week 4 the 22nd.
@@ -341,8 +352,7 @@ export function scheduleText(task, lang) {
   if (fk === 'sunday') return hi ? 'हर रविवार' : 'Every Sunday'
   if (fk === 'weekly') return hi ? `हर ${dayName(day || 1, hi ? 'hi' : 'en')}` : `Every ${dayName(day || 1, 'en')}`
   if (fk === 'alternate' || fk === 'alternateMS') {
-    const skip = task?.skip_sunday ?? task?.skipSunday
-    return alternateDays(skip).map((d) => dayShort(d, lang)).join(' · ')
+    return taskDays(task).map((d) => dayShort(d, lang)).join(' · ')
   }
   if (fk === 'monthly') {
     const d = monthlyDate(week)
@@ -354,13 +364,70 @@ export function scheduleText(task, lang) {
 // Not this person's problem today: a Mon-Sat job on a Sunday, or Sunday-only
 // work on any other day. The row is still shown — hiding work is how it gets
 // forgotten — but it is never counted as late.
+// Is today one of this task's days? The same question the nightly reset asks in
+// SQL — kept in step with it deliberately, because a task the database has not
+// brought back should not be sitting in somebody's list either.
+//
+// Monthly is the exception: its "day" is the start of a week-long window, not a
+// date to be at work on, so it stays visible through that week.
+export function isDueToday(task, now = new Date()) {
+  const iso = now.getDay() === 0 ? 7 : now.getDay()
+  const fk = taskFrequency(task)
+  if (fk === 'sunday') return iso === 7
+  if (fk === 'dailyMS') return iso !== 7
+  if (fk === 'alternate' || fk === 'alternateMS') return taskDays(task).includes(iso)
+  // Weekly work stays on the list from its day until the week is out. A missed
+  // Monday deep-weed is not made good by next Monday's — the weeds are still
+  // there — so unlike daily and alternate work it does not get superseded, and
+  // dropping it the next morning is how it silently never happens.
+  if (fk === 'weekly') return iso >= Number(task?.week_day ?? task?.weekDay ?? 1)
+  if (fk === 'monthly') {
+    // Its week of the month, not a single date and not the whole month. Pinning
+    // it to one date would make a month's work impossible to catch up on; leaving
+    // it open all month put every monthly job into every day's total, which is
+    // how "today's work" read 287 when 130 of those were not due today at all.
+    // same reasoning, a month long: from its week until the month is out
+    const wk = Math.min(Math.floor((now.getDate() - 1) / 7) + 1, 4)
+    return wk >= Math.min(Math.max(Number(task?.month_week ?? task?.monthWeek) || 1, 1), 4)
+  }
+  return true                            // daily
+}
+
+// How many times this job was SUPPOSED to happen between two dates.
+//
+// Deliberately not the same question as isDueToday(). A weekly job stays VISIBLE
+// from its day to the end of the week, but it was only ever expected ONCE — count
+// visible days and a Monday job would look like seven missed jobs by Sunday.
+//
+// This is what makes "what did not get done" answerable at all: completions are
+// the only thing recorded, so the gap has to be computed against what was owed.
+export function expectedOccurrences(task, from, to) {
+  const fk = taskFrequency(task)
+  const days = fk === 'alternate' || fk === 'alternateMS' ? taskDays(task) : null
+  const weekDay = Number(task?.week_day ?? task?.weekDay ?? 1)
+  const monthDay = monthlyDate(task?.month_week ?? task?.monthWeek)
+
+  let n = 0
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate())
+  while (d <= end) {
+    const iso = d.getDay() === 0 ? 7 : d.getDay()
+    if (fk === 'daily') n += 1
+    else if (fk === 'dailyMS') n += iso === 7 ? 0 : 1
+    else if (fk === 'sunday') n += iso === 7 ? 1 : 0
+    else if (days) n += days.includes(iso) ? 1 : 0
+    else if (fk === 'weekly') n += iso === weekDay ? 1 : 0
+    else if (fk === 'monthly') n += d.getDate() === monthDay ? 1 : 0
+    d.setDate(d.getDate() + 1)
+  }
+  return n
+}
+
+// Not this person's problem today. The row is hidden from staff — the roster
+// still lists every job, because that is the plan, not the day.
 export function notDueToday(task, now = new Date()) {
   if (!task) return false
-  const sunday = now.getDay() === 0
-  const fk = taskFrequency(task)
-  if (fk === 'sunday') return !sunday
-  if (sunday && (fk === 'dailyMS' || fk === 'alternateMS')) return true
-  return false
+  return !isDueToday(task, now)
 }
 
 // A task is overdue when it has a due date in the past and isn't completed yet.
@@ -370,6 +437,17 @@ export function isTaskOverdue(task, today, now = new Date()) {
   if (!task || task.status === TASK_STATUS.COMPLETED) return false
   // a job that isn't due today cannot be late today
   if (notDueToday(task, now)) return false
+  const fk = taskFrequency(task)
+  const iso = now.getDay() === 0 ? 7 : now.getDay()
+
+  // Weekly and monthly work is late once its own day / week has PASSED and it is
+  // still open. On the day itself it is simply today's job, not a failure.
+  if (fk === 'weekly') return iso > Number(task.week_day ?? task.weekDay ?? 1)
+  if (fk === 'monthly') {
+    const wk = Math.min(Math.floor((now.getDate() - 1) / 7) + 1, 4)
+    return wk > Math.min(Math.max(Number(task.month_week ?? task.monthWeek) || 1, 1), 4)
+  }
+
   if (task.category === 'daily') {
     // already sent for approval = the staff member did their part on time
     return task.status !== TASK_STATUS.COMPLETION_REQUESTED

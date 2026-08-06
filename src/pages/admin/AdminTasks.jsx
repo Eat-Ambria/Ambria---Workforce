@@ -7,14 +7,14 @@ import { nowISO, todayISO, fmtDate, fmtDateTime } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import RosterModal from './RosterModal'
+import StaffProgress from './StaffProgress'
 import MyTasks from '../employee/MyTasks'
 import PhotoViewer from '../../components/common/PhotoViewer'
 import { useConfirm } from '../../components/common/ConfirmDialog'
@@ -59,8 +59,6 @@ export default function AdminTasks() {
   const [scope, setScope] = useState('all')    // 'all' = everyone's work | 'mine' = my own
 
   const today = todayISO()
-  // collapse the status tabs into a dropdown once the row gets tight (≤1073px)
-  const statusCompact = useMediaQuery('(max-width: 1073px)')
 
   // apply property / department / category / staff filters to any query
   const applyFilters = useCallback((q) => {
@@ -178,17 +176,13 @@ export default function AdminTasks() {
   const issueView = tab === 'issues' || tab === 'issuesDone'
 
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
-  // task-status tabs only — the Issues view is a separate button (see below)
-  const tabs = [
-    { key: 'all', label: `${t.all} (${counts.all || 0})` },
-    { key: 'overdue', label: `${t.overdue}${c('overdue')}` },
-    { key: 'pending', label: `${t.pending}${c('pending')}` },
-    { key: 'inprogress', label: `${t.inProgress}${c('inprogress')}` },
-    { key: 'completed', label: `${t.completed}${c('completed')}` },
-    // Nothing enters the approval queue any more — staff close their own tasks.
-    // The tab only appears while rows from the old flow are still sitting in it.
-    ...(counts.review || tab === 'review' ? [{ key: 'review', label: `${t.reviewQueue}${c('review')}` }] : []),
-  ]
+  // Rows from the retired approval queue can still be sitting in 'review'.
+  // Nothing sends work there any more, so surface it only while it isn't empty.
+  const staleReview = (counts.review || 0) > 0
+  // Cards are for work you have to open and act on — an issue, or a leftover
+  // approval. Everyday work is the progress table above; a 400-card list of it
+  // was never read to the end.
+  const showList = issueView || tab === 'review'
 
   if (loading) return <Loader label={t.loading} />
 
@@ -222,7 +216,8 @@ export default function AdminTasks() {
       <>
       <SectionTitle>{t.tasks}</SectionTitle>
 
-      {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
+      {/* venue + staff filters — both dropdowns, side by side (stack on narrow).
+          They sit above the progress table because they narrow it. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         {canSeeAllProps && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
@@ -289,26 +284,44 @@ export default function AdminTasks() {
         ))}
       </div>
 
-      {/* task-status on the left (tabs on wide screens, one dropdown when tight),
-          the Issues view as a separate button on the right */}
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.taskStatus}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {statusCompact ? (
-            <select
-              style={inputStyle(C)}
-              value={tabs.some((s) => s.key === tab) ? tab : tabs[0].key}
-              onChange={(e) => changeTab(e.target.value)}
-              aria-label={t.status || 'Status'}
-            >
-              {tabs.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
-          ) : (
-            <Tabs tabs={tabs} active={tab} onChange={changeTab} noMargin />
-          )}
-        </div>
+      {/* the progress table only selects the columns it draws, so opening a job
+          re-reads the whole row — the modal needs photos, notes, the issue trail */}
+      <StaffProgress
+        user={user}
+        members={members}
+        propFilter={propFilter}
+        deptFilter={deptFilter}
+        memberFilter={memberFilter}
+        catFilter={catFilter}
+        prioFilter={prioFilter}
+        onOpenTask={async ({ id }) => {
+          const { data } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle()
+          if (data) setReview(data)
+        }}
+      />
+
+      {/* One button, not a row of status tabs: the table above already says how
+          much is pending, in progress and done, per person. Issues are the
+          exception — something went wrong and somebody has to open it. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
+        {staleReview && (
+          <button
+            onClick={() => changeTab(tab === 'review' ? 'all' : 'review')}
+            aria-pressed={tab === 'review'}
+            style={{
+              whiteSpace: 'nowrap', flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
+              background: tab === 'review' ? C.maroon : C.cardAlt,
+              color: tab === 'review' ? '#fff' : C.tl,
+              border: `1px solid ${tab === 'review' ? C.maroon : C.border}`,
+            }}
+          >
+            {t.reviewQueue} ({counts.review})
+          </button>
+        )}
         <button
-          onClick={() => changeTab('issues')}
+          onClick={() => changeTab(issueView ? 'all' : 'issues')}
           aria-pressed={issueView}
           style={{
             whiteSpace: 'nowrap', flexShrink: 0,
@@ -349,6 +362,7 @@ export default function AdminTasks() {
         </div>
       )}
 
+      {showList && (<>
       {listLoading && list.length === 0 ? (
         <Loader label={t.loading} />
       ) : list.length === 0 ? (
@@ -415,6 +429,7 @@ export default function AdminTasks() {
           </Button>
         </div>
       )}
+      </>)}
 
       </>
       )}

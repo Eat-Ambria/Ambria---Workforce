@@ -9,7 +9,7 @@ import {
   TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, propName, deptName,
   memberInProperty, personName, PRIORITIES,
   TASK_FREQUENCIES, FREQUENCY_MAP, taskFrequency, frequencyLabel,
-  WEEK_DAYS, dayName, scheduleText, staffingLabel,
+  WEEK_DAYS, dayName, dayShort, scheduleText, staffingLabel, alternateDays,
 } from '../../constants/org'
 import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -232,7 +232,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // meant four separate reads of what is one document.
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, month_week, skip_sunday, staffing, priority, due_date, status, started_at, before_photo, completion_photo')
+      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, status, started_at, before_photo, completion_photo')
       .in('property', props)
       .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
@@ -249,6 +249,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         category: r.category, sop: r.description || '', staffing: r.staffing || '',
         time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
         monthWeek: r.month_week || '', skipSunday: !!r.skip_sunday,
+        weekDays: Array.isArray(r.week_days) && r.week_days.length ? r.week_days.map(Number) : null,
         priority: r.priority || 'medium', dueDate: r.due_date || '',
         photoRequired: r.photo_required !== false, rows: [],
       })
@@ -273,7 +274,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     title: '', titleHi: '', from: '', to: '', photoRequired: true, people: [], weekDay: '',
     // a new row states its own frequency now that the roster shows them all at once
     freq: freqFilter === 'all' ? 'daily' : freqFilter, monthWeek: '', sop: '', staffing: '',
-    priority: 'medium', dueDate: '',
+    priority: 'medium', dueDate: '', weekDays: null,
   })
   const openEdit = (g) => setForm({
     mode: 'edit', key: g.key, dept: g.department || '',
@@ -281,6 +282,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     photoRequired: g.photoRequired !== false, people: g.people, weekDay: g.weekDay || '',
     freq: freqOf(g), monthWeek: g.monthWeek || '', sop: g.sop || '', staffing: g.staffing || '',
     priority: g.priority || 'medium', dueDate: g.dueDate || '',
+    weekDays: g.weekDays || null,
   })
 
   function applyForm(v) {
@@ -300,14 +302,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         title: v.title, titleHi: v.titleHi, from: v.from, to: v.to, weekDay: v.weekDay,
         photoRequired: v.photoRequired, dept: v.dept, people: v.people,
         freq: v.freq, monthWeek: v.monthWeek, sop: v.sop, staffing: v.staffing,
-        priority: v.priority, dueDate: v.dueDate,
+        priority: v.priority, dueDate: v.dueDate, weekDays: v.weekDays,
       }])
     } else {
       setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
         ...g, title: v.title, title_hi: v.titleHi, from: v.from, to: v.to,
         photoRequired: v.photoRequired, people: v.people,
         sop: v.sop, staffing: v.staffing, monthWeek: v.monthWeek,
-        priority: v.priority, dueDate: v.dueDate,
+        priority: v.priority, dueDate: v.dueDate, weekDays: v.weekDays,
         ...freqSpec(v.freq, v.weekDay),
       })))
     }
@@ -438,6 +440,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const rehindied = (g.title_hi || '') !== (g.rows[0]?.title_hi || '')
     const reprioed = (g.priority || 'medium') !== (g.rows[0]?.priority || 'medium')
     const redued = (g.dueDate || '') !== (g.rows[0]?.due_date || '')
+    const redaysed = JSON.stringify(g.weekDays || null)
+      !== JSON.stringify(g.rows[0]?.week_days?.length ? g.rows[0].week_days.map(Number) : null)
     const retimed = fmtRange(g.from, g.to) !== normRange(g.rows[0]?.time_block)
     const rephotoed = g.photoRequired !== (g.rows[0]?.photo_required !== false)
     const redayed = String(g.weekDay || '') !== String(g.rows[0]?.week_day || '')
@@ -446,12 +450,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       || String(g.monthWeek || '') !== String(g.rows[0]?.month_week || '')
     const resopped = (g.sop || '') !== (g.rows[0]?.description || '')
       || (g.staffing || '') !== (g.rows[0]?.staffing || '')
-    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued }
+    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
   const dropCount = plan.reduce((n, x) => n + x.dropped.length, 0)
-  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped).length
+  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped).length
   const filledDrafts = drafts.filter((d) => d.title.trim())
   const nothingToSave = addCount + dropCount + renameCount + filledDrafts.length === 0
 
@@ -462,10 +466,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         try { return await translateToHindi(title) } catch { return null }
       }
 
-      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued } of plan) {
+      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
         // frequency or SOP — applies to every copy of it
-        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued) {
+        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed) {
           const patch = {}
           if (renamed) patch.title = g.title.trim()
           // What is in the box is what gets saved. Only fall back to translating
@@ -478,6 +482,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           if (rephotoed) patch.photo_required = g.photoRequired
           if (reprioed) patch.priority = g.priority || 'medium'
           if (redued) patch.due_date = g.dueDate || null
+          if (redaysed) patch.week_days = g.weekDays?.length ? g.weekDays : null
           if (redayed) patch.week_day = g.weekDay ? Number(g.weekDay) : null
           if (refreqed) {
             patch.category = g.category
@@ -537,6 +542,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               photo_required: g.photoRequired !== false,
               priority: g.priority || 'medium',
               due_date: g.dueDate || null,
+              week_days: g.weekDays?.length ? g.weekDays : null,
               assigned_to: id,
               assignee_name: person?.name || null,
               status: TASK_STATUS.PENDING,
@@ -595,6 +601,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             time_block: fmtRange(d.from, d.to) || null,
             photo_required: d.photoRequired !== false,
             week_day: spec.category === 'weekly' ? Number(spec.weekDay || 1) : null,
+            week_days: spec.category === 'alternate' && d.weekDays?.length ? d.weekDays : null,
             month_week: spec.category === 'monthly' && d.monthWeek ? Number(d.monthWeek) : null,
             skip_sunday: !!spec.skipSunday,
             priority: 'medium',
@@ -946,6 +953,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     // numbering runs straight down the department, as the printed
                     // sheet numbers it — restarting at 1 per band read as an error
                     const startNo = bands.slice(0, bandIndex).reduce((n, b) => n + b.rows.length, 0)
+                    const schedules = [...new Set(bandRows.map((g) => scheduleText(g, lang)))]
+                    const bandSchedule = schedules.length === 1 ? schedules[0] : ''
                     return (
                       <div key={fk}>
                         {/* the frequency, said once for the group it applies to */}
@@ -963,11 +972,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           <span style={{ fontSize: 12, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
                             {bandRows.length}
                           </span>
-                          {/* when it comes round, once for the band instead of on every row */}
-                          {scheduleText(bandRows[0], lang) && (
-                            <span style={{ fontSize: 12, fontWeight: 600, color: C.tl }}>
-                              {scheduleText(bandRows[0], lang)}
-                            </span>
+                          {/* Stated here only while every job in the band still
+                              shares it. Once one is given its own days, the strip
+                              would be claiming a schedule the group no longer has,
+                              so it goes quiet and each row speaks for itself. */}
+                          {bandSchedule && (
+                            <span style={{ fontSize: 12, fontWeight: 600, color: C.tl }}>{bandSchedule}</span>
                           )}
                         </div>
 
@@ -1008,9 +1018,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 </div>
                                 <span style={{ ...tdCell, fontSize: 13, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.45 }}>
                                   <span style={{ display: 'block', color: C.text }}>{clock || '—'}</span>
-                                  {/* only when this row differs from the band's own schedule */}
-                                  {when && when !== scheduleText(bandRows[0], lang) && (
-                                    <span style={{ display: 'block', fontWeight: 700, color: f.ink, fontSize: 10.5 }}>{when}</span>
+                                  {/* shown whenever the band cannot speak for the
+                                      whole group — then every row states its own */}
+                                  {when && !bandSchedule && (
+                                    <span style={{ display: 'block', fontWeight: 700, color: f.ink, fontSize: 11.5 }}>{when}</span>
                                   )}
                                 </span>
                                 {/* Assigned: the roster's rule on top, the actual
@@ -1098,6 +1109,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                   }}
                                 >
                                   <PeoplePicker
+                                    autoFocus
                                     C={C} t={t} lang={lang} staff={staff}
                                     chosen={g.people}
                                     onToggle={(id) => togglePerson(g.key, id)}
@@ -1172,7 +1184,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 //
 // Module level on purpose: defined inside the parent's body, its identity changed
 // every render, React remounted it, and the search text died on each keystroke.
-function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting }) {
+function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false }) {
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
   // Nothing is listed until something is typed. Forty names on screen is a wall
@@ -1191,7 +1203,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
         <Icon name="search" size={15} color={C.faint} />
         <input
-          autoFocus
+          autoFocus={autoFocus}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={t.searchPerson}
@@ -1325,6 +1337,40 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit }) {
       </div>
 
       {/* a weekly job picks its day; Sunday-only already has one */}
+      {/* Alternate work repeats on the days chosen here — and keeps repeating on
+          them until someone changes it. Left untouched it uses the Mon/Wed/Fri
+          default, which is what every seeded job still does. */}
+      {(value.freq === 'alternate' || value.freq === 'alternateMS') && (
+        <Field label={t.repeatOnDays} hint={t.repeatOnDaysHint}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {WEEK_DAYS.map((d) => {
+              const chosen = value.weekDays || alternateDays(value.freq === 'alternateMS')
+              const on = chosen.includes(d.v)
+              return (
+                <button
+                  key={d.v}
+                  type="button"
+                  onClick={() => {
+                    const next = on ? chosen.filter((x) => x !== d.v) : [...chosen, d.v].sort((a, b) => a - b)
+                    // never leave it with no days at all — that is a task that
+                    // never comes back, which is not something anyone means to make
+                    set({ weekDays: next.length ? next : chosen })
+                  }}
+                  style={{
+                    minWidth: 46, padding: '7px 6px', borderRadius: 9, fontSize: 12.5, fontWeight: 700,
+                    border: `1.5px solid ${on ? C.maroon : C.border}`,
+                    background: on ? C.maroon : C.card,
+                    color: on ? '#fff' : C.tl,
+                  }}
+                >
+                  {dayShort(d.v, lang)}
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+      )}
+
       {value.freq === 'weekly' && (
         <Field label={t.dayOfWeek} hint={t.dayOfWeekHint}>
           <select style={inputStyle(C)} value={value.weekDay || ''} onChange={(e) => set({ weekDay: e.target.value })}>
