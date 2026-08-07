@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
-import { translateToHindi } from '../../lib/translate'
+import { translateToHindi, transliterateToHindi } from '../../lib/translate'
 import { Field, inputStyle, Spinner } from './UI'
 import Icon from './Icon'
 
@@ -18,7 +18,11 @@ const hasLatin = (s) => /[A-Za-z]/.test(s || '')
 // Auto-fill stops for good once the field is edited by hand (there is a link to
 // turn it back on). Source text already written in Devanagari is left alone —
 // pushing Hindi through an English→Hindi translator is how it comes back mangled.
-export default function HindiInput({ label, source, value, onChange, rows, placeholder, hint }) {
+// `transliterate` switches the machine from translating to spelling out. Use it
+// for proper nouns: a translator turns "Ram Narayan the Mali" into a gardener,
+// while transliteration gives राम नारायण — the same name, readable by staff who
+// do not read Latin script.
+export default function HindiInput({ label, source, value, onChange, rows, placeholder, hint, transliterate }) {
   const C = useColors()
   const t = useT()
   const [auto, setAuto] = useState(!value)
@@ -34,7 +38,7 @@ export default function HindiInput({ label, source, value, onChange, rows, place
     setBusy(true); setFailed(false)
     const id = setTimeout(async () => {
       try {
-        onChange(await translateToHindi(q, ctrl.signal))
+        onChange(await (transliterate ? transliterateToHindi : translateToHindi)(q, ctrl.signal))
       } catch (e) {
         if (e.name !== 'AbortError') setFailed(true)
       } finally {
@@ -44,7 +48,7 @@ export default function HindiInput({ label, source, value, onChange, rows, place
     return () => { clearTimeout(id); ctrl.abort() }
     // onChange is a fresh closure each render; depending on it would re-translate forever
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, auto])
+  }, [source, auto, transliterate])
 
   const common = {
     style: rows ? { ...inputStyle(C), resize: 'vertical' } : { ...inputStyle(C), paddingRight: 34 },

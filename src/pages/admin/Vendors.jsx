@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { typedPhone } from '../../lib/phone'
 import { useColors } from '../../context/ThemeContext'
-import { useT } from '../../context/LangContext'
+import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { Card, Loader, EmptyState, Button, SectionTitle, Field, inputStyle } from '../../components/common/UI'
+import HindiInput from '../../components/common/HindiInput'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
@@ -12,6 +13,7 @@ import { useConfirm } from '../../components/common/ConfirmDialog'
 export default function Vendors() {
   const C = useColors()
   const t = useT()
+  const { lang } = useLang()
   const { user } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -34,7 +36,10 @@ export default function Vendors() {
   const searched = useMemo(() => {
     const s = search.trim().toLowerCase()
     if (!s) return rows
-    return rows.filter((r) => [r.name, r.company, r.category, r.phone].filter(Boolean).some((f) => f.toLowerCase().includes(s)))
+    // the Hindi columns are searchable too — otherwise typing what you can
+    // see on the card returns nothing
+    return rows.filter((r) => [r.name, r.name_hi, r.company, r.category, r.category_hi, r.phone]
+      .filter(Boolean).some((f) => f.toLowerCase().includes(s)))
   }, [rows, search])
 
   const visible = useMemo(() => {
@@ -44,9 +49,9 @@ export default function Vendors() {
     return [...list].sort((a, b) => {
       const av = vendorType(a) === 'fixed' ? 0 : 1
       const bv = vendorType(b) === 'fixed' ? 0 : 1
-      return av - bv || (a.name || '').localeCompare(b.name || '')
+      return av - bv || vName(a, lang).localeCompare(vName(b, lang))
     })
-  }, [searched, typeFilter])
+  }, [searched, typeFilter, lang])
 
   const counts = useMemo(() => ({
     all: searched.length,
@@ -113,8 +118,8 @@ export default function Vendors() {
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
-                  <div style={{ fontSize: 13, color: C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.category}{v.company ? ` · ${v.company}` : ''}</div>
+                  <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vName(v, lang)}</div>
+                  <div style={{ fontSize: 13, color: C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vCategory(v, lang)}{v.company ? ` · ${v.company}` : ''}</div>
                   <div style={{ fontSize: 13, color: C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.phone}</div>
                 </div>
                 {/* The badge rides with the buttons rather than the name: it is
@@ -156,6 +161,11 @@ export default function Vendors() {
   )
 }
 
+// Same shape as personName/propName/deptName in constants/org: prefer the _hi
+// column, fall back to English so a vendor added before this existed still reads.
+const vName = (v, lang) => (lang === 'hi' && v?.name_hi ? v.name_hi : (v?.name || ''))
+const vCategory = (v, lang) => (lang === 'hi' && v?.category_hi ? v.category_hi : (v?.category || ''))
+
 const iconLink = (C, bg) => ({ width: 38, height: 38, borderRadius: 10, background: bg, display: 'grid', placeItems: 'center' })
 
 // Rows written before the column existed read as 'new' from the DB default, but
@@ -189,9 +199,12 @@ function VendorModal({ user, record, onClose, onSaved }) {
   const C = useColors()
   const t = useT()
   const confirm = useConfirm()
+  const { lang } = useLang()
   const editing = !!record
   const [form, setForm] = useState({
     name: record?.name || '',
+    name_hi: record?.name_hi || '',
+    category_hi: record?.category_hi || '',
     company: record?.company || '',
     phone: record?.phone || '',
     category: record?.category || '',
@@ -210,6 +223,8 @@ function VendorModal({ user, record, onClose, onSaved }) {
     const payload = {
       name: form.name.trim(), company: form.company || null, phone: form.phone.trim(),
       category: form.category.trim(), notes: form.notes || null,
+      name_hi: form.name_hi.trim() || null,
+      category_hi: form.category_hi.trim() || null,
       vendor_type: form.vendorType,
     }
     const { error } = editing
@@ -221,7 +236,7 @@ function VendorModal({ user, record, onClose, onSaved }) {
   }
 
   async function remove() {
-    if (!(await confirm({ message: t.deleteVendorConfirm, detail: record.name, confirmLabel: t.remove }))) return
+    if (!(await confirm({ message: t.deleteVendorConfirm, detail: vName(record, lang), confirmLabel: t.remove }))) return
     setBusy(true); setErr('')
     const { error } = await supabase.from('vendors').update({ is_active: false }).eq('id', record.id)
     setBusy(false)
@@ -230,7 +245,7 @@ function VendorModal({ user, record, onClose, onSaved }) {
   }
 
   return (
-    <Modal open onClose={onClose} title={editing ? `${t.edit} — ${record.name}` : t.vendors}
+    <Modal open onClose={onClose} title={editing ? `${t.edit} — ${vName(record, lang)}` : t.vendors}
       footer={(
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
@@ -243,8 +258,26 @@ function VendorModal({ user, record, onClose, onSaved }) {
         </>
       )}>
       <Field label={t.fullName}><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
+      {/* transliterate, don't translate: a translator reads "Ram Narayan the
+          Mali" as a gardener. Spelling it out keeps the name and makes it
+          readable to staff who don't read Latin script. */}
+      <HindiInput
+        transliterate
+        label={t.vendorNameHi}
+        hint={t.vendorNameHiHint}
+        source={form.name}
+        value={form.name_hi}
+        onChange={(v) => setForm((f) => ({ ...f, name_hi: v }))}
+      />
       <Field label={t.phone}><input style={inputStyle(C)} value={form.phone} type="tel" inputMode="numeric" maxLength={10} placeholder={t.phonePlaceholder} onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))} /></Field>
       <Field label={t.category}><input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder="e.g. Electrician, Florist" /></Field>
+      {/* a trade IS a word, so this one really is translated */}
+      <HindiInput
+        label={t.vendorCategoryHi}
+        source={form.category}
+        value={form.category_hi}
+        onChange={(v) => setForm((f) => ({ ...f, category_hi: v }))}
+      />
       <Field label={t.vendorType}>
         <div style={{ display: 'grid', gap: 8 }}>
           {[
