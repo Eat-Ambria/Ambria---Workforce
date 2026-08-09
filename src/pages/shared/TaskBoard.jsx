@@ -528,7 +528,12 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     const fe = {}
     if (!form.title.trim()) fe.title = `${t.title} ${t.isRequired}`
     if (!form.priority) fe.priority = `${t.priority} ${t.isRequired}`
-    if (!form.assignee) fe.assignee = `${t.assignedTo} ${t.isRequired}`
+    // Only an admin gets the assignee field, so only an admin can be required
+    // to fill it. Demanding it from staff made Submit do nothing at all: no
+    // field to fill, no ref to scroll to, no error to read.
+    // A request raised by staff goes in as 'open' for an admin to route — the
+    // same path a request from the public link takes.
+    if (admin && !form.assignee) fe.assignee = `${t.assignedTo} ${t.isRequired}`
     if (form.due_date && form.due_date < todayISO()) fe.due_date = t.dueDatePast
     setFieldErr(fe)
     if (Object.keys(fe).length) {
@@ -537,8 +542,14 @@ function PostModal({ user, members = [], onClose, onSaved }) {
         : fe.priority ? prioRef.current
         : fe.assignee ? assigneeRef.current
         : fe.due_date ? dueRef.current : null
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      target?.focus?.({ preventScroll: true })
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        target.focus?.({ preventScroll: true })
+      } else {
+        // No field to jump to — say it out loud instead of failing in silence,
+        // which is exactly how the staff-assignee bug stayed invisible.
+        setErr(Object.values(fe).join(' '))
+      }
       return
     }
     setBusy(true); setErr('')
