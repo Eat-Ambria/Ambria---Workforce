@@ -104,6 +104,7 @@ export default function TaskBoard() {
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
   const [creating, setCreating] = useState(false)
+  const [logging, setLogging] = useState(false)   // recording work already done
   const [active, setActive] = useState(null)
   const [editingRow, setEditingRow] = useState(null) // wording/Hindi fix from the list
 
@@ -214,14 +215,26 @@ export default function TaskBoard() {
   }, [members, lang])
 
   const today = todayISO()
+  // Split before anything counts. Work logged after the fact was never open, so
+  // it must not swell "Completed" — that number means requests that were raised
+  // and then finished.
+  const requestRows = useMemo(() => visibleRows.filter((r) => !r.logged_direct), [visibleRows])
+  const loggedRows = useMemo(() => visibleRows.filter((r) => r.logged_direct), [visibleRows])
+
   const doneAll = useMemo(
-    () => visibleRows.filter((r) => ['approved', 'completed'].includes(r.status)),
-    [visibleRows]
+    () => requestRows.filter((r) => ['approved', 'completed'].includes(r.status)),
+    [requestRows]
   )
+  const recentCutoff = () => new Date(Date.now() - COMPLETED_DAYS * 86400000).toISOString()
   const doneRecent = useMemo(() => {
-    const cutoff = new Date(Date.now() - COMPLETED_DAYS * 86400000).toISOString()
+    const cutoff = recentCutoff()
     return doneAll.filter((r) => (r.resolved_at || r.created_at || '') >= cutoff)
   }, [doneAll])
+  // logged work is finished by definition, so it needs the same window
+  const loggedRecent = useMemo(() => {
+    const cutoff = recentCutoff()
+    return loggedRows.filter((r) => (r.resolved_at || r.created_at || '') >= cutoff)
+  }, [loggedRows])
 
   const groups = useMemo(() => {
     // finished repairs older than the window are hidden, not deleted — keep "All"
@@ -229,17 +242,20 @@ export default function TaskBoard() {
     const shown = new Set((showAllDone ? doneAll : doneRecent).map((r) => r.id))
     const isDone = (r) => ['approved', 'completed'].includes(r.status)
     return {
-      all: visibleRows.filter((r) => !isDone(r) || shown.has(r.id)),
+      all: requestRows.filter((r) => !isDone(r) || shown.has(r.id)),
       // overdue = past its due date and not yet finished (cross-cuts open/in-progress)
-      overdue: visibleRows.filter((r) => r.due_date && r.due_date < today && !isDone(r)),
-      open: visibleRows.filter((r) => ['open', 'assigned'].includes(r.status)),
-      in_progress: visibleRows.filter((r) => r.status === 'in_progress'),
-      review: visibleRows.filter((r) => r.status === 'approval_requested'),
+      overdue: requestRows.filter((r) => r.due_date && r.due_date < today && !isDone(r)),
+      open: requestRows.filter((r) => ['open', 'assigned'].includes(r.status)),
+      in_progress: requestRows.filter((r) => r.status === 'in_progress'),
+      review: requestRows.filter((r) => r.status === 'approval_requested'),
       completed: showAllDone ? doneAll : doneRecent,
+      logged: showAllDone ? loggedRows : loggedRecent,
     }
-  }, [visibleRows, today, doneAll, doneRecent, showAllDone])
+  }, [requestRows, loggedRows, loggedRecent, today, doneAll, doneRecent, showAllDone])
 
-  const hiddenDone = doneAll.length - doneRecent.length
+  const hiddenDone = tab === 'logged'
+    ? loggedRows.length - loggedRecent.length
+    : doneAll.length - doneRecent.length
 
   // staff who actually have requests assigned — populate the name filter
   const memberOptions = useMemo(() => {
@@ -269,6 +285,9 @@ export default function TaskBoard() {
     { key: 'in_progress', label: `${t.inProgress} (${groups.in_progress.length})` },
     { key: 'review', label: `${t.reviewQueue} (${groups.review.length})` },
     { key: 'completed', label: `${t.completed} (${groups.completed.length})` },
+    // shown only once there is something in it — an empty tab is a question
+    // nobody asked
+    ...(groups.logged.length ? [{ key: 'logged', label: `${t.logWorkTab} (${groups.logged.length})` }] : []),
   ]
 
   if (loading) return <Loader label={t.loading} />
@@ -276,7 +295,25 @@ export default function TaskBoard() {
 
   return (
     <div>
-      <SectionTitle right={<Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />{t.taskBoard}</Button>}>
+      <SectionTitle
+        right={(
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* Recording finished work is a different act from asking for work,
+                so it is a different button — not a checkbox inside the request
+                form that everyone would miss. */}
+            {admin && (
+              <Button variant="ghost" onClick={() => setLogging(true)}>
+                <Icon name="check" size={16} color={C.maroon} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                {t.logWork}
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              {t.taskBoard}
+            </Button>
+          </div>
+        )}
+      >
         {t.taskBoard}
       </SectionTitle>
 
@@ -414,6 +451,9 @@ export default function TaskBoard() {
                     )}
                     {(r.category || 'other') !== 'other' && (
                       <div style={{ marginTop: 6 }}>
+                        {r.logged_direct && (
+                          <Badge color={C.maroon} bg={C.maroonSoft}>{t.loggedBadge}</Badge>
+                        )}
                         <Badge color={C[FIX_CAT_TONE[r.category] || 'blue']} bg={C.cardAlt}>
                           {fixCatLabel(r.category, t, lang)}
                         </Badge>
@@ -454,7 +494,7 @@ export default function TaskBoard() {
 
       {/* older finished repairs are hidden rather than deleted — they still
           count in Analytics and in each staff member's rating history */}
-      {['completed', 'all'].includes(tab) && hiddenDone > 0 && (
+      {['completed', 'all', 'logged'].includes(tab) && hiddenDone > 0 && (
         <div style={{ textAlign: 'center', marginTop: 14 }}>
           <button
             type="button"
@@ -478,6 +518,7 @@ export default function TaskBoard() {
       )}
 
       {creating && <PostModal user={user} members={members} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load() }} />}
+      {logging && <LogWorkModal user={user} onClose={() => setLogging(false)} onSaved={() => { setLogging(false); load() }} />}
       {active && <DetailModal row={active} user={user} admin={admin} members={members} onClose={() => { setActive(null); load() }} onSaved={() => { setActive(null); load() }} />}
       {editingRow && (
         <EditTextModal
@@ -527,6 +568,110 @@ function PublicLinkBar({ C, t }) {
       </div>
       <div style={{ fontSize: 12, color: C.tl, marginTop: 8 }}>{t.publicLinkHint}</div>
     </div>
+  )
+}
+
+// Work already done, recorded after the fact.
+//
+// Deliberately shorter than the request form: there is nobody to assign, no
+// priority to weigh and no due date to meet, because it is finished. What is
+// left is what the super admin needs to read — where, what kind, what happened,
+// and a photo if there is one.
+function LogWorkModal({ user, onClose, onSaved }) {
+  const C = useColors()
+  const t = useT()
+  const { lang } = useLang()
+  const superAdmin = isSuperAdmin(user?.role)
+  const [form, setForm] = useState({
+    title: '', title_hi: '', note: '', category: 'other',
+    property: user.property && user.property !== 'all' ? user.property : 'pp',
+  })
+  const [photos, setPhotos] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  async function save() {
+    if (!form.title.trim()) { setErr(`${t.title} ${t.isRequired}`); return }
+    if (!form.note.trim()) { setErr(`${t.logWorkWhat} ${t.isRequired}`); return }
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('work_board').insert({
+      title: form.title.trim(),
+      title_hi: form.title_hi.trim() || null,
+      category: form.category || 'other',
+      property: superAdmin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp'),
+      department: catDept(form.category) || user.department || null,
+      posted_by: user.id,
+      posted_by_name: user.name,
+      // The admin did it themselves, so they are both sides of it. Recording the
+      // assignee is what puts the work against their name later.
+      assigned_to: user.id,
+      assigned_to_name: user.name,
+      priority: 'normal',
+      // Finished the moment it is written — it was finished before that.
+      status: 'completed',
+      resolved_at: nowISO(),
+      resolution_note: form.note.trim(),
+      resolution_photos: photos,
+      logged_direct: true,
+    })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t.logWorkTitle}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.cancel}</Button>
+          <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 2 }}>{t.save}</Button>
+        </>
+      )}
+    >
+      <div style={{ background: C.maroonSoft, color: C.maroon, borderRadius: 10, padding: '10px 12px', fontSize: 12.5, marginBottom: 14, lineHeight: 1.5 }}>
+        {t.logWorkHint}
+      </div>
+
+      <Field label={t.title} required>
+        <input autoFocus style={inputStyle(C)} value={form.title} onChange={set('title')} />
+      </Field>
+
+      <HindiInput
+        label={t.hindiTitle}
+        hint={t.hindiForStaffHint}
+        source={form.title}
+        value={form.title_hi}
+        onChange={(v) => setForm((f) => ({ ...f, title_hi: v }))}
+      />
+
+      <Field label={t.requestType} hint={t.requestTypeHint}>
+        <select style={inputStyle(C)} value={form.category} onChange={set('category')}>
+          {FIX_CATEGORIES.map((c) => <option key={c} value={c}>{fixCatLabel(c, t, lang)}</option>)}
+        </select>
+      </Field>
+
+      {superAdmin && (
+        <Field label={t.propertyLabel} hint={t.propertyWorkHint}>
+          <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
+            {PROPERTIES.map((pp) => <option key={pp.code} value={pp.code}>{propName(pp.code, lang)}</option>)}
+          </select>
+        </Field>
+      )}
+
+      <Field label={t.logWorkWhat} required hint={t.logWorkWhatHint}>
+        <textarea rows={3} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.note} onChange={set('note')} />
+      </Field>
+
+      <Field label={`${t.uploadPhoto} (${t.optional})`}>
+        <PhotoCapture folder="work_board" value={photos} onChange={setPhotos} />
+      </Field>
+
+      {err && <div style={{ color: C.red, fontSize: 13 }}>{err}</div>}
+    </Modal>
   )
 }
 
