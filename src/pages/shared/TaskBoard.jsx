@@ -100,6 +100,7 @@ export default function TaskBoard() {
   const [tab, setTab] = useState(location.state?.tab || 'all')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
   const [catFilter, setCatFilter] = useState('all')       // all | other (general) | kitchen
+  const [prioFilter, setPrioFilter] = useState('all')     // all | urgent | high | normal | low
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
   const [creating, setCreating] = useState(false)
@@ -187,12 +188,23 @@ export default function TaskBoard() {
       : rows.filter((r) => r.assigned_to === user.id)
   }, [rows, memberFilter, admin, scope, user.id])
 
-  const visibleRows = useMemo(() => (
-    // a row written before the kitchen split has no category at all — it is general
-    catFilter === 'all'
-      ? scopedRows
-      : scopedRows.filter((r) => (r.category || 'other') === catFilter)
-  ), [scopedRows, catFilter])
+  // a row written before the kitchen split has no category at all — it is general
+  const byCat = useCallback(
+    (list) => (catFilter === 'all' ? list : list.filter((r) => (r.category || 'other') === catFilter)),
+    [catFilter]
+  )
+  const byPrio = useCallback(
+    (list) => (prioFilter === 'all' ? list : list.filter((r) => (r.priority || 'normal') === prioFilter)),
+    [prioFilter]
+  )
+
+  const visibleRows = useMemo(() => byPrio(byCat(scopedRows)), [scopedRows, byCat, byPrio])
+
+  // Each filter counts with the OTHER already applied, so a number always says
+  // what clicking it returns. Counting both from scopedRows is how a chip ends
+  // up promising 28 above a list of 3.
+  const catPool = useMemo(() => byPrio(scopedRows), [scopedRows, byPrio])
+  const prioPool = useMemo(() => byCat(scopedRows), [scopedRows, byCat])
 
   // repair rows keep the assignee name from assignment time; swap in the Hindi
   // name when the UI is Hindi and we know the person
@@ -244,10 +256,10 @@ export default function TaskBoard() {
   // one source for both shapes — a label that differs between the chips and the
   // dropdown is a bug waiting to be reported as "it says something else on my phone"
   const catChoices = [
-    { key: 'all', label: `${t.all} (${scopedRows.length})` },
+    { key: 'all', label: `${t.all} (${catPool.length})` },
     ...FIX_CATEGORIES.map((c) => ({
       key: c,
-      label: `${fixCatLabel(c, t, lang)} (${scopedRows.filter((r) => (r.category || 'other') === c).length})`,
+      label: `${fixCatLabel(c, t, lang)} (${catPool.filter((r) => (r.category || 'other') === c).length})`,
     })),
   ]
   const tabs = [
@@ -309,20 +321,48 @@ export default function TaskBoard() {
       )}
 
       {/* name-wise filter — show only the requests assigned to one staff member */}
-      {admin && memberOptions.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, maxWidth: 340, marginLeft: 'auto' }}>
-          <Icon name="user" size={16} color={C.tl} />
+      {/* The two narrowing filters, on one line. Both answer "show me less of
+          this list" rather than defining it, so neither earns a chip row.
+          They wrap instead of shrinking: two half-width selects on a phone are
+          worse than two stacked full-width ones. minWidth 0 is what allows the
+          shrink at all — a flex item defaults to its content width and would
+          push the row past the edge of the screen. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        {/* Priorities with nothing in them are left out: an option that returns
+            an empty list is a dead end. 'low' is not offered on new requests,
+            but old rows still carry it, so it appears only if one does. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
+          <Icon name="warning" size={16} color={C.tl} style={{ flexShrink: 0 }} />
           <select
             style={inputStyle(C)}
-            value={memberFilter}
-            onChange={(e) => setMemberFilter(e.target.value)}
-            aria-label={t.assignedTo}
+            value={prioFilter}
+            onChange={(e) => setPrioFilter(e.target.value)}
+            aria-label={t.priority}
           >
-            <option value="all">{t.assignedTo} — {t.all}</option>
-            {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            <option value="all">{t.priority} — {t.all}</option>
+            {['urgent', 'high', 'normal', 'low'].map((pkey) => {
+              const n = prioPool.filter((r) => (r.priority || 'normal') === pkey).length
+              if (!n) return null
+              return <option key={pkey} value={pkey}>{prioLabel(pkey, t)} ({n})</option>
+            })}
           </select>
         </div>
-      )}
+
+        {admin && memberOptions.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
+            <Icon name="user" size={16} color={C.tl} style={{ flexShrink: 0 }} />
+            <select
+              style={inputStyle(C)}
+              value={memberFilter}
+              onChange={(e) => setMemberFilter(e.target.value)}
+              aria-label={t.assignedTo}
+            >
+              <option value="all">{t.assignedTo} — {t.all}</option>
+              {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* status tabs on wide screens; one labeled dropdown when tight (≤813px) */}
       {statusCompact ? (

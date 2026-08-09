@@ -110,6 +110,7 @@ function AdminDashboard({ user }) {
     const [
       total, pending, inProgress, waiting, done, overdue, pHigh, pMed, pLow,
       bOpen, bProg, bDone, vendors, videos, fireR, chemR, boardOverdue,
+      bUrgent, bHigh,
       myTasks, myFixes, dailyLate,
     ] = await Promise.all([
       taskBase(),
@@ -124,6 +125,10 @@ function AdminDashboard({ user }) {
       boardBase().in('status', ['open', 'assigned']),
       boardBase().in('status', ['in_progress', 'approval_requested']),
       boardBase().in('status', ['approved', 'completed']),
+      // Urgent and High among the requests still OPEN. Counting finished ones
+      // too would leave the number high all week after the work was done.
+      boardBase().eq('priority', 'urgent').not('status', 'in', '("approved","completed")'),
+      boardBase().eq('priority', 'high').not('status', 'in', '("approved","completed")'),
       vq,
       supabase.from('training_videos').select('*', { count: 'exact', head: true }).eq('is_active', true),
       scopedRows('fire_extinguishers', 'expiry_date', false),
@@ -152,7 +157,10 @@ function AdminDashboard({ user }) {
         waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue) + cnt(dailyLate),
         priority: { high: cnt(pHigh), medium: cnt(pMed), low: cnt(pLow) },
       },
-      board: { open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue) },
+      board: {
+        open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue),
+        urgent: cnt(bUrgent), high: cnt(bHigh),
+      },
       mine: { tasks: cnt(myTasks), fixes: cnt(myFixes) },
       vendors: cnt(vendors),
       fire: fireStat,
@@ -273,6 +281,10 @@ function AdminDashboard({ user }) {
       {/* section widgets */}
       <div style={widgetGrid}>
         <Widget C={C} icon="taskBoard" title={t.taskBoard} onView={() => go('/task-board')}>
+          {/* What needs doing first, before how much there is. Both count only
+              unfinished requests, so the number falls as the work gets done. */}
+          <Row C={C} label={t.prioUrgent} value={d.board.urgent} tone={C.red} danger={d.board.urgent > 0} />
+          <Row C={C} label={t.prioHigh} value={d.board.high} tone={C.yellow} />
           <Row C={C} label={t.open} value={d.board.open} tone={C.blue} />
           <Row C={C} label={t.inProgress} value={d.board.progress} tone={C.yellow} />
           <Row C={C} label={t.completed} value={d.board.done} tone={C.green} />

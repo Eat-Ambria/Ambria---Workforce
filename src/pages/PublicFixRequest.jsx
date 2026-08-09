@@ -265,7 +265,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   const lang = hi ? 'hi' : 'en'
   const [form, setForm] = useState({
     name: '', phone: '', property: 'pp', location: '',
-    title: '', titleHi: '', issue: '', descHi: '', category: 'other',
+    title: '', titleHi: '', issue: '', descHi: '', category: 'other', priority: 'normal',
     department: '', assignee: '',
   })
   const [people, setPeople] = useState([])
@@ -375,7 +375,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       department: form.department || null,
       posted_by: 'public',
       posted_by_name: `${form.name.trim()} · ${hi ? 'बाहरी' : 'External'}`,
-      priority: 'normal',
+      priority: form.priority,
       photos,
       voice_url: voice || null,
       assigned_to: assignee?.id || null,
@@ -518,6 +518,20 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
           </span>
         </div>
       )}
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={fieldLabel}>{hi ? 'कितना ज़रूरी है?' : 'How urgent is it?'}</label>
+        <select style={inputStyle(C)} value={form.priority} onChange={set('priority')}>
+          <option value="normal">{hi ? 'सामान्य' : 'Normal'}</option>
+          <option value="high">{hi ? 'ज़्यादा ज़रूरी' : 'High'}</option>
+          <option value="urgent">{hi ? 'बहुत ज़रूरी' : 'Urgent'}</option>
+        </select>
+        <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
+          {hi
+            ? 'ज़रूरी तभी चुनें जब अभी ख़तरा हो या चीज़ इस्तेमाल लायक न हो।'
+            : 'Urgent is for something unsafe or unusable right now.'}
+        </span>
+      </div>
 
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'जगह / एरिया (कहाँ है समस्या?)' : 'Location / area (where is it?)'}</label>
