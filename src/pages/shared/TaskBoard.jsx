@@ -239,6 +239,17 @@ export default function TaskBoard() {
 
   // collapse the status tabs into a dropdown on narrow screens (≤813px)
   const statusCompact = useMediaQuery('(max-width: 813px)')
+  // seven kinds of repair need more room than six statuses
+  const catCompact = useMediaQuery('(max-width: 900px)')
+  // one source for both shapes — a label that differs between the chips and the
+  // dropdown is a bug waiting to be reported as "it says something else on my phone"
+  const catChoices = [
+    { key: 'all', label: `${t.all} (${scopedRows.length})` },
+    ...FIX_CATEGORIES.map((c) => ({
+      key: c,
+      label: `${fixCatLabel(c, t, lang)} (${scopedRows.filter((r) => (r.category || 'other') === c).length})`,
+    })),
+  ]
   const tabs = [
     { key: 'all', label: `${t.all} (${groups.all.length})` },
     { key: 'overdue', label: `${t.overdue} (${groups.overdue.length})` },
@@ -268,22 +279,34 @@ export default function TaskBoard() {
         </div>
       )}
 
-      {/* Kitchen or the rest. Counted from every row in scope, not from the
-          filtered list, so the number on a tab still says how much is behind it. */}
-      <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
-        <ScopeChip C={C} active={catFilter === 'all'} onClick={() => setCatFilter('all')}>
-          {t.all} ({scopedRows.length})
-        </ScopeChip>
-        {/* Every kind gets a chip, including the ones sitting at zero: the row
-            doubles as the list of what a repair can be filed as, and a trade
-            that only appears once someone has already used it is a trade nobody
-            discovers. The row scrolls sideways, so six costs nothing. */}
-        {FIX_CATEGORIES.map((c) => (
-          <ScopeChip key={c} C={C} active={catFilter === c} onClick={() => setCatFilter(c)}>
-            {fixCatLabel(c, t, lang)} ({scopedRows.filter((r) => (r.category || 'other') === c).length})
-          </ScopeChip>
-        ))}
-      </div>
+      {/* Counted from every row in scope, not from the filtered list, so the
+          number beside a kind still says how much is behind it.
+          Every kind is listed, including the ones sitting at zero: this doubles
+          as the list of what a repair can be filed as, and a trade that only
+          appears once someone has used it is a trade nobody discovers.
+          Seven of them do not fit a phone, and a sideways-scrolling row hides
+          whichever ones you have not scrolled to — so below 900px it becomes a
+          dropdown, the same way the status tabs already do. */}
+      {catCompact ? (
+        <div style={{ marginBottom: 14 }}>
+          <select
+            style={inputStyle(C)}
+            value={catFilter}
+            onChange={(e) => setCatFilter(e.target.value)}
+            aria-label={t.requestType}
+          >
+            {catChoices.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+          </select>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          {catChoices.map((c) => (
+            <ScopeChip key={c.key} C={C} active={catFilter === c.key} onClick={() => setCatFilter(c.key)}>
+              {c.label}
+            </ScopeChip>
+          ))}
+        </div>
+      )}
 
       {/* name-wise filter — show only the requests assigned to one staff member */}
       {admin && memberOptions.length > 0 && (
