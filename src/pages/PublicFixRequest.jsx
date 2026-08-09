@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
-import { PROPERTIES, PROPERTY_MAP, propName, DEPARTMENTS, deptName, personName } from '../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName, deptName, personName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { hindiFor } from '../lib/translate'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs, Field } from '../components/common/UI'
@@ -292,13 +292,31 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   // how a request ends up assigned to someone the picker no longer even lists.
   const setDept = (e) => setForm((f) => ({ ...f, department: e.target.value, assignee: '' }))
 
-  // A kitchen fault is a kitchen job. Pre-fill it rather than making the visitor
-  // say the same thing twice; they can still change it.
-  const setCategory = (e) => setForm((f) => ({
-    ...f,
-    category: e.target.value,
-    ...(e.target.value === 'kitchen' && !f.department ? { department: 'kt', assignee: '' } : null),
-  }))
+  // A kitchen fault is a kitchen job, a wiring fault is the electrician's. The
+  // kind of repair already names the team, so fill it in rather than making the
+  // visitor say the same thing twice — they can still change it afterwards.
+  // 'other' names no team, so it leaves the department alone.
+  const CAT_DEPT = { kitchen: 'kt', ms: 'ms', el: 'el', pt: 'pt', cp: 'cp' }
+  // A general repair is the only kind that leaves the team open, and the teams
+  // it can go to are the four that do general work. Kitchen, Electrician and the
+  // rest are their own kind of repair — offering them here as well would let a
+  // request say "General repair" and "Electrician" at the same time.
+  const GENERAL_DEPTS = ['a', 'h', 'k', 's']
+  const deptChoices = CAT_DEPT[form.category] ? [CAT_DEPT[form.category]] : GENERAL_DEPTS
+
+  const setCategory = (e) => {
+    const cat = e.target.value
+    const dept = CAT_DEPT[cat]
+    setForm((f) => ({
+      ...f,
+      category: cat,
+      // The kind of repair decides the team, so the previous answer never
+      // survives the switch: a trade sets its own, and going back to General
+      // clears it rather than leaving "Kitchen" sitting under "General repair".
+      department: dept || '',
+      assignee: '',
+    }))
+  }
   // phone: keep digits only, never longer than 10
   const setPhone = (e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))
 
@@ -462,6 +480,12 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
         <select style={inputStyle(C)} value={form.category} onChange={setCategory}>
           <option value="other">{hi ? 'सामान्य मरम्मत' : 'General repair'}</option>
           <option value="kitchen">{hi ? 'रसोई / किचन' : 'Kitchen'}</option>
+          {/* the trades, listed the same way Kitchen is. Codes match
+              FIX_CATEGORIES in TaskBoard — a visitor and an admin have to be
+              filing the same thing under the same name. */}
+          {['ms', 'el', 'pt', 'cp'].map((c) => (
+            <option key={c} value={c}>{deptName(c, lang)}</option>
+          ))}
         </select>
       </div>
 
@@ -469,7 +493,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
         <label style={fieldLabel}>{hi ? 'किस डिपार्टमेंट का काम?' : 'Which department?'}</label>
         <select style={inputStyle(C)} value={form.department} onChange={setDept}>
           <option value="">{hi ? '— चुनें (वैकल्पिक) —' : '— Select (optional) —'}</option>
-          {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
+          {deptChoices.map((code) => <option key={code} value={code}>{deptName(code, lang)}</option>)}
         </select>
         <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
           {hi

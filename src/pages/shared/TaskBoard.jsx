@@ -45,23 +45,38 @@ const prioLabel = (p, t) => ({ low: t.prioLow, normal: t.prioNormal, high: t.pri
 
 // What broke, not who fixes it. 'other' is every request ever written before the
 // kitchen split, so it stays the default and means "general".
-const FIX_CATEGORIES = ['other', 'kitchen']
-const fixCatLabel = (c, t) => ({ other: t.fixCatGeneral, kitchen: t.fixCatKitchen }[c] || t.fixCatGeneral)
-const FIX_CAT_TONE = { other: 'blue', kitchen: 'accent' }
-const KITCHEN_DEPT = 'kt'
-
-// Who may take this request. A kitchen fault goes to the kitchen team, so those
-// are the only names offered — picking a gardener for a broken oven is a mistake
-// the list should not make available.
+// What broke, not who fixes it. 'other' is every request written before any of
+// this existed, so it stays the default and means "general".
 //
-// The exception is an empty Kitchen department: nobody is in it yet, and a picker
-// with no names would simply block the assignment. Then everyone is offered and
-// the hint says why, rather than leaving the admin stuck at a blank list.
+// Everything after 'other' is also a department code. Kitchen was never a
+// special case — it was the first kind of repair that belonged to one team, and
+// the trades are more of the same.
+const FIX_CATEGORIES = ['other', 'kitchen', 'ms', 'el', 'pt', 'cp']
+
+// 'other' has no team — a general repair can go to anyone.
+const catDept = (c) => (!c || c === 'other' ? null : (c === 'kitchen' ? 'kt' : c))
+
+const fixCatLabel = (c, t, lang) => {
+  if (!c || c === 'other') return t.fixCatGeneral
+  if (c === 'kitchen') return t.fixCatKitchen
+  return deptName(c, lang)
+}
+const FIX_CAT_TONE = { other: 'blue', kitchen: 'accent' }
+
+// Who may take this request. A kitchen fault goes to the kitchen team and a
+// wiring fault to the electricians — picking a gardener for a broken oven is a
+// mistake the list should not make available. A general repair has no such
+// team, so everyone is offered.
+//
+// The exception is a team nobody is in yet: a picker with no names simply blocks
+// the assignment. Then everyone is offered and the hint says why, rather than
+// leaving the admin stuck at a blank list.
 function assignableFor(category, members) {
-  if ((category || 'other') !== 'kitchen') return { people: members, restricted: false }
-  const kitchen = members.filter((m) => m.department === KITCHEN_DEPT)
-  return kitchen.length
-    ? { people: kitchen, restricted: true }
+  const dept = catDept(category)
+  if (!dept) return { people: members, restricted: false }
+  const team = members.filter((m) => m.department === dept)
+  return team.length
+    ? { people: team, restricted: true }
     : { people: members, restricted: false }
 }
 
@@ -259,9 +274,13 @@ export default function TaskBoard() {
         <ScopeChip C={C} active={catFilter === 'all'} onClick={() => setCatFilter('all')}>
           {t.all} ({scopedRows.length})
         </ScopeChip>
+        {/* Every kind gets a chip, including the ones sitting at zero: the row
+            doubles as the list of what a repair can be filed as, and a trade
+            that only appears once someone has already used it is a trade nobody
+            discovers. The row scrolls sideways, so six costs nothing. */}
         {FIX_CATEGORIES.map((c) => (
           <ScopeChip key={c} C={C} active={catFilter === c} onClick={() => setCatFilter(c)}>
-            {fixCatLabel(c, t)} ({scopedRows.filter((r) => (r.category || 'other') === c).length})
+            {fixCatLabel(c, t, lang)} ({scopedRows.filter((r) => (r.category || 'other') === c).length})
           </ScopeChip>
         ))}
       </div>
@@ -333,7 +352,7 @@ export default function TaskBoard() {
                     {(r.category || 'other') !== 'other' && (
                       <div style={{ marginTop: 6 }}>
                         <Badge color={C[FIX_CAT_TONE[r.category] || 'blue']} bg={C.cardAlt}>
-                          {fixCatLabel(r.category, t)}
+                          {fixCatLabel(r.category, t, lang)}
                         </Badge>
                       </div>
                     )}
@@ -476,7 +495,10 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   }
 
   // A kitchen request narrows the names the moment the kind is chosen.
-  const { people: atProperty, restricted: kitchenOnly } = assignableFor(form.category, members)
+  const { people: atProperty, restricted: teamOnly } = assignableFor(form.category, members)
+  const teamHint = teamOnly
+    ? t.tradeStaffOnly.replace('{d}', deptName(catDept(form.category), lang))
+    : t.assigneeAnyVenueHint
 
   async function save() {
     // validate per-field so the message appears next to the field, not at the bottom
@@ -512,9 +534,11 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       property,
       posted_by: user.id,
       posted_by_name: user.name,
-      // taken from whoever is doing it, so department scoping still works;
-      // left null when nobody is picked yet
-      department: person?.department || null,
+      // The kind of repair carries its own team — a wiring fault is the
+      // electricians', whoever ends up holding the screwdriver. A general repair
+      // has none, so it falls back to whoever is doing it, which is what keeps
+      // department scoping routing the request.
+      department: catDept(form.category) || person?.department || null,
       priority: form.priority,
       due_date: form.due_date || null,
       assigned_to: person?.id || null,
@@ -543,7 +567,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       />
       <Field label={t.requestType} hint={t.requestTypeHint}>
         <select style={inputStyle(C)} value={form.category} onChange={set('category')}>
-          {FIX_CATEGORIES.map((c) => <option key={c} value={c}>{fixCatLabel(c, t)}</option>)}
+          {FIX_CATEGORIES.map((c) => <option key={c} value={c}>{fixCatLabel(c, t, lang)}</option>)}
         </select>
       </Field>
       <Field label={`${t.description} (${t.optional})`}><textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.description} onChange={set('description')} /></Field>
@@ -575,7 +599,7 @@ function PostModal({ user, members = [], onClose, onSaved }) {
       {/* Straight to a person. Everyone at the chosen venue is listed, with
           their department beside the name so the right one is easy to spot. */}
       {admin && (
-        <Field label={t.assignedTo} required error={fieldErr.assignee} hint={kitchenOnly ? t.kitchenStaffOnly : t.assigneeAnyVenueHint}>
+        <Field label={t.assignedTo} required error={fieldErr.assignee} hint={teamHint}>
           <PersonPicker
             ref={assigneeRef}
             C={C} t={t} lang={lang}
@@ -798,7 +822,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
         )}
         {(row.category || 'other') !== 'other' && (
-          <Badge color={C[FIX_CAT_TONE[row.category] || 'blue']} bg={C.cardAlt}>{fixCatLabel(row.category, t)}</Badge>
+          <Badge color={C[FIX_CAT_TONE[row.category] || 'blue']} bg={C.cardAlt}>{fixCatLabel(row.category, t, lang)}</Badge>
         )}
         {/* A request raised in English is unreadable to the people who have to
             do it. Anyone can fix the wording — or write the Hindi themselves. */}
@@ -867,7 +891,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {/* Straight to a person — every assignable name, searchable. The
               department is taken from whoever is picked, so routing still works
               without anyone choosing a team first. */}
-          <Field label={t.assignedTo} required hint={assignPool.restricted ? t.kitchenStaffOnly : t.assigneeAnyVenueHint}>
+          <Field label={t.assignedTo} required hint={assignPool.restricted
+            ? t.tradeStaffOnly.replace('{d}', deptName(catDept(row.category), lang))
+            : t.assigneeAnyVenueHint}>
             <PersonPicker
               C={C} t={t} lang={lang}
               people={assignPool.people}

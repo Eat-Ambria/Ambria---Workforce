@@ -161,6 +161,25 @@ export default function Vendors() {
   )
 }
 
+// The trades a vendor can be filed under. English is what goes in `category`,
+// Hindi in `category_hi` — written down rather than machine-translated, because
+// a translator turns a trade into a description ("Mistri work" -> "mason's job")
+// and these are labels people scan, not sentences they read.
+//
+// The first four were asked for; the rest are what the existing vendors already
+// use, kept so nothing already filed has to be re-filed.
+const VENDOR_TRADES = [
+  { en: 'Electrician',            hi: 'बिजली मिस्त्री' },
+  { en: 'Mistri work',            hi: 'मिस्त्री का काम' },
+  { en: 'Painter',                hi: 'पेंटर' },
+  { en: 'Carpenter',              hi: 'बढ़ई' },
+  { en: 'Plumber',                hi: 'प्लंबर' },
+  { en: 'AC/HVAC',                hi: 'एसी / कूलिंग' },
+  { en: 'Welder / Fabrication',   hi: 'वेल्डर / फैब्रिकेशन' },
+  { en: 'Glass & Aluminium Work', hi: 'शीशा और एल्युमिनियम' },
+]
+const OTHER = '__other'
+
 // Same shape as personName/propName/deptName in constants/org: prefer the _hi
 // column, fall back to English so a vendor added before this existed still reads.
 const vName = (v, lang) => (lang === 'hi' && v?.name_hi ? v.name_hi : (v?.name || ''))
@@ -214,6 +233,9 @@ function VendorModal({ user, record, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  // an existing vendor filed under something not on the list keeps its text and
+  // lands on "Other" rather than being silently blanked
+  const listedTrade = VENDOR_TRADES.some((tr) => tr.en === form.category)
 
   async function save() {
     if (!form.name.trim()) { setErr(`${t.fullName} ${t.isRequired}`); return }
@@ -270,14 +292,47 @@ function VendorModal({ user, record, onClose, onSaved }) {
         onChange={(v) => setForm((f) => ({ ...f, name_hi: v }))}
       />
       <Field label={t.phone}><input style={inputStyle(C)} value={form.phone} type="tel" inputMode="numeric" maxLength={10} placeholder={t.phonePlaceholder} onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))} /></Field>
-      <Field label={t.category}><input style={inputStyle(C)} value={form.category} onChange={set('category')} placeholder="e.g. Electrician, Florist" /></Field>
-      {/* a trade IS a word, so this one really is translated */}
-      <HindiInput
-        label={t.vendorCategoryHi}
-        source={form.category}
-        value={form.category_hi}
-        onChange={(v) => setForm((f) => ({ ...f, category_hi: v }))}
-      />
+      <Field label={t.category} required>
+        <select
+          style={inputStyle(C)}
+          value={listedTrade ? form.category : (form.category ? OTHER : '')}
+          onChange={(e) => {
+            const v = e.target.value
+            if (v === OTHER) { setForm((f) => ({ ...f, category: '', category_hi: '' })); return }
+            const tr = VENDOR_TRADES.find((x) => x.en === v)
+            // both columns come from the list, so the Hindi is never a guess
+            setForm((f) => ({ ...f, category: tr ? tr.en : '', category_hi: tr ? tr.hi : '' }))
+          }}
+        >
+          <option value="">— {t.category} —</option>
+          {VENDOR_TRADES.map((tr) => (
+            <option key={tr.en} value={tr.en}>{lang === 'hi' ? tr.hi : tr.en}</option>
+          ))}
+          <option value={OTHER}>{t.other}</option>
+        </select>
+      </Field>
+
+      {/* The list will always be missing something, and a vendor you cannot file
+          is a vendor you cannot add. Free text stays available, and only then is
+          the Hindi worth translating. */}
+      {!listedTrade && (
+        <>
+          <Field label={`${t.category} — ${t.other}`}>
+            <input
+              style={inputStyle(C)}
+              value={form.category}
+              onChange={set('category')}
+              placeholder="e.g. Florist, Pest control"
+            />
+          </Field>
+          <HindiInput
+            label={t.vendorCategoryHi}
+            source={form.category}
+            value={form.category_hi}
+            onChange={(v) => setForm((f) => ({ ...f, category_hi: v }))}
+          />
+        </>
+      )}
       <Field label={t.vendorType}>
         <div style={{ display: 'grid', gap: 8 }}>
           {[

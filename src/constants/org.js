@@ -34,6 +34,19 @@ export const DEPARTMENTS = [
   // Orange sits furthest from the other four under colour-blind simulation
   // (worst-case ΔE 17.6 against them, well clear of the 8 floor).
   { code: 'kt', name: 'Kitchen', nameHi: 'रसोई', color: '#9A3412', ink: '#9A3412' },
+  // The trades. Added for repair work, but staff are posted to them, so they are
+  // departments like any other — they appear in the roster, the staff form and
+  // analytics too.
+  //
+  // Colours searched, not chosen: worst-case dE 15.2 across all nine under
+  // normal / deuteranope / protanope / tritanope vision, against the floor of 8
+  // Kitchen set. Nine categories is tight — Electrician sits near Housekeeping
+  // in the blues and Painter near Kitchen in the oranges. They separate, but not
+  // at a glance, so never let a dot be the only thing saying which is which.
+  { code: 'el', name: 'Electrician', nameHi: 'बिजली मिस्त्री', color: '#1E40AF', ink: '#1E40AF' },
+  { code: 'ms', name: 'Mistri work', nameHi: 'मिस्त्री का काम', color: '#86198F', ink: '#86198F' },
+  { code: 'pt', name: 'Painter', nameHi: 'पेंटर', color: '#C2410C', ink: '#C2410C' },
+  { code: 'cp', name: 'Carpenter', nameHi: 'बढ़ई', color: '#1F2937', ink: '#1F2937' },
 ]
 
 // Retired codes. NOT offered when choosing a department, but kept here so any
@@ -41,9 +54,7 @@ export const DEPARTMENTS = [
 // — history should not turn into gibberish because a list was shortened.
 const RETIRED_DEPARTMENTS = {
   sales: { code: 'sales', name: 'Sales', nameHi: 'बिक्री', color: '#D97706' },
-  tech: { code: 'tech', name: 'Technology', nameHi: 'तकनीक', color: '#0891B2' },
   ops: { code: 'ops', name: 'Operations', nameHi: 'संचालन', color: '#4F46E5' },
-  hr: { code: 'hr', name: 'HR', nameHi: 'एचआर', color: '#D4537E' },
   finance: { code: 'finance', name: 'Finance', nameHi: 'वित्त', color: '#059669' },
   marketing: { code: 'marketing', name: 'Marketing', nameHi: 'मार्केटिंग', color: '#DC2626' },
   oh: { code: 'oh', name: 'Overall Head', nameHi: 'ओवरऑल हेड', color: '#7C3AED' },
@@ -52,7 +63,7 @@ const RETIRED_DEPARTMENTS = {
   sech: { code: 'sech', name: 'Security Head', nameHi: 'सिक्योरिटी हेड', color: '#9D174D' },
 }
 
-// Lookup: the four live departments plus every retired code, for display only.
+// Lookup: every live department plus every retired code, for display only.
 export const DEPARTMENT_MAP = DEPARTMENTS.reduce(
   (m, d) => ({ ...m, [d.code]: d }),
   { ...RETIRED_DEPARTMENTS }
