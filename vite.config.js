@@ -6,6 +6,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Live URL: https://eat-ambria.github.io/Ambria---Workforce/
 export default defineConfig({
   base: '/Ambria---Workforce/',
+  build: {
+    rollupOptions: {
+      // Two HTML entries, because two installable apps need two manifests in
+      // two heads. fix-request/index.html is emitted at dist/fix-request/, which
+      // GitHub Pages serves at /Ambria---Workforce/fix-request/ — a real file,
+      // not the SPA 404 fallback, so the public manifest arrives with the page.
+      input: {
+        main: 'index.html',
+        fixRequest: 'fix-request/index.html',
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -69,5 +81,29 @@ export default defineConfig({
       },
       devOptions: { enabled: true },
     }),
+
+    // vite-plugin-pwa injects the ADMIN manifest into every HTML entry it sees.
+    // On the public page that lands above ours and wins, which is the whole bug
+    // this entry exists to fix — so it is stripped back out, from that page only.
+    {
+      name: 'one-manifest-per-page',
+      enforce: 'post',
+      // Not transformIndexHtml: vite-plugin-pwa adds its link after that hook
+      // has run, so stripping there removed nothing. The emitted asset is the
+      // last place both links exist, and this plugin is registered last.
+      generateBundle(_options, bundle) {
+        for (const [name, asset] of Object.entries(bundle)) {
+          if (!name.includes('fix-request') || !name.endsWith('.html')) continue
+          const before = asset.source
+          asset.source = String(before).replace(
+            /<link[^>]+rel="manifest"[^>]+\/manifest\.webmanifest"[^>]*>\s*/g,
+            ''
+          )
+          if (asset.source === before) {
+            this.warn(`one-manifest-per-page: nothing removed from ${name}`)
+          }
+        }
+      },
+    },
   ],
 })

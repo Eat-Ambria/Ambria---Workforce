@@ -50,7 +50,10 @@ export default function App() {
 
       {/* PUBLIC — no login. Shareable link for outside users to raise a fix
           request. Lands in the Task Board as an 'open' request for admins. */}
+      {/* both spellings: the app is served from /fix-request/ now, but links
+          without the slash have already been shared */}
       <Route path="/fix-request" element={<PublicFixRequest />} />
+      <Route path="/fix-request/" element={<PublicFixRequest />} />
 
       <Route
         element={

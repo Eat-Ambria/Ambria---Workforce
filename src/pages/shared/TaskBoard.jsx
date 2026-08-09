@@ -536,7 +536,11 @@ export default function TaskBoard() {
 function PublicLinkBar({ C, t }) {
   const [copied, setCopied] = useState(false)
   // origin + Vite base ('/Ambria---Workforce/') + route → full public URL
-  const link = `${window.location.origin}${import.meta.env.BASE_URL}fix-request`
+  // Trailing slash on purpose: dist/fix-request/index.html is a real file, and
+  // that URL fetches it. Without the slash GitHub Pages 404s to the admin shell,
+  // which carries the admin manifest — and installing from there gave people the
+  // admin app instead of the repair one.
+  const link = `${window.location.origin}${import.meta.env.BASE_URL}fix-request/`
 
   async function copy() {
     try {
