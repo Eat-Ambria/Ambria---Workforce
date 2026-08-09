@@ -57,7 +57,6 @@ const COLS_NARROW_PICK = '34px 170px 104px 128px 118px'
 const FREQ = TASK_FREQUENCIES
 const FREQ_MAP = FREQUENCY_MAP
 const freqOf = taskFrequency
-const SUMMARY_COLS = ['daily', 'sunday', 'alternate', 'weekly', 'monthly']
 const summaryBucket = (fk) => (fk === 'dailyMS' ? 'daily' : fk === 'alternateMS' ? 'alternate' : fk)
 // Filtering wants four buckets, not seven chips. "(Mon-Sat)" is a rule about
 // Sundays, not a different kind of work, and Sunday-only work IS weekly work —
@@ -79,15 +78,8 @@ const weekName = (v, lang) => {
 }
 
 // Summary cells: a spreadsheet reads as a grid, so the cells carry the borders.
-const sumHead = {
-  padding: '11px 9px 9px', fontSize: 9.5, fontWeight: 700,
-  textTransform: 'uppercase', letterSpacing: '0.11em', textAlign: 'center',
-}
-const sumCell = { padding: '12px 9px', fontSize: 14, textAlign: 'center' }
 // one grid for the head, the rows and the totals — three different template
 // strings is how a table quietly stops lining up
-const SUM_GRID = '138px repeat(5, minmax(0,1fr)) 68px'
-const SUM_GRID_NARROW = '104px repeat(5, 56px) 52px'
 // the same five buckets, named short enough to fit a phone column
 const SUM_SHORT = {
   daily:     { en: 'DAILY', hi: 'रोज़' },
@@ -188,7 +180,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // A 13px icon with 1px of padding is a mouse target. A finger needs ~34px, so
   // the row actions grow on a phone instead of asking for a precise tap.
   const iconSize = wide ? 17 : 18
-  const sumGrid = wide ? SUM_GRID : SUM_GRID_NARROW
   const sumLabel = (k) => (wide ? freqLabel(k, lang) : (lang === 'hi' ? SUM_SHORT[k].hi : SUM_SHORT[k].en))
   const today = todayISO()
   // How far down the sticky filter bar has to sit. The app header is sticky at
@@ -432,20 +423,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // The Summary sheet: how much work each department carries, by frequency.
   // Counted from the whole roster, never from the filtered view — a summary that
   // changes when you click a chip is not a summary.
-  const summary = useMemo(() => {
-    const blank = () => SUMMARY_COLS.reduce((m, k) => ({ ...m, [k]: 0 }), {})
-    const by = DEPARTMENTS.reduce((m, d) => ({ ...m, [d.code]: blank() }), {})
-    groups.forEach((g) => {
-      const cell = by[g.department]
-      if (!cell) return
-      cell[summaryBucket(freqOf(g))] += 1
-    })
-    return by
-  }, [groups])
-  const grandTotal = useMemo(
-    () => Object.values(summary).reduce((n, r) => n + SUMMARY_COLS.reduce((m, k) => m + r[k], 0), 0),
-    [summary]
-  )
 
   // removes the job from EVERY person at this venue, not just one of them
   async function deleteGroup(g) {
@@ -803,88 +780,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                 {t.clientVisitDay}
               </span>
             )}
-          </div>
-        </div>
-        {/* Summary: the whole roster's weight per department, per frequency */}
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: wide ? 520 : 496 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: sumGrid, background: C.card }}>
-              <span style={{ ...sumHead, ...stickyCell(C.card), color: C.faint, textAlign: 'left' }}>
-                {t.department}
-                <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', color: C.faint, fontWeight: 600, marginTop: 2 }}>
-                  {t.tapToFilter}
-                </span>
-              </span>
-              {/* the band's colour as a 2px rule under its heading. Enough to tie
-                  the column to its chips and its rows; not enough to shout. */}
-              {SUMMARY_COLS.map((k) => (
-                <span key={k} style={{ ...sumHead, color: C.tl, boxShadow: `inset 0 -2px 0 ${FREQ_MAP[k].ink}` }}>
-                  {sumLabel(k)}
-                </span>
-              ))}
-              <span style={{ ...sumHead, color: C.faint, boxShadow: `inset 0 -2px 0 ${C.maroon}` }}>{t.total}</span>
-            </div>
-            {DEPARTMENTS.map((d) => {
-              const r = summary[d.code] || {}
-              const tot = SUMMARY_COLS.reduce((n, k) => n + (r[k] || 0), 0)
-              // the row IS the filter — tap to narrow, tap again to clear
-              const on = deptTab === d.code
-              const rowBg = on ? C.maroonSoft : C.card
-              return (
-                <div
-                  key={d.code}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={on}
-                  onClick={() => pickDept(on ? 'all' : d.code)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDept(on ? 'all' : d.code) } }}
-                  style={{ display: 'grid', gridTemplateColumns: sumGrid, borderTop: `1px solid ${C.border}`, background: rowBg, cursor: 'pointer' }}
-                >
-                  {/* the department's colour as a slim bar; the name itself stays
-                      plain dark text, because a coloured bar AND coloured text AND
-                      a coloured column is three ways of saying the same thing */}
-                  <span style={{ ...sumCell, ...stickyCell(rowBg), textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, fontWeight: on ? 800 : 600, color: on ? C.maroon : C.text }}>
-                    <span style={{ width: on ? 4 : 3, alignSelf: on ? 'stretch' : undefined, height: on ? undefined : 16, borderRadius: 2, background: d.color, flexShrink: 0 }} />
-                    {deptName(d.code, lang)}
-                  </span>
-                  {SUMMARY_COLS.map((k) => (
-                    <span
-                      key={k}
-                      style={{
-                        ...sumCell,
-                        fontVariantNumeric: 'tabular-nums',
-                        // a zero is absence of work: present, but it should not
-                        // compete with a real figure for attention
-                        color: r[k] ? C.text : C.faint,
-                        fontWeight: r[k] ? 600 : 400,
-                      }}
-                    >
-                      {r[k] || 0}
-                    </span>
-                  ))}
-                  <span style={{ ...sumCell, fontWeight: 700, color: C.maroon, fontVariantNumeric: 'tabular-nums', borderLeft: `1px solid ${C.border}` }}>{tot}</span>
-                </div>
-              )
-            })}
-            {/* Column totals, not five blank cells. "How much daily work does a
-                venue carry" is a question this table should answer. */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => pickDept('all')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDept('all') } }}
-              style={{ display: 'grid', gridTemplateColumns: sumGrid, borderTop: `1px solid ${C.borderStrong}`, background: deptTab === 'all' ? C.maroonSoft : C.cardAlt, cursor: 'pointer' }}
-            >
-              <span style={{ ...sumCell, ...stickyCell(deptTab === 'all' ? C.maroonSoft : C.cardAlt), textAlign: 'left', paddingLeft: 23, fontWeight: 700, color: deptTab === 'all' ? C.maroon : C.tl, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.1em' }}>
-                {t.totalPerProperty}
-              </span>
-              {SUMMARY_COLS.map((k) => (
-                <span key={k} style={{ ...sumCell, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
-                  {Object.values(summary).reduce((n, row) => n + (row[k] || 0), 0)}
-                </span>
-              ))}
-              <span style={{ ...sumCell, fontWeight: 800, fontSize: 16, color: C.maroon, fontVariantNumeric: 'tabular-nums', borderLeft: `1px solid ${C.border}` }}>{grandTotal}</span>
-            </div>
           </div>
         </div>
       </div>

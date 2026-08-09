@@ -7,7 +7,7 @@ import { nowISO, todayISO, fmtDate, fmtDateTime } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, dailyOverdueActive, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
@@ -46,7 +46,7 @@ export default function AdminTasks() {
   const [loading, setLoading] = useState(true)       // first load
   const [listLoading, setListLoading] = useState(false) // subsequent refreshes
   const [page, setPage] = useState(0)
-  const [tab, setTab] = useState(presetTab || 'pending')
+  const [tab, setTab] = useState(presetTab || 'all')
   const [propFilter, setPropFilter] = useState(
     canSeeAllProps ? (presetProp || 'all') : user.property
   )
@@ -81,7 +81,21 @@ export default function AdminTasks() {
     if (key === 'review') return q.eq('status', TASK_STATUS.COMPLETION_REQUESTED)
     if (key === 'issues') return q.in('issue_status', [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING])
     if (key === 'issuesDone') return q.eq('issue_status', TASK_STATUS.ISSUE_RESOLVED)
-    if (key === 'overdue') return q.lt('due_date', today).neq('status', TASK_STATUS.COMPLETED)
+    if (key === 'overdue') {
+      // A daily task carries no due date, so a due_date test cannot see one. The
+      // dashboard counts those separately once the cutoff hour has passed and
+      // adds them in — this tab counted only the due_date kind, so its "3" led
+      // to a list of one. Same rule on both sides now.
+      const byDue = `and(due_date.lt.${today},status.neq.${TASK_STATUS.COMPLETED})`
+      if (!dailyOverdueActive()) return q.or(byDue)
+      const dailyLate = [
+        'category.eq.daily',
+        `status.neq.${TASK_STATUS.COMPLETED}`,
+        `status.neq.${TASK_STATUS.COMPLETION_REQUESTED}`,
+        `or(due_date.is.null,due_date.gte.${today})`,
+      ].join(',')
+      return q.or(`${byDue},and(${dailyLate})`)
+    }
     return q // 'all'
   }, [today])
 
@@ -182,7 +196,16 @@ export default function AdminTasks() {
   // Cards are for work you have to open and act on — an issue, or a leftover
   // approval. Everyday work is the progress table above; a 400-card list of it
   // was never read to the end.
-  const showList = issueView || tab === 'review'
+  // Any status other than "none chosen" means somebody asked for a list —
+  // the Issues button, the Review button, or a dashboard tile deep-linking in.
+  // This used to name three tabs explicitly, so five of the six dashboard tiles
+  // landed here and silently showed the progress table instead.
+  const showList = tab !== 'all'
+  const tabLabel = {
+    overdue: t.overdue, pending: t.pending, inprogress: t.inProgress,
+    review: t.reviewQueue, completed: t.completed,
+    issues: t.openIssues, issuesDone: t.issueResolved,
+  }[tab] || ''
 
   if (loading) return <Loader label={t.loading} />
 
@@ -201,6 +224,46 @@ export default function AdminTasks() {
         <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
         <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
         <PropChip C={C} full active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</PropChip>
+
+        {/* Issues sit up here with the view switcher, not under the progress
+            table. Something has gone wrong on two jobs — that is the first
+            thing an admin should see, not the last. Only on "All tasks": the
+            roster and a personal task list have no issue queue. */}
+        {scope === 'all' && (
+          <span style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            {staleReview && (
+              <button
+                onClick={() => changeTab(tab === 'review' ? 'all' : 'review')}
+                aria-pressed={tab === 'review'}
+                style={{
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
+                  background: tab === 'review' ? C.maroon : C.cardAlt,
+                  color: tab === 'review' ? '#fff' : C.tl,
+                  border: `1px solid ${tab === 'review' ? C.maroon : C.border}`,
+                }}
+              >
+                {t.reviewQueue} ({counts.review})
+              </button>
+            )}
+            <button
+              onClick={() => changeTab(issueView ? 'all' : 'issues')}
+              aria-pressed={issueView}
+              style={{
+                whiteSpace: 'nowrap', flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
+                background: issueView ? C.red : C.rBg,
+                color: issueView ? '#fff' : C.red,
+                border: `1px solid ${issueView ? C.red : 'transparent'}`,
+              }}
+            >
+              <Icon name="warning" size={15} color={issueView ? '#fff' : C.red} />
+              {t.issues}{counts.issues ? ` (${counts.issues})` : ''}
+            </button>
+          </span>
+        )}
       </div>
 
       {scope === 'roster' ? (
@@ -284,8 +347,13 @@ export default function AdminTasks() {
         ))}
       </div>
 
-      {/* the progress table only selects the columns it draws, so opening a job
-          re-reads the whole row — the modal needs photos, notes, the issue trail */}
+      {/* Hidden while looking at issues or the leftover approval queue. That
+          table answers "how is today going", which is not the question you are
+          asking when you have opened an exception — and it is tall enough that
+          the list underneath it looked like nothing had happened at all.
+          The progress table only selects the columns it draws, so opening a job
+          re-reads the whole row — the modal needs photos, notes, the issue trail. */}
+      {!showList && (
       <StaffProgress
         user={user}
         members={members}
@@ -299,43 +367,7 @@ export default function AdminTasks() {
           if (data) setReview(data)
         }}
       />
-
-      {/* One button, not a row of status tabs: the table above already says how
-          much is pending, in progress and done, per person. Issues are the
-          exception — something went wrong and somebody has to open it. */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
-        {staleReview && (
-          <button
-            onClick={() => changeTab(tab === 'review' ? 'all' : 'review')}
-            aria-pressed={tab === 'review'}
-            style={{
-              whiteSpace: 'nowrap', flexShrink: 0,
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
-              background: tab === 'review' ? C.maroon : C.cardAlt,
-              color: tab === 'review' ? '#fff' : C.tl,
-              border: `1px solid ${tab === 'review' ? C.maroon : C.border}`,
-            }}
-          >
-            {t.reviewQueue} ({counts.review})
-          </button>
-        )}
-        <button
-          onClick={() => changeTab(issueView ? 'all' : 'issues')}
-          aria-pressed={issueView}
-          style={{
-            whiteSpace: 'nowrap', flexShrink: 0,
-            display: 'inline-flex', alignItems: 'center', gap: 7,
-            padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
-            background: issueView ? C.red : C.rBg,
-            color: issueView ? '#fff' : C.red,
-            border: `1px solid ${issueView ? C.red : 'transparent'}`,
-          }}
-        >
-          <Icon name="warning" size={15} color={issueView ? '#fff' : C.red} />
-          {t.issues}{counts.issues ? ` (${counts.issues})` : ''}
-        </button>
-      </div>
+      )}
 
       {/* Resolving an issue no longer hides the task — it moves here, and the
           nightly job clears the flag a day later. */}
@@ -363,6 +395,27 @@ export default function AdminTasks() {
       )}
 
       {showList && (<>
+      {/* Arriving from a dashboard tile used to leave no sign of what was being
+          filtered, and no way back to the day's progress. */}
+      {!issueView && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+            {tabLabel} ({counts[tab] || 0})
+          </span>
+          <button
+            type="button"
+            onClick={() => changeTab('all')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+              background: C.card, color: C.tl, border: `1px solid ${C.border}`,
+            }}
+          >
+            <Icon name="close" size={13} color={C.tl} />
+            {t.clearFilter}
+          </button>
+        </div>
+      )}
       {listLoading && list.length === 0 ? (
         <Loader label={t.loading} />
       ) : list.length === 0 ? (
