@@ -12,6 +12,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
+        // stated rather than inferred from start_url: the public repair page
+        // ships its own manifest at this origin, and the two must never be
+        // mistaken for one app
+        id: '/Ambria---Workforce/',
         name: 'Ambria Admin',
         short_name: 'Ambria Admin',
         description: 'Ambria Admin — task, training and team management for Ambria event venues',
@@ -30,7 +34,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
         // take over from the previous worker straight away instead of waiting
         // for every tab to close, and bin the old build's caches
         skipWaiting: true,

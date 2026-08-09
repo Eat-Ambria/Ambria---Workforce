@@ -42,7 +42,50 @@ function addMine(id) {
   } catch { /* ignore private-mode storage errors */ }
 }
 
+// While this page is open the document advertises the PUBLIC app, not the admin
+// one. Both live at the same origin, so the only thing telling a browser they
+// are different apps is the manifest each page links to — same-manifest means
+// same app, and installing one would just reinstall the other.
+//
+// Everything is restored on unmount: an admin who happened to open the public
+// link should not then be offered "Repair Request" as their install.
+function usePublicManifest() {
+  useEffect(() => {
+    const link = document.querySelector('link[rel="manifest"]')
+    const theme = document.querySelector('meta[name="theme-color"]')
+    const before = {
+      manifest: link?.getAttribute('href') || null,
+      theme: theme?.getAttribute('content') || null,
+      title: document.title,
+    }
+
+    const base = import.meta.env.BASE_URL || '/'
+    if (link) link.setAttribute('href', `${base}fix-request.webmanifest`)
+    if (theme) theme.setAttribute('content', '#8A2438')
+    document.title = 'Ambria Repair Request'
+
+    // iOS ignores the manifest and reads these instead, so the home-screen
+    // entry there is named by this tag rather than by the JSON above.
+    const appleTitle = document.createElement('meta')
+    appleTitle.name = 'apple-mobile-web-app-title'
+    appleTitle.content = 'Repair Request'
+    const appleCapable = document.createElement('meta')
+    appleCapable.name = 'apple-mobile-web-app-capable'
+    appleCapable.content = 'yes'
+    document.head.append(appleTitle, appleCapable)
+
+    return () => {
+      if (link && before.manifest) link.setAttribute('href', before.manifest)
+      if (theme && before.theme) theme.setAttribute('content', before.theme)
+      document.title = before.title
+      appleTitle.remove()
+      appleCapable.remove()
+    }
+  }, [])
+}
+
 export default function PublicFixRequest() {
+  usePublicManifest()
   const C = useColors()
   const { lang, toggle: toggleLang } = useLang()
   const hi = lang === 'hi'

@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { newId } from '../../lib/id'
-import { todayISO, fmtDate } from '../../lib/time'
+import { todayISO } from '../../lib/time'
 import { translateToHindi } from '../../lib/translate'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
   TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, propName, deptName,
   memberInProperty, personName, PRIORITIES,
-  TASK_FREQUENCIES, FREQUENCY_MAP, taskFrequency, frequencyLabel,
-  WEEK_DAYS, dayName, dayShort, scheduleText, staffingLabel, alternateDays,
+  FREQUENCY_MAP, taskFrequency, frequencyLabel,
+  WEEK_DAYS, dayName, dayShort, staffingLabel, monthlyDate, taskDays,
+  SHIFTS, hasShifts, shiftLabel,
 } from '../../constants/org'
 import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -50,11 +51,40 @@ const COLS_PICK = '34px 38px minmax(0,1.3fr) 116px 136px minmax(0,1.5fr) 96px'
 const COLS_NARROW = '190px 104px 128px 118px'
 const COLS_NARROW_PICK = '34px 170px 104px 128px 118px'
 
+// The flat sheet, in the order the drawing lays it out. Seven 32px day columns
+// is the whole point of the layout, so they are fixed and everything else gives
+// way around them; the table scrolls sideways rather than crushing them.
+// One list of widths, and BOTH the grid template and the table's minimum width
+// are derived from it. They were two hand-kept values before, and adding the
+// Shift column made them disagree by 146px — past which neither the header nor
+// the rows painted a background, so rows showed through the header. A number
+// that has to be updated in sympathy with another number will drift; this one
+// cannot.
+const COL_W = {
+  pick: 34, num: 38, task: 260,
+  daily: 208, weekly: 96, monthly: 96, day: 32,
+  assigned: 150, venue: 104, shift: 124, time: 116, actions: 104,
+}
+const TASK_W = COL_W.task
+
+const sheetTracks = ({ picking, showVenue }) => [
+  picking && COL_W.pick,
+  COL_W.num,
+  COL_W.task,
+  COL_W.daily,
+  COL_W.weekly,
+  COL_W.monthly,
+  ...Array(7).fill(COL_W.day),
+  COL_W.assigned,
+  showVenue && COL_W.venue,
+  COL_W.shift,
+  COL_W.time,
+  COL_W.actions,
+].filter(Boolean)
+
 // The seven bands and the category/skip_sunday/week_day mapping live in
 // constants/org.js — the staff task list and the dashboard label tasks from the
 // same source, so a job can never read "Sunday only" here and "Weekly" there.
-// FREQ keeps the sheet's UPPERCASE wording for the table header.
-const FREQ = TASK_FREQUENCIES
 const FREQ_MAP = FREQUENCY_MAP
 const freqOf = taskFrequency
 const summaryBucket = (fk) => (fk === 'dailyMS' ? 'daily' : fk === 'alternateMS' ? 'alternate' : fk)
@@ -66,16 +96,6 @@ const FILTER_BANDS = ['daily', 'alternate', 'weekly', 'monthly']
 const filterBucket = (fk) => (fk === 'sunday' ? 'weekly' : summaryBucket(fk))
 const freqLabel = (fk, lang) => frequencyLabel(fk, lang).toUpperCase()
 
-const MONTH_WEEKS = [
-  { v: 1, en: '1st Week', hi: 'पहला हफ़्ता' },
-  { v: 2, en: '2nd Week', hi: 'दूसरा हफ़्ता' },
-  { v: 3, en: '3rd Week', hi: 'तीसरा हफ़्ता' },
-  { v: 4, en: '4th Week', hi: 'चौथा हफ़्ता' },
-]
-const weekName = (v, lang) => {
-  const w = MONTH_WEEKS.find((x) => x.v === Number(v))
-  return w ? (lang === 'hi' ? w.hi : w.en) : ''
-}
 
 // Summary cells: a spreadsheet reads as a grid, so the cells carry the borders.
 // one grid for the head, the rows and the totals — three different template
@@ -88,15 +108,26 @@ const SUM_SHORT = {
   weekly:    { en: 'WEEK',  hi: 'हफ़्ता' },
   monthly:   { en: 'MON',   hi: 'माह' },
 }
-// The first column pins itself while the rest scrolls sideways. It needs a solid
-// background of its own: a transparent sticky cell lets the scrolling numbers
-// slide underneath it.
+// Nothing in a row is pinned any more. The department band above each block
+// already says which department you are in, and it stays put on its own, so a
+// per-row Department column was the same fact twice — paid for with a sticky
+// cell that kept letting the scrolling columns slide out from under it.
 const stickyCell = (bg) => ({ position: 'sticky', left: 0, zIndex: 1, background: bg })
+// Task is deliberately NOT pinned. With Department it took a third of the
+// visible width and sat over the day ticks — the columns you scroll sideways
+// to reach were the ones it was covering.
 const thCell = {
   padding: '11px 10px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
   textTransform: 'uppercase', letterSpacing: '0.1em',
 }
-const tdCell = { padding: '12px 10px' }
+const tdCell = { padding: '9px 10px' }
+// inputStyle is built for a form field; inside a 100px sheet cell it needs to
+// give back the padding and the font size
+const miniInput = (C) => ({
+  width: '100%', background: C.white, color: C.text,
+  border: `1px solid ${C.border}`, borderRadius: 7,
+  padding: '5px 4px', fontSize: 11.5, outline: 'none',
+})
 
 // The sheet writes 12-hour times — "4:30-5:00 PM", "9:00 AM-5:00 PM" — while
 // <input type="time"> speaks 24-hour. Dropping the meridiem, as this used to,
@@ -145,6 +176,10 @@ const TIME_SLOTS = (() => {
   return out
 })()
 
+// Built once. The labels carry no language — a clock face reads the same either
+// way — which is what lets the cell below sit behind memo().
+const TIME_OPTIONS = TIME_SLOTS.map((v) => ({ v, label: fmt12(v) }))
+
 const minutesOf = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))
 const spanLabel = (from, to, t) => {
   if (!from || !to) return ''
@@ -159,6 +194,109 @@ const spanLabel = (from, to, t) => {
 // Comparing the new value against the RAW text called every row an edit, so a
 // roster nobody had touched offered to save 117 changes.
 const normRange = (block) => fmtRange(...Object.values(parseRange(block)))
+
+// The seven day columns, Sunday first as the sheet draws them (WEEK_DAYS is
+// Monday-first because that is how the database numbers them).
+const DAY_COLS = [7, 1, 2, 3, 4, 5, 6]
+
+// 1 -> "1st". Hindi just takes the number — Devanagari ordinals for dates are
+// not how anyone writes a monthly rota.
+const ordinal = (n, lang) => {
+  if (lang === 'hi') return String(n)
+  const s = ['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th'
+  return `${n}${s}`
+}
+
+// Which days a row shows as ticked. Weekly means one day; monthly is not a
+// weekday pattern at all, so it ticks nothing.
+// The ticks belong to Alternate and to nothing else. A daily row shows none:
+// asking "which days" of a job that runs every day is the question that made a
+// plain daily task draw three ticks, because taskDays() falls back to
+// alternateDays() — Mon/Wed/Fri — when a row has no day list of its own.
+const altDays = (g) => (['alternate', 'alternateMS'].includes(freqOf(g)) ? taskDays(g) : [])
+
+// A row runs on ONE schedule. Each setter therefore clears the other three
+// rather than layering on top of them — a sheet that let a job claim both
+// "daily" and "every Wednesday" would be lying about what the staff will see.
+const BLANK = { weekDays: null, weekDay: '', monthWeek: '', skipSunday: false }
+const setDaily = (v) => (v === 'dailyMS'
+  ? { ...BLANK, category: 'daily', skipSunday: true }
+  : { ...BLANK, category: 'daily' })
+const setWeekly = (d) => ({ ...BLANK, category: 'weekly', weekDay: Number(d) })
+const setMonthly = (w) => ({ ...BLANK, category: 'monthly', monthWeek: Number(w) })
+// Saturday and Sunday, and nothing else — the shortcut's "on" state. Reading it
+// off the days rather than a category keeps it honest: tick Sat and Sun by hand
+// and the button lights up too, because that is the same schedule.
+const isWeekendOnly = (g) => {
+  const d = ['alternate', 'alternateMS'].includes(freqOf(g)) ? taskDays(g) : []
+  return d.length === 2 && d.includes(6) && d.includes(7)
+}
+
+const setAlternate = (days) => {
+  const d = [...new Set(days.map(Number))].sort((a, b) => a - b)
+  return { ...BLANK, category: 'alternate', weekDays: d, skipSunday: !d.includes(7) }
+}
+
+// Start and end, stacked. Behind memo() and deliberately given no `lang`:
+// these 152 options are the most expensive thing on the sheet and the language
+// toggle has no business rebuilding them.
+// Start and end. Text until you click it.
+//
+// Two selects of 76 options each is 152 elements per row; on a 125-row sheet
+// that is 19,000 of them, ~90% of everything the table renders, and it is what
+// made the roster slow to open and slow to re-language. A cell nobody is editing
+// does not need a picker — so it is a line of text, and the selects appear on
+// the one cell being edited.
+//
+// Behind memo() with no `lang` prop: a clock face reads the same in both
+// languages, so switching cannot invalidate these.
+const TimeCell = memo(function TimeCell({ C, gKey, from, to, pick, onPatch }) {
+  const [editing, setEditing] = useState(false)
+
+  if (!editing) {
+    return (
+      <span style={tdCell}>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          style={{
+            width: '100%', textAlign: 'left', background: 'transparent',
+            padding: 0, fontSize: 11.5, fontWeight: 600,
+            color: from ? C.text : C.faint, fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {fmtRange(from, to) || pick}
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <span style={{ ...tdCell, display: 'grid', gap: 3 }}>
+      <select
+        autoFocus
+        style={miniInput(C)}
+        value={from || ''}
+        // a start past the end would leave a negative block
+        onChange={(e) => onPatch(gKey, { from: e.target.value, to: to && e.target.value && e.target.value >= to ? '' : to })}
+      >
+        <option value="">{pick}</option>
+        {TIME_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+      </select>
+      <select
+        style={miniInput(C)}
+        value={to || ''}
+        onChange={(e) => onPatch(gKey, { to: e.target.value })}
+        onBlur={() => setEditing(false)}
+      >
+        <option value="">{pick}</option>
+        {TIME_OPTIONS.filter((o) => !from || o.v > from).map((o) => (
+          <option key={o.v} value={o.v}>{o.label}</option>
+        ))}
+      </select>
+    </span>
+  )
+})
 
 // Roster: one screen to hand out a venue's recurring work.
 //
@@ -194,7 +332,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [])
-  const todayDow = new Date().getDay() === 0 ? 7 : new Date().getDay()
   const tapTarget = {
     background: 'transparent', display: 'grid', placeItems: 'center',
     width: wide ? 26 : 34, height: wide ? 26 : 34,
@@ -265,6 +402,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // the slow part. Those from elsewhere are labelled with their own venue, and
   // the cover dates below record the arrangement.
   const staff = useMemo(() => [...members, ...formerStaff], [members, formerStaff])
+  // find() inside a map is a scan per person per row; the sheet asks this
+  // question a few hundred times on every render
+  const staffById = useMemo(() => new Map(staff.map((m) => [m.id, m])), [staff])
 
   // someone on this roster who is not based at any of the selected venues
   const isVisiting = useCallback(
@@ -279,7 +419,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // meant four separate reads of what is one document.
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, status, started_at, before_photo, completion_photo')
+      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, shift, status, started_at, before_photo, completion_photo')
       .in('property', props)
       .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
@@ -297,7 +437,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
         monthWeek: r.month_week || '', skipSunday: !!r.skip_sunday,
         weekDays: Array.isArray(r.week_days) && r.week_days.length ? r.week_days.map(Number) : null,
-        priority: r.priority || 'medium', dueDate: r.due_date || '',
+        priority: r.priority || 'medium', dueDate: r.due_date || '', shift: r.shift || '',
         photoRequired: r.photo_required !== false, rows: [],
       })
       byTitle.get(key).rows.push(r)
@@ -370,8 +510,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const renameGroup = (key, title) =>
     setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, title } : g)))
 
-  const setGroupTime = (key, patch) =>
+  // useCallback with no deps: setGroups is stable, so this identity never
+  // changes — which is what lets memo() on TimeCell actually hold.
+  const setGroupTime = useCallback((key, patch) => {
     setGroups((prev) => prev.map((g) => (g.key === key ? { ...g, ...patch } : g)))
+  }, [])
 
   // Narrowing the list is only half the job: if the screen still shows the
   // summary afterwards, nothing appears to have happened. Scroll to the work,
@@ -385,40 +528,82 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const pickDept = (code) => { setDeptTab(code); requestAnimationFrame(goToList) }
 
   // which department's round is on screen, and which frequency band
+  // Filter on the SAVED row, not the edited group — the same reason the sort
+  // does. With a frequency filter on, ticking a day changed the category and
+  // the row failed its own filter mid-edit and vanished from under the cursor.
+  // The filter re-applies on the next load, once the change has been saved.
   const shownGroups = useMemo(
-    () => groups.filter((g) => (deptTab === 'all' || g.department === deptTab)
-      && (freqFilter === 'all' || filterBucket(freqOf(g)) === freqFilter)),
+    () => groups.filter((g) => {
+      const r = g.rows[0] || {}
+      const dept = r.department ?? g.department
+      const fk = r.category ? freqOf(r) : freqOf(g)
+      return (deptTab === 'all' || dept === deptTab)
+        && (freqFilter === 'all' || filterBucket(fk) === freqFilter)
+    }),
     [groups, deptTab, freqFilter]
   )
 
   // The sheet's own shape: department band, then a block per frequency inside it,
   // each block numbered and time-ordered. Reading it that way is the whole point —
   // "what does housekeeping do every day" is one block, not a filter.
-  const sections = useMemo(() => {
+  // Department, then frequency, then time — and the bands that say so. Sorting
+  // alone was not enough at 459 rows: nothing marked where one department ended.
+  const sheetRows = useMemo(() => {
     const deptOrder = DEPARTMENTS.map((d) => d.code)
-    const freqOrder = FREQ.map((f) => f.key)
-    const byDept = new Map()
-    shownGroups.forEach((g) => {
-      const d = g.department || '_'
-      if (!byDept.has(d)) byDept.set(d, new Map())
-      const fk = freqOf(g)
-      const byFreq = byDept.get(d)
-      if (!byFreq.has(fk)) byFreq.set(fk, [])
-      byFreq.get(fk).push(g)
+    // Department, then the clock. Frequency used to be the second key, which
+    // grouped the block into runs of daily / alternate / weekly — the sub-blocks
+    // the bands used to label. A department now reads as one shift from morning
+    // to evening, which is how the printed roster is worked through, and each
+    // row says its own frequency on its chip.
+    //
+    // Sort on the SAVED row, not the edited group: ticking a day changes the
+    // frequency, and ranking on live values would slide the row out from under
+    // the cursor mid-edit. The sheet settles on the next load.
+    const saved = (g) => g.rows[0] || {}
+    const deptRank = (g) => {
+      const d = saved(g).department ?? g.department
+      return deptOrder.indexOf(d) < 0 ? 99 : deptOrder.indexOf(d)
+    }
+    // Sort on the PARSED start, not the raw text. A monthly row's time_block
+    // reads "1st Week", and comparing that as a string drops it between 12:15
+    // and 2:00 because both begin with a "1". Parsed, it has no clock time at
+    // all and sinks to the end of its department, which is where a job with no
+    // hour belongs.
+    const startOf = (g) => parseRange(saved(g).time_block).from
+    return [...shownGroups].sort((a, b) => {
+      const sa = startOf(a)
+      const sb = startOf(b)
+      return deptRank(a) - deptRank(b)
+        || (sa ? 0 : 1) - (sb ? 0 : 1)
+        || sa.localeCompare(sb)
+        || (a.title || '').localeCompare(b.title || '')
     })
-    return [...byDept.entries()]
-      .sort((a, b) => deptOrder.indexOf(a[0]) - deptOrder.indexOf(b[0]))
-      .map(([dept, byFreq]) => ({
-        dept,
-        count: [...byFreq.values()].reduce((n, r) => n + r.length, 0),
-        bands: [...byFreq.entries()]
-          .sort((a, b) => freqOrder.indexOf(a[0]) - freqOrder.indexOf(b[0]))
-          .map(([fk, rows]) => ({
-            fk,
-            rows: [...rows].sort((a, b) => (a.time_block || 'zz').localeCompare(b.time_block || 'zz')),
-          })),
-      }))
   }, [shownGroups])
+
+  // The same rows, cut into department blocks and frequency blocks inside them.
+  // Derived from sheetRows so the bands and the order can never disagree.
+  //
+  // The numbering runs straight down the department, not restarting inside each
+  // frequency block — that is how the printed sheet numbers it, and a second "1"
+  // a few rows below the first reads as a mistake.
+  const sections = useMemo(() => {
+    const out = []
+    let dept = null
+    let nInDept = 0
+    let dRef = null
+    sheetRows.forEach((g) => {
+      const d = (g.rows[0] || {}).department ?? g.department ?? '_'
+      if (d !== dept) {
+        dept = d; nInDept = 0
+        dRef = { kind: 'dept', key: 'd:' + d, dept: d, n: 0 }
+        out.push(dRef)
+      }
+      nInDept += 1
+      dRef.n += 1
+      out.push({ kind: 'row', key: g.key, g, no: nInDept })
+    })
+    return out
+  }, [sheetRows])
 
   // The Summary sheet: how much work each department carries, by frequency.
   // Counted from the whole roster, never from the filtered view — a summary that
@@ -516,12 +701,24 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       || String(g.monthWeek || '') !== String(g.rows[0]?.month_week || '')
     const resopped = (g.sop || '') !== (g.rows[0]?.description || '')
       || (g.staffing || '') !== (g.rows[0]?.staffing || '')
-    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed }
+    // Moving a job to another venue rewrites property on every copy of it.
+    const removed = (g.property || '') !== (g.rows[0]?.property || '')
+    const reshifted = (g.shift || '') !== (g.rows[0]?.shift || '')
+    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
   const dropCount = plan.reduce((n, x) => n + x.dropped.length, 0)
-  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped).length
+  // The plan already works out what changed on every group; the sheet just
+  // needs the yes/no so it can tint the row.
+  const editedKeys = useMemo(() => new Set(
+    plan.filter((x) => x.added.length || x.dropped.length || x.renamed || x.rehindied
+      || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped
+      || x.reprioed || x.redued || x.redaysed || x.removed || x.reshifted).map((x) => x.g.key)
+  ), [plan])
+  const isEdited = (g) => editedKeys.has(g.key)
+
+  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.removed || x.reshifted).length
   const nothingToSave = addCount + dropCount + renameCount === 0
 
   async function save() {
@@ -531,10 +728,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         try { return await translateToHindi(title) } catch { return null }
       }
 
-      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed } of plan) {
+      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
         // frequency or SOP — applies to every copy of it
-        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed) {
+        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed || removed || reshifted) {
           const patch = {}
           if (renamed) patch.title = g.title.trim()
           // What is in the box is what gets saved. Only fall back to translating
@@ -559,6 +756,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             patch.description = g.sop?.trim() || null
             patch.staffing = g.staffing?.trim() || null
           }
+          if (removed) patch.property = g.property
+          if (reshifted) patch.shift = g.shift || null
           const { error } = await supabase.from('tasks')
             .update(patch)
             .in('id', g.rows.map((r) => r.id))
@@ -725,6 +924,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // means throw away the unsaved edits and re-read the roster.
   const discard = () => { setForm(null); setExpandedKey(null); load() }
 
+  // With one venue selected every row would repeat its name — the filter at the
+  // top already said it once. The column returns the moment there are two.
+  const showVenue = props.length > 1
+  const tracks = sheetTracks({ picking, showVenue })
+  const flatCols = tracks.map((n) => `${n}px`).join(' ')
+  const gridMin = tracks.reduce((a, b) => a + b, 0)
+
   // one source of truth for the row tracks, so a checkbox column can never
   // appear in the header and not in the rows
   const gridCols = picking
@@ -763,35 +969,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   const body = (
     <>
-      {/* The sheet's own masthead. The shift and the Sunday rule are the two
-          facts every row is written against, so they sit above every row. */}
-      <div style={{ border: `1px solid ${C.borderStrong}`, borderRadius: 14, overflow: 'hidden', marginBottom: 14, boxShadow: C.shadow }}>
-        <div style={{ background: `linear-gradient(160deg, ${C.maroon} 0%, ${C.maroonDark} 100%)`, padding: '16px 18px', textAlign: 'center' }}>
-          <div style={{ fontSize: 19, fontWeight: 700, color: '#fff', letterSpacing: '0.01em' }}>
-            {t.dutyRoster}
-          </div>
-          <div style={{ fontSize: 11.5, fontWeight: 500, color: '#ffffffa8', marginTop: 6 }}>
-            {t.rosterShift}
-            <span style={{ opacity: 0.35, margin: '0 10px' }}>·</span>
-            <b style={{ color: '#fff', fontWeight: 600 }}>{dayName(todayDow, lang)}</b>
-            {', '}{fmtDate(today)}
-            {todayDow === 7 && (
-              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', background: '#ffffff26', borderRadius: 999, padding: '2px 8px' }}>
-                {t.clientVisitDay}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* The Sunday rule, spelled out where it cannot be missed */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, background: '#FFF7F7', border: `1px solid ${FREQ_MAP.sunday.ink}1f`, borderRadius: 12, padding: '12px 14px', marginBottom: 16, lineHeight: 1.6 }}>
-        <span style={{ fontSize: 14, lineHeight: 1.3, color: FREQ_MAP.sunday.ink }}>⊖</span>
-        <span style={{ fontSize: 12, color: C.text }}>
-          <b style={{ color: FREQ_MAP.sunday.ink, letterSpacing: '0.02em' }}>{t.sundayRuleLead}</b> {t.sundayRuleBody}
-        </span>
-      </div>
-
       {/* Venue, frequency and department in one bar that follows the page. They
           used to sit on either side of the summary, so narrowing a 121-row list
           meant scrolling back to the top for every change.
@@ -880,13 +1057,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           and revocable; a checkbox buried in the roster could neither show who
           was covering where nor end it. Lending someone to another venue's round
           still records the cover automatically — see save(). */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
-        <Button variant="primary" onClick={openAdd} style={{ padding: '8px 14px', fontSize: 13 }}>
+      {/* The note explains what the sheet below does and the button acts on it,
+          so they share a line: the note reads left, the button sits at the right
+          edge of the sheet it adds to. Stacked, the button floated alone above a
+          full-width paragraph and belonged to neither. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 16, flexWrap: 'wrap', marginBottom: 12,
+      }}>
+        <span style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, flex: '1 1 320px', minWidth: 0 }}>
+          {t.rosterNote}
+        </span>
+        <Button variant="primary" onClick={openAdd} style={{ padding: '8px 14px', fontSize: 13, flexShrink: 0 }}>
           <Icon name="plus" size={14} color="#fff" style={{ marginRight: 4 }} />{t.addTaskRow}
         </Button>
       </div>
-
-      <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 12, lineHeight: 1.5 }}>{t.rosterNote}</div>
 
       {loading ? <Loader label={t.loading} /> : (
         <>
@@ -894,242 +1079,343 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             <div style={{ fontSize: 13.5, color: C.tl, padding: '14px 2px' }}>{t.rosterEmpty}</div>
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
-              {/* The Master Task List, in the sheet's shape: a coloured band per
-                  department, and inside it one numbered block per frequency with
-                  its own header row. The six columns are the sheet's six —
-                  # / Frequency / Task / Time / Assigned / SOP — and the photo rule
-                  sits with the row actions so it does not add a seventh. */}
-              <div ref={listRef} style={{ overflowX: 'auto' }}>
-              <div style={{ minWidth: wide ? 1030 : 548, display: 'grid', gap: 14 }}>
-              {sections.map(({ dept, count, bands }) => (
-                <div key={dept} style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-                  {/* department band, the sheet's full-width colour bar */}
-                  <div style={{ background: C.card, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}` }}>
-                    <span style={{ width: 3, height: 18, borderRadius: 2, background: dept === '_' ? C.tl : (DEPARTMENT_MAP[dept]?.color || C.tl), flexShrink: 0 }} />
-                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: '0.01em' }}>
-                      {dept === '_' ? t.unassigned : deptName(dept, lang)}
-                    </span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
-                  </div>
+              {/* One flat sheet. Every column the roster is read by is a column:
+                  department, task, the seven days, weekly, monthly, who, where,
+                  when. The department bands and frequency headers are gone —
+                  they repeated on every block what each row already says. */}
+              {/* The sheet scrolls inside itself, both ways. It has to: a sticky
+                  header cannot stick to the page from inside an overflow
+                  container — setting overflow-x also makes the box a vertical
+                  scrollport, and sticky then anchors to that box. Giving the box
+                  a height turns that from a bug into the behaviour we want, and
+                  the header parks at its top edge. */}
+              <div
+                ref={listRef}
+                style={{
+                  // Horizontal only, and no height cap. With one, the box had
+                  // vertical overflow of its own and swallowed the page's scroll
+                  // whenever the pointer was over the sheet — which is most of
+                  // the screen. Without it there is nothing to scroll vertically
+                  // inside the box, so the wheel goes to the page where it
+                  // belongs. The cost is the header, which can no longer stick:
+                  // sticky resolves against the nearest scrollport, and that is
+                  // this box, not the page.
+                  overflowX: 'auto',
+                  border: `1px solid ${C.borderStrong}`,
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ minWidth: gridMin }}>
 
-                  {/* One header row for the whole department. It used to repeat
-                      per band, which put two of them on screen at once. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: gridCols, background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
-                    {picking && (
-                      <span style={{ ...thCell, display: 'grid', placeItems: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={allShownPicked}
-                          onChange={() => setPicked((prev) => {
-                            const next = new Set(prev)
-                            shownGroups.forEach((g) => (allShownPicked ? next.delete(g.key) : next.add(g.key)))
-                            return next
-                          })}
-                          aria-label={t.selectAllShown}
-                          style={{ width: 16, height: 16, accentColor: C.maroon, cursor: 'pointer' }}
-                        />
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: flatCols,
+                    background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}`,
+                    // no sticky: see the wrapper — the box is the scrollport,
+                    // so sticking to its top would pin the header to a line that
+                    // does not move
+                    zIndex: 30,
+                  }}>
+                    {picking && <span style={thCell} />}
+                    <span style={{ ...thCell, textAlign: 'center' }}>#</span>
+                    <span style={thCell}>{t.task}</span>
+                    <span style={thCell}>{t.frequency}</span>
+                    <span style={thCell}>{t.weekly}</span>
+                    <span style={thCell}>{t.monthly}</span>
+                    {/* The seven day letters, on one line. They carry the
+                        alternate ink so the group reads as one column without a
+                        word above it — "ALTERNATE" over a 32px cell made the
+                        first header two lines tall and knocked the letters out
+                        of line with each other. */}
+                    {DAY_COLS.map((d) => (
+                      <span key={d} style={{ ...thCell, textAlign: 'center', padding: '11px 2px', color: FREQ_MAP.alternate.ink }}>
+                        {dayShort(d, lang).slice(0, lang === 'hi' ? 2 : 1)}
                       </span>
-                    )}
-                    {wide && <span style={thCell}>#</span>}
-                    <span style={{ ...thCell, ...(wide ? null : stickyCell(C.cardAlt)) }}>{t.task}</span>
-                    <span style={thCell}>{t.time}</span>
+                    ))}
                     <span style={thCell}>{t.assigned}</span>
-                    {wide && <span style={thCell}>{t.sopColumn}</span>}
+                    {showVenue && <span style={thCell}>{t.properties}</span>}
+                    <span style={thCell}>{t.shiftColumn}</span>
+                    <span style={thCell}>{t.time}</span>
                     <span style={thCell} />
                   </div>
 
-                  {bands.map(({ fk, rows: bandRows }, bandIndex) => {
-                    const f = FREQ_MAP[fk] || FREQ_MAP.daily
-                    // numbering runs straight down the department, as the printed
-                    // sheet numbers it — restarting at 1 per band read as an error
-                    const startNo = bands.slice(0, bandIndex).reduce((n, b) => n + b.rows.length, 0)
-                    const schedules = [...new Set(bandRows.map((g) => scheduleText(g, lang)))]
-                    const bandSchedule = schedules.length === 1 ? schedules[0] : ''
-                    return (
-                      <div key={fk}>
-                        {/* the frequency, said once for the group it applies to */}
-                        <div
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            padding: '12px 14px 11px', background: C.card,
-                            borderTop: `1px solid ${C.border}`,
-                            boxShadow: `inset 3px 0 0 ${f.ink}`,
-                          }}
-                        >
-                          <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: f.ink }}>
-                            {freqLabel(fk, lang)}
+                  {sections.map((item, i) => {
+                    if (item.kind === 'dept') {
+                      const dc = item.dept === '_' ? C.tl : (DEPARTMENT_MAP[item.dept]?.color || C.tl)
+                      return (
+                        <div key={item.key} style={{
+                          padding: '11px 14px', background: C.card,
+                          borderTop: `1px solid ${C.borderStrong}`,
+                          width: gridMin,
+                        }}>
+                          {/* The band spans the sheet, but its label rides at the
+                              left edge. A full-width sticky band showed you its
+                              empty middle once you scrolled right, with the name
+                              clipped off the side. */}
+                          <span style={{ position: 'sticky', left: 14, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 3, height: 16, borderRadius: 2, background: dc, flexShrink: 0 }} />
+                            <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
+                              {item.dept === '_' ? t.unassigned : deptName(item.dept, lang)}
+                            </span>
+                            <span style={{ fontSize: 12, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{item.n}</span>
                           </span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
-                            {bandRows.length}
-                          </span>
-                          {/* Stated here only while every job in the band still
-                              shares it. Once one is given its own days, the strip
-                              would be claiming a schedule the group no longer has,
-                              so it goes quiet and each row speaks for itself. */}
-                          {bandSchedule && (
-                            <span style={{ fontSize: 12, fontWeight: 600, color: C.tl }}>{bandSchedule}</span>
-                          )}
                         </div>
+                      )
+                    }
+                    const g = item.g
+                    const f = FREQ_MAP[freqOf(g)] || FREQ_MAP.daily
+                    const edited = isEdited(g)
+                    const bg = edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card)
+                    const days = altDays(g)
+                    const weekendOnly = isWeekendOnly(g)
+                    const open = expandedKey === g.key
+                    const names = (g.people || [])
+                      .map((id) => staffById.get(id))
+                      .filter(Boolean)
+                      .map((m) => personName(m, lang))
+                    return (
+                      <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: bg, boxShadow: `inset 3px 0 0 ${f.ink}` }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: flatCols, alignItems: 'center' }}>
+                          {picking && (
+                            <span style={{ ...tdCell, display: 'grid', placeItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={picked.has(g.key)}
+                                onChange={() => togglePick(g.key)}
+                                aria-label={g.title}
+                                style={{ width: 16, height: 16, accentColor: C.maroon, cursor: 'pointer' }}
+                              />
+                            </span>
+                          )}
 
-                        {bandRows.map((g, i) => {
-                          const before = g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to)
-                          const renamed = g.title.trim() && g.title.trim() !== g.rows[0]?.title
-                          const edited = renamed || g.people.length !== before.length || g.people.some((id) => !before.includes(id))
-                          const open = expandedKey === g.key
-                          const names = g.people
-                            .map((id) => staff.find((m) => m.id === id))
-                            .filter(Boolean)
-                            .map((m) => personName(m, lang))
-                          // Two different questions, so two lines: WHICH DAYS it
-                          // comes round on, and WHAT TIME on those days.
-                          const when = scheduleText(g, lang)
-                          const clock = fmtRange(g.from, g.to)
-                          return (
-                            <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card), boxShadow: `inset 3px 0 0 ${f.ink}` }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'start' }}>
-                                {picking && (
-                                  <span
-                                    style={{ ...tdCell, display: 'grid', placeItems: 'center' }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={picked.has(g.key)}
-                                      onChange={() => togglePick(g.key)}
-                                      aria-label={g.title}
-                                      style={{ width: 16, height: 16, accentColor: C.maroon, cursor: 'pointer' }}
-                                    />
-                                  </span>
-                                )}
-                                {wide && (
-                                  <span style={{ ...tdCell, color: C.faint, fontWeight: 600, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
-                                    {startNo + i + 1}
-                                  </span>
-                                )}
-                                <div style={{ ...tdCell, minWidth: 0, ...(wide ? null : stickyCell(edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card))) }}>
-                                  <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, lineHeight: 1.4 }}>
-                                    {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
-                                  </div>
-                                  {!wide && g.sop && (
-                                    <div style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.45, marginTop: 4 }}>{g.sop}</div>
-                                  )}
-                                  {(props.length > 1 || g.area) && (
-                                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', fontSize: 11, color: C.tl, marginTop: 2 }}>
-                                      {props.length > 1 && <span>{propName(g.property, lang)}</span>}
-                                      {g.area && <span>{g.area}</span>}
-                                    </div>
-                                  )}
-                                </div>
-                                <span style={{ ...tdCell, fontSize: 13, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.45 }}>
-                                  <span style={{ display: 'block', color: C.text }}>{clock || '—'}</span>
-                                  {/* shown whenever the band cannot speak for the
-                                      whole group — then every row states its own */}
-                                  {when && !bandSchedule && (
-                                    <span style={{ display: 'block', fontWeight: 700, color: f.ink, fontSize: 11.5 }}>{when}</span>
-                                  )}
+                          <span style={{ ...tdCell, textAlign: 'center', fontSize: 12, fontWeight: 600, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                            {item.no}
+                          </span>
+
+                          <div style={{ ...tdCell, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>
+                              {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
+                            </div>
+                            {/* What the ticks add up to. Weekly and Monthly have
+                                their own columns to announce themselves; daily
+                                and alternate had nothing, so ticking three days
+                                looked like it had done nothing at all. It reads
+                                back live, which is also how you learn the rule. */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                              {/* Sat-Sun stores as alternate [Sat, Sun] because that
+                                  is what the scheduler understands, but the chip
+                                  should say what was chosen. Pressing "Sat-Sun"
+                                  and being told "ALTERNATE DAYS" reads as the
+                                  button having done something else. */}
+                              <span style={{
+                                fontSize: 9.5, fontWeight: 800, letterSpacing: '0.07em',
+                                color: f.ink, background: f.tint,
+                                borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap',
+                              }}>
+                                {weekendOnly ? t.freqSatSun.toUpperCase() : freqLabel(freqOf(g), lang)}
+                              </span>
+                              {/* the days themselves, for the patterns a label
+                                  cannot name — "Alternate" does not say which three.
+                                  Sat-Sun names its own two, so it needs no list. */}
+                              {!weekendOnly && ['alternate', 'alternateMS'].includes(freqOf(g)) && (
+                                <span style={{ fontSize: 10, color: C.tl, whiteSpace: 'nowrap' }}>
+                                  {days.map((d) => dayShort(d, lang)).join(' · ')}
                                 </span>
-                                {/* Assigned: the roster's rule on top, the actual
-                                    names under it. The sheet only ever said "Any 2";
-                                    the app has to know which two. */}
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedKey(open ? null : g.key)}
-                                  title={t.tapToAssign}
-                                  aria-expanded={open}
-                                  style={{ ...tdCell, textAlign: 'left', background: 'transparent', minWidth: 0, display: 'block', cursor: 'pointer' }}
-                                >
-                                  {/* the roster's rule — plain text, not a control */}
-                                  {g.staffing && (
-                                    <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.faint }}>{staffingLabel(g.staffing, lang)}</span>
-                                  )}
-                                  {/* The names ARE the button. "Unassigned" in grey
-                                      text read as a status nobody could act on, so an
-                                      empty job now wears an outlined "+ Assign" slot
-                                      and a filled one wears its names as a pill you
-                                      can see is pressable. */}
-                                  {names.length ? (
-                                    <span
-                                      style={{
-                                        display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: g.staffing ? 3 : 0,
-                                        maxWidth: '100%', padding: '3px 8px', borderRadius: 999,
-                                        background: open ? C.maroon : C.maroonSoft,
-                                        color: open ? '#fff' : C.maroon,
-                                        border: `1px solid ${open ? C.maroon : 'transparent'}`,
-                                        fontSize: 12.5, fontWeight: 700,
-                                      }}
-                                    >
-                                      <span style={{ overflowWrap: 'anywhere' }}>{names.join(', ')}</span>
-                                      <Icon name="edit" size={11} color={open ? '#fff' : C.maroon} />
-                                    </span>
-                                  ) : (
-                                    <span
-                                      style={{
-                                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: g.staffing ? 3 : 0,
-                                        padding: '3px 9px 3px 6px', borderRadius: 999,
-                                        border: `1px dashed ${open ? C.maroon : C.borderStrong}`,
-                                        background: open ? C.maroonSoft : 'transparent',
-                                        color: open ? C.maroon : C.tl, fontSize: 12.5, fontWeight: 700,
-                                      }}
-                                    >
-                                      <Icon name="plus" size={12} color={open ? C.maroon : C.tl} />
-                                      {t.assign}
-                                    </span>
-                                  )}
-                                </button>
-                                {wide && (
-                                  <span style={{ ...tdCell, fontSize: 12.5, color: C.tl, lineHeight: 1.5 }}>
-                                    {g.sop || '—'}
-                                  </span>
-                                )}
-                                <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: wide ? 4 : 6, justifyContent: wide ? 'flex-end' : 'flex-start' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setGroupTime(g.key, { photoRequired: !g.photoRequired })}
-                                    title={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
-                                    aria-label={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
-                                    aria-pressed={g.photoRequired}
-                                    style={tapTarget}
-                                  >
-                                    {/* the icon carries the whole message: a camera, or a
-                                        camera with a line through it. No pill, no border. */}
-                                    <Icon name={g.photoRequired ? 'camera' : 'cameraOff'} size={iconSize} color={g.photoRequired ? C.maroon : C.faint} />
-                                  </button>
-                                  <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={tapTarget}>
-                                    <Icon name="edit" size={iconSize} color={C.tl} />
-                                  </button>
-                                  <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={tapTarget}>
-                                    <Icon name="trash" size={iconSize} color={C.red} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {open && (
-                                <div
-                                  style={{
-                                    padding: '10px', borderTop: `1px solid ${C.border}`, background: C.card,
-                                    // the row is 620px wide on a phone so the panel would
-                                    // sit mostly off-screen; sticky-left keeps it in view
-                                    ...(wide ? null : { position: 'sticky', left: 0, width: 'min(100%, 92vw)' }),
-                                  }}
-                                >
-                                  <PeoplePicker
-                                    autoFocus
-                                    C={C} t={t} lang={lang} staff={staff}
-                                    chosen={g.people}
-                                    onToggle={(id) => togglePerson(g.key, id)}
-                                    isVisiting={isVisiting}
-                                  />
-                                </div>
                               )}
                             </div>
-                          )
-                        })}
+                            {g.sop && (
+                              <div style={{ fontSize: 11, color: C.tl, lineHeight: 1.4, marginTop: 3 }}>{g.sop}</div>
+                            )}
+                          </div>
+
+                          {/* Four controls, one schedule. Picking in any of them
+                              clears the other three. */}
+                          {/* Two buttons rather than a dropdown: there are exactly
+                              two answers, and a closed select shows neither of
+                              them until you open it. Here both are on the sheet
+                              and the live one is filled in. */}
+                          <span style={{ ...tdCell, display: 'flex', gap: 4 }}>
+                            {/* Sat-Sun is not a third kind of "daily" — it is two
+                                days, which the model already calls alternate. The
+                                button is a shortcut for ticking Sat and Sun, and
+                                it lights up only when those two are exactly what
+                                is ticked. */}
+                            {[
+                              { k: 'dailyMS', label: t.freqDailyMonSat },
+                              { k: 'daily', label: t.freqDailyMonSun },
+                              { k: 'weekend', label: t.freqSatSun },
+                            ].map((opt) => {
+                              const on = opt.k === 'weekend' ? weekendOnly : freqOf(g) === opt.k
+                              return (
+                                <button
+                                  key={opt.k}
+                                  type="button"
+                                  onClick={() => setGroupTime(g.key, opt.k === 'weekend' ? setAlternate([6, 7]) : setDaily(opt.k))}
+                                  aria-pressed={on}
+                                  style={{
+                                    flex: 1, padding: '5px 2px', borderRadius: 7,
+                                    fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer',
+                                    background: on ? FREQ_MAP.daily.ink : C.white,
+                                    color: on ? '#fff' : C.tl,
+                                    border: `1px solid ${on ? FREQ_MAP.daily.ink : C.border}`,
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              )
+                            })}
+                          </span>
+
+                          <span style={tdCell}>
+                            <select
+                              style={miniInput(C)}
+                              value={['weekly', 'sunday'].includes(freqOf(g)) ? (g.weekDay || 7) : ''}
+                              onChange={(e) => e.target.value && setGroupTime(g.key, setWeekly(e.target.value))}
+                              aria-label={t.weekly}
+                            >
+                              <option value="">—</option>
+                              {WEEK_DAYS.map((d) => <option key={d.v} value={d.v}>{dayShort(d.v, lang)}</option>)}
+                            </select>
+                          </span>
+
+                          <span style={tdCell}>
+                            <select
+                              style={miniInput(C)}
+                              value={freqOf(g) === 'monthly' ? (g.monthWeek || 1) : ''}
+                              onChange={(e) => e.target.value && setGroupTime(g.key, setMonthly(e.target.value))}
+                              aria-label={t.monthly}
+                            >
+                              <option value="">—</option>
+                              {/* "8" alone reads as a count; the date says which
+                                  day of the month the job lands on. */}
+                              {[1, 2, 3, 4].map((w) => (
+                                <option key={w} value={w}>{ordinal(monthlyDate(w), lang)}</option>
+                              ))}
+                            </select>
+                          </span>
+
+                          {DAY_COLS.map((d) => {
+                            const on = days.includes(d)
+                            return (
+                              <span key={d} style={{ ...tdCell, padding: '10px 2px', display: 'grid', placeItems: 'center' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  aria-label={`${t.freqAlternate} — ${dayName(d, lang)}`}
+                                  onChange={() => {
+                                    const next = on ? days.filter((x) => x !== d) : [...days, d]
+                                    // unticking the last day would leave a
+                                    // schedule of no days at all
+                                    if (!next.length) return
+                                    setGroupTime(g.key, setAlternate(next))
+                                  }}
+                                  style={{ width: 15, height: 15, accentColor: FREQ_MAP.alternate.ink, cursor: 'pointer' }}
+                                />
+                              </span>
+                            )
+                          })}
+
+                          {/* Several people can share a job, which a single select
+                              cannot say, so the cell opens the picker instead. */}
+                          <span style={tdCell}>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedKey(open ? null : g.key)}
+                              style={{
+                                width: '100%', textAlign: 'left', fontSize: 11.5, lineHeight: 1.35,
+                                background: 'transparent', color: names.length ? C.maroon : C.faint,
+                                fontWeight: names.length ? 700 : 600, padding: 0,
+                              }}
+                            >
+                              {names.length ? names.join(', ') : `+ ${t.assign}`}
+                            </button>
+                            {g.staffing && (
+                              <span style={{ display: 'block', fontSize: 10.5, color: C.faint, marginTop: 2 }}>
+                                {staffingLabel(g.staffing, lang)}
+                              </span>
+                            )}
+                          </span>
+
+                          {showVenue && (
+                            <span style={tdCell}>
+                              <select
+                                style={miniInput(C)}
+                                value={g.property || ''}
+                                onChange={(e) => setGroupTime(g.key, { property: e.target.value })}
+                                aria-label={t.properties}
+                              >
+                                {PROPERTIES.map((pp) => (
+                                  <option key={pp.code} value={pp.code}>{propName(pp.code, lang)}</option>
+                                ))}
+                              </select>
+                            </span>
+                          )}
+
+                          {/* A dropdown with one option is furniture. Only
+                              security has two shifts to pick between; for
+                              everyone else this states the 9-to-5 and stops. */}
+                          <span style={tdCell}>
+                            {hasShifts(g.department) ? (
+                              <select
+                                style={miniInput(C)}
+                                value={g.shift || 'day'}
+                                onChange={(e) => setGroupTime(g.key, { shift: e.target.value })}
+                                aria-label={t.shiftColumn}
+                              >
+                                {SHIFTS.map((sh) => (
+                                  <option key={sh.key} value={sh.key}>{shiftLabel(sh.key, lang)}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span style={{ fontSize: 11, color: C.faint }}>{shiftLabel(null, lang)}</span>
+                            )}
+                          </span>
+
+                          <TimeCell
+                            C={C}
+                            gKey={g.key}
+                            from={g.from}
+                            to={g.to}
+                            pick={t.pickTime}
+                            onPatch={setGroupTime}
+                          />
+
+                          <div style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              onClick={() => setGroupTime(g.key, { photoRequired: !g.photoRequired })}
+                              title={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
+                              aria-label={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
+                              aria-pressed={g.photoRequired}
+                              style={tapTarget}
+                            >
+                              <Icon name={g.photoRequired ? 'camera' : 'cameraOff'} size={iconSize} color={g.photoRequired ? C.maroon : C.faint} />
+                            </button>
+                            <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={tapTarget}>
+                              <Icon name="edit" size={iconSize} color={C.tl} />
+                            </button>
+                            <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={tapTarget}>
+                              <Icon name="trash" size={iconSize} color={C.red} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {open && (
+                          <div style={{ padding: '10px', borderTop: `1px solid ${C.border}`, background: C.card }}>
+                            <PeoplePicker
+                              C={C}
+                              t={t}
+                              lang={lang}
+                              staff={staff}
+                              chosen={g.people}
+                              onToggle={(id) => togglePerson(g.key, id)}
+                              isVisiting={isVisiting}
+                            />
+                          </div>
+                        )}
                       </div>
                     )
                   })}
                 </div>
-              ))}
-              </div>
               </div>
             </div>
           )}
@@ -1374,10 +1660,107 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
       {/* Frequency first: it decides whether a day, a week of the month, or
           neither is worth asking for. "(Mon-Sat)" is the Sunday rule; "Sunday
           only" is the light work done while clients walk the property. */}
+      {/* The same four choices the sheet offers, in the same order, obeying
+          the same rule: one of them is the schedule and picking it clears the
+          rest. A form that spoke a different vocabulary from the sheet it adds
+          to would teach the wrong thing twice. */}
       <Field label={t.frequency} required hint={t.frequencyHint}>
-        <select style={inputStyle(C)} value={value.freq || 'daily'} onChange={(e) => set({ freq: e.target.value })}>
-          {FREQ.map((f) => <option key={f.key} value={f.key}>{freqLabel(f.key, lang)}</option>)}
-        </select>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[
+            { k: 'dailyMS', label: t.freqDailyMonSat },
+            { k: 'daily', label: t.freqDailyMonSun },
+            { k: 'weekend', label: t.freqSatSun },
+          ].map((opt) => {
+            const on = opt.k === 'weekend'
+              ? (value.freq === 'alternate' && (value.weekDays || []).length === 2
+                 && value.weekDays.includes(6) && value.weekDays.includes(7))
+              : value.freq === opt.k
+            return (
+              <button
+                key={opt.k}
+                type="button"
+                onClick={() => set(opt.k === 'weekend'
+                  ? { freq: 'alternate', weekDays: [6, 7], weekDay: '', monthWeek: '' }
+                  : { freq: opt.k, weekDays: null, weekDay: '', monthWeek: '' })}
+                aria-pressed={on}
+                style={{
+                  flex: '1 1 90px', padding: '9px 8px', borderRadius: 9,
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  border: `1.5px solid ${on ? FREQ_MAP.daily.ink : C.border}`,
+                  background: on ? FREQ_MAP.daily.ink : C.card,
+                  color: on ? '#fff' : C.tl,
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      </Field>
+
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 150px' }}>
+          <Field label={t.weekly} hint={t.dayOfWeekHint}>
+            <select
+              style={inputStyle(C)}
+              value={['weekly', 'sunday'].includes(value.freq) ? (value.weekDay || 7) : ''}
+              onChange={(e) => e.target.value && set({
+                freq: 'weekly', weekDay: Number(e.target.value), weekDays: null, monthWeek: '',
+              })}
+            >
+              <option value="">—</option>
+              {WEEK_DAYS.map((d) => <option key={d.v} value={d.v}>{lang === 'hi' ? d.hi : d.en}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div style={{ flex: '1 1 150px' }}>
+          <Field label={t.monthly} hint={t.weekOfMonthHint}>
+            <select
+              style={inputStyle(C)}
+              value={value.freq === 'monthly' ? (value.monthWeek || 1) : ''}
+              onChange={(e) => e.target.value && set({
+                freq: 'monthly', monthWeek: Number(e.target.value), weekDays: null, weekDay: '',
+              })}
+            >
+              <option value="">—</option>
+              {[1, 2, 3, 4].map((w) => (
+                <option key={w} value={w}>{ordinal(monthlyDate(w), lang)}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </div>
+
+      {/* Alternate is set by ticking days, here as it is on the sheet. Ticking
+          anything makes the job alternate; it is the only control that does. */}
+      <Field label={t.freqAlternate} hint={t.repeatOnDaysHint}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {WEEK_DAYS.map((d) => {
+            const chosen = value.freq === 'alternate' ? (value.weekDays || []) : []
+            const on = chosen.includes(d.v)
+            return (
+              <button
+                key={d.v}
+                type="button"
+                onClick={() => {
+                  const next = on ? chosen.filter((x) => x !== d.v) : [...chosen, d.v].sort((a, b) => a - b)
+                  // a job with no days never comes back; nobody means to make one
+                  if (!next.length) return
+                  set({ freq: 'alternate', weekDays: next, weekDay: '', monthWeek: '' })
+                }}
+                aria-pressed={on}
+                style={{
+                  minWidth: 46, padding: '7px 6px', borderRadius: 9, fontSize: 12.5, fontWeight: 700,
+                  border: `1.5px solid ${on ? FREQ_MAP.alternate.ink : C.border}`,
+                  background: on ? FREQ_MAP.alternate.ink : C.card,
+                  color: on ? '#fff' : C.tl,
+                }}
+              >
+                {dayShort(d.v, lang)}
+              </button>
+            )
+          })}
+        </div>
       </Field>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1400,60 +1783,6 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
           </Field>
         </div>
       </div>
-
-      {/* a weekly job picks its day; Sunday-only already has one */}
-      {/* Alternate work repeats on the days chosen here — and keeps repeating on
-          them until someone changes it. Left untouched it uses the Mon/Wed/Fri
-          default, which is what every seeded job still does. */}
-      {(value.freq === 'alternate' || value.freq === 'alternateMS') && (
-        <Field label={t.repeatOnDays} hint={t.repeatOnDaysHint}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {WEEK_DAYS.map((d) => {
-              const chosen = value.weekDays || alternateDays(value.freq === 'alternateMS')
-              const on = chosen.includes(d.v)
-              return (
-                <button
-                  key={d.v}
-                  type="button"
-                  onClick={() => {
-                    const next = on ? chosen.filter((x) => x !== d.v) : [...chosen, d.v].sort((a, b) => a - b)
-                    // never leave it with no days at all — that is a task that
-                    // never comes back, which is not something anyone means to make
-                    set({ weekDays: next.length ? next : chosen })
-                  }}
-                  style={{
-                    minWidth: 46, padding: '7px 6px', borderRadius: 9, fontSize: 12.5, fontWeight: 700,
-                    border: `1.5px solid ${on ? C.maroon : C.border}`,
-                    background: on ? C.maroon : C.card,
-                    color: on ? '#fff' : C.tl,
-                  }}
-                >
-                  {dayShort(d.v, lang)}
-                </button>
-              )
-            })}
-          </div>
-        </Field>
-      )}
-
-      {value.freq === 'weekly' && (
-        <Field label={t.dayOfWeek} hint={t.dayOfWeekHint}>
-          <select style={inputStyle(C)} value={value.weekDay || ''} onChange={(e) => set({ weekDay: e.target.value })}>
-            <option value="">{dayName(1, lang)} ({t.defaultLabel})</option>
-            {WEEK_DAYS.map((d) => <option key={d.v} value={d.v}>{lang === 'hi' ? d.hi : d.en}</option>)}
-          </select>
-        </Field>
-      )}
-
-      {/* a monthly job picks its week, so a month's work is not all on the 1st */}
-      {value.freq === 'monthly' && (
-        <Field label={t.weekOfMonth} hint={t.weekOfMonthHint}>
-          <select style={inputStyle(C)} value={value.monthWeek || ''} onChange={(e) => set({ monthWeek: e.target.value })}>
-            <option value="">{weekName(1, lang)} ({t.defaultLabel})</option>
-            {MONTH_WEEKS.map((w) => <option key={w.v} value={w.v}>{lang === 'hi' ? w.hi : w.en}</option>)}
-          </select>
-        </Field>
-      )}
 
       {/* how many and which kind, in the roster's own words. The names are ticked
           below; this is the rule they are ticked against. */}
