@@ -932,6 +932,19 @@ function CreateModal({ user, members, record, onClose, onSaved }) {
       status: TASK_STATUS.PENDING,
       task_date: todayISO(),
     }))
+    // The same person cannot hold the same job twice at one venue. Saying so
+    // here means an accidental second save is a clear message rather than a
+    // duplicate card on their phone — or a raw constraint error from the table.
+    const first = rows[0]
+    if (first.assigned_to) {
+      const { data: clash } = await supabase.from('tasks')
+        .select('id')
+        .eq('property', first.property)
+        .eq('title', first.title)
+        .eq('assigned_to', first.assigned_to)
+        .limit(1)
+      if (clash?.length) { setBusy(false); setErr(t.taskAlreadyThere); return }
+    }
     const { error } = await supabase.from('tasks').insert(rows)
     setBusy(false)
     if (error) { setErr(error.message); return }

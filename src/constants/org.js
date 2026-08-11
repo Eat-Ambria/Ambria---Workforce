@@ -64,27 +64,19 @@ const RETIRED_DEPARTMENTS = {
 }
 
 // Lookup: every live department plus every retired code, for display only.
-// Every department runs a day and a night half. What differs is the hours:
-// security is a fixed twelve-on, twelve-off round the clock, while everyone else
-// works whatever their row's Time column says — a gardener's night shift is not
-// the same twelve hours as a guard's.
-export const SHIFT_DEPT = 's'
+// A shift is a day or a night half, and that is all it says. Any department can
+// run one — this used to be Security's alone.
+// Security used to carry fixed hours here — 8-to-8 either way — but the hours
+// belong on the row: the roster already has a Time column, and two places
+// stating the same thing is one place to get it wrong.
 export const SHIFTS = [
   { key: 'day', en: 'Day', hi: 'दिन' },
   { key: 'night', en: 'Night', hi: 'रात' },
 ]
-// Only security's hours are fixed by the shift itself.
-export const SECURITY_HOURS = {
-  day: { from: '08:00', to: '20:00', label: '8 AM – 8 PM' },
-  night: { from: '20:00', to: '08:00', label: '8 PM – 8 AM' },
-}
-export const shiftLabel = (key, lang, dept) => {
+export const shiftLabel = (key, lang) => {
   const sh = SHIFTS.find((x) => x.key === key)
   if (!sh) return '—'
-  const name = lang === 'hi' ? sh.hi : sh.en
-  // security's two shifts ARE their hours, so the label says them
-  const hours = dept === SHIFT_DEPT ? SECURITY_HOURS[key]?.label : null
-  return hours ? `${name} ${hours}` : name
+  return lang === 'hi' ? sh.hi : sh.en
 }
 
 export const DEPARTMENT_MAP = DEPARTMENTS.reduce(

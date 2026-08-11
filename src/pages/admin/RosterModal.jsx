@@ -11,7 +11,7 @@ import {
   memberInProperty, personName, PRIORITIES,
   FREQUENCY_MAP, taskFrequency, frequencyLabel,
   WEEK_DAYS, dayName, dayShort, staffingLabel, monthlyDate, taskDays,
-  SHIFTS, SHIFT_DEPT, SECURITY_HOURS, shiftLabel,
+  SHIFTS, shiftLabel,
 } from '../../constants/org'
 import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -62,11 +62,17 @@ const COLS_NARROW_PICK = '34px 170px 104px 128px 118px'
 // that has to be updated in sympathy with another number will drift; this one
 // cannot.
 const COL_W = {
-  pick: 34, num: 38, task: 260,
-  weekly: 96, monthly: 96, day: 40,
-  assigned: 150, venue: 156, shift: 160, time: 116, actions: 104,
+  // Trimmed so the sheet fits a laptop beside the sidebar. Every pixel here is
+  // one the last columns do not have to be scrolled to reach.
+  pick: 34, num: 32, task: 240,
+  weekly: 84, monthly: 84, day: 36,
+  assigned: 140, venue: 184, shift: 92, time: 108, actions: 96,
 }
 const TASK_W = COL_W.task
+
+// Task takes the slack, so the sheet reaches both edges instead of ending in a
+// strip of nothing — and long titles stop wrapping to three lines.
+const TASK_TRACK = `minmax(${COL_W.task}px, 1fr)`
 
 const sheetTracks = ({ picking }) => [
   picking && COL_W.pick,
@@ -108,19 +114,14 @@ const SUM_SHORT = {
   weekly:    { en: 'WEEK',  hi: 'हफ़्ता' },
   monthly:   { en: 'MON',   hi: 'माह' },
 }
-// Nothing in a row is pinned any more. The department band above each block
-// already says which department you are in, and it stays put on its own, so a
-// per-row Department column was the same fact twice — paid for with a sticky
-// cell that kept letting the scrolling columns slide out from under it.
-const stickyCell = (bg) => ({ position: 'sticky', left: 0, zIndex: 1, background: bg })
 // Task is deliberately NOT pinned. With Department it took a third of the
 // visible width and sat over the day ticks — the columns you scroll sideways
 // to reach were the ones it was covering.
 const thCell = {
-  padding: '11px 10px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
+  padding: '12px 12px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
   textTransform: 'uppercase', letterSpacing: '0.1em',
 }
-const tdCell = { padding: '9px 10px' }
+const tdCell = { padding: '11px 12px' }
 // inputStyle is built for a form field; inside a 100px sheet cell it needs to
 // give back the padding and the font size
 const miniInput = (C) => ({
@@ -398,6 +399,16 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [props, setProps] = useState([defaultProperty || PROPERTIES[0].code])
   const [freqFilter, setFreqFilter] = useState('all')  // which frequency band is shown
   const [rows, setRows] = useState([])        // every task row for these venues
+  // Where each job runs across ALL five venues, not just the loaded ones:
+  // { 'dept||title': ['pp', 'ex', ...] }. The PROPERTIES ticks read from this.
+  const [jobSpread, setJobSpread] = useState({})
+  // A person's shift is not a roster row, so it has nowhere in `groups` to live.
+  // Pending edits count towards Save; once written they move to the applied map,
+  // which is what the picker reads — `members` comes from the page above and is
+  // not reloaded by this modal, so without it a saved shift would appear to
+  // revert the moment the popover reopened.
+  const [shiftEdits, setShiftEdits] = useState({})   // { userId: 'day' | 'night' | '' }
+  const [shiftApplied, setShiftApplied] = useState({})
   const [groups, setGroups] = useState([])    // one per distinct job, with its chosen people
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -469,6 +480,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // the slow part. Those from elsewhere are labelled with their own venue, and
   // the cover dates below record the arrangement.
   const staff = useMemo(() => [...members, ...formerStaff], [members, formerStaff])
+  // what a person's shift is right now, pending edits winning over written ones
+  const personShift = useCallback(
+    (m) => (m ? (shiftEdits[m.id] ?? shiftApplied[m.id] ?? m.shift ?? '') : ''),
+    [shiftEdits, shiftApplied]
+  )
+  const setPersonShift = useCallback((id, next) => {
+    setShiftEdits((prev) => ({ ...prev, [id]: next }))
+  }, [])
   // find() inside a map is a scan per person per row; the sheet asks this
   // question a few hundred times on every render
   const staffById = useMemo(() => new Map(staff.map((m) => [m.id, m])), [staff])
@@ -491,6 +510,30 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
     setRows(data || [])
+
+    // Three columns over every venue — cheap, and the only way the ticks can say
+    // where a job runs rather than where the sheet is pointed.
+    //
+    // In pages, because this one deliberately reads the whole table and the API
+    // caps a response at a thousand rows. Silently losing the tail would mean
+    // ticks that stop mentioning venues as the roster grows.
+    const PAGE = 1000
+    const map = {}
+    for (let from = 0; ; from += PAGE) {
+      const { data: page, error } = await supabase
+        .from('tasks')
+        .select('property, department, title')
+        .order('id')
+        .range(from, from + PAGE - 1)
+      if (error) break
+      ;(page || []).forEach((r) => {
+        const k = `${r.department}||${r.title}`
+        if (!map[k]) map[k] = []
+        if (!map[k].includes(r.property)) map[k].push(r.property)
+      })
+      if (!page || page.length < PAGE) break
+    }
+    setJobSpread(map)
     // one entry per distinct job; `people` is the set currently doing it
     const byTitle = new Map()
     ;(data || []).forEach((r) => {
@@ -824,9 +867,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   // The same job at three venues is three groups — that is how the key is
   // built. Gathered back up, they answer "where does this run".
-  const jobVenues = useCallback((g) => groups
-    .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
-    .map((x) => x.property), [groups])
+  //
+  // The loaded groups only cover the venues in the sheet's filter, so the spread
+  // read across all of them is folded in: without it a round running everywhere
+  // showed one tick, and ticking a venue it already ran at made a second copy.
+  const jobVenues = useCallback((g) => {
+    const here = groups
+      .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
+      .map((x) => x.property)
+    const everywhere = jobSpread[`${g.department}||${g.rows?.[0]?.title || g.title}`] || []
+    return [...new Set([...here, ...everywhere])]
+  }, [groups, jobSpread])
 
   // What the tick list currently shows: the pending choice if one has been made
   // on this row, otherwise wherever the job runs today.
@@ -845,8 +896,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     return g.venues.length !== at.length || g.venues.some((v) => !at.includes(v))
   })
 
+  // A shift edit that matches what is already stored is not a change.
+  const shiftCount = Object.entries(shiftEdits)
+    .filter(([id, v]) => v !== (shiftApplied[id] ?? staffById.get(id)?.shift ?? '')).length
+
   const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.removed || x.reshifted || x.resorted).length
-  const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length === 0
+  const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount === 0
 
   // Shared by save() and createJob(): both write a Hindi title, and a title
   // that fails to translate is saved without one rather than lost.
@@ -981,7 +1036,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       for (const g of groups.filter((x) => !x.isNew && x.venues)) {
         const now = groups
           .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
-        const at = now.map((x) => x.property)
+        // where it runs, including venues outside the sheet's filter
+        const at = jobVenues(g)
         for (const v of g.venues.filter((v2) => !at.includes(v2))) {
           await createJobRow({ ...g, properties: [v] })
         }
@@ -991,8 +1047,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           if (ids.length) {
             const { error } = await supabase.from('tasks').delete().in('id', ids)
             if (error) throw error
+          } else {
+            // A venue the sheet never loaded: no ids in memory, so it goes by
+            // what identifies the job. The SAVED title — a rename in this same
+            // save only touched the copies the sheet is holding.
+            const { error } = await supabase.from('tasks').delete()
+              .eq('property', v)
+              .eq('department', g.department)
+              .eq('title', g.rows[0]?.title || g.title)
+            if (error) throw error
           }
         }
+      }
+
+      // Whose shift changed. A person, not a row — one write each, and it
+      // applies to every job they hold, which is the point of it being on them.
+      for (const [id, sh] of Object.entries(shiftEdits)) {
+        const { error } = await supabase.from('users')
+          .update({ shift: sh || null }).eq('id', id)
+        if (error) throw error
+      }
+      if (Object.keys(shiftEdits).length) {
+        setShiftApplied((prev) => ({ ...prev, ...shiftEdits }))
+        setShiftEdits({})
       }
 
       // Re-read from the database rather than trusting what is in memory: the
@@ -1039,13 +1116,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       const chosen = d.people?.length ? d.people : []
       const combos = venues.flatMap((prop) => {
         if (!chosen.length) return [{ prop, id: null }]
-        // People belong to venues. Copying the whole picked list to all five
-        // would put a Pushpanjali gardener on the Restro round; each person
-        // only lands where they actually work. (Someone on 'all' — Sandeep —
-        // matches every venue, which is correct.)
-        const here = d.allProps
-          ? chosen.filter((id) => memberInProperty(staff.find((m) => m.id === id), prop))
-          : chosen
+        // People belong to venues. Copying the whole picked list to every venue
+        // would put a Pushpanjali gardener on the Restro round; each person only
+        // lands where they actually work. (Someone on 'all' — Sandeep — matches
+        // every venue, which is correct.)
+        //
+        // This used to apply to the all-properties path only, so the sheet's own
+        // venue ticks fanned every picked guard out to every ticked venue — one
+        // body on the same 12:30 round at four properties. To put someone at
+        // another venue deliberately, assign them on that venue's row: the
+        // picker lists visiting staff and records the cover.
+        const here = chosen.filter((id) => memberInProperty(staffById.get(id), prop))
         // no one picked for this venue: leave a row for its admin to fill,
         // rather than skipping the venue and calling it common
         return here.length ? here.map((id) => ({ prop, id })) : [{ prop, id: null }]
@@ -1079,8 +1160,27 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           task_date: todayISO(),
         }
       })
-      const { error } = await supabase.from('tasks').insert(inserts)
-      if (error) throw error
+      // What is already there. A person on the same job at the same venue is
+      // that job, not a second one — inserting them again is how one round came
+      // to be listed four times on a guard's phone. Unassigned rows are left
+      // alone: two blank rows on a job are two open slots, which is a real thing.
+      // Venue, job, window, person. Department and frequency are tags on a job,
+      // not part of which job it is — keying on them would let the same round
+      // back in because one copy happened to be filed under another department.
+      const jobKey = (r) => [r.property, r.title, r.time_block || '', r.assigned_to].join('|')
+      const { data: present, error: readErr } = await supabase
+        .from('tasks')
+        .select('property, title, time_block, assigned_to')
+        .in('property', venues)
+        .eq('title', title)
+      if (readErr) throw readErr
+      const already = new Set((present || []).filter((r) => r.assigned_to).map(jobKey))
+      const fresh = inserts.filter((r) => !r.assigned_to || !already.has(jobKey(r)))
+
+      if (fresh.length) {
+        const { error } = await supabase.from('tasks').insert(fresh)
+        if (error) throw error
+      }
       // save() reloads and toasts once for the whole batch; doing it per row
       // would reload the sheet out from under the loop
       if (!d.batch) {
@@ -1130,7 +1230,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   }, [dragKey, blockOf, sheetRows])
 
   const tracks = sheetTracks({ picking })
-  const flatCols = tracks.map((n) => `${n}px`).join(' ')
+  // Fixed pixels everywhere except Task. The sum still counts Task's minimum, so
+  // gridMin stays the width below which the sheet scrolls rather than squeezes.
+  const flatCols = tracks
+    .map((n) => (n === COL_W.task ? TASK_TRACK : `${n}px`))
+    .join(' ')
   const gridMin = tracks.reduce((a, b) => a + b, 0)
 
   // one source of truth for the row tracks, so a checkbox column can never
@@ -1164,7 +1268,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         {inline ? t.discardChanges : t.cancel}
       </Button>
       <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
-        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + venueEdits.length})`}
+        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount})`}
       </Button>
     </>
   )
@@ -1302,6 +1406,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               chosen={(groups.find((x) => x.key === assignAt.key) || {}).people || []}
               onToggle={(id) => togglePerson(assignAt.key, id)}
               isVisiting={isVisiting}
+              shift={(groups.find((x) => x.key === assignAt.key) || {}).shift || ''}
+              dept={(groups.find((x) => x.key === assignAt.key) || {}).department || ''}
+              shiftOf={personShift}
+              onSetShift={setPersonShift}
             />
           </div>
         </>,
@@ -1379,7 +1487,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                         <div key={item.key} style={{
                           padding: '11px 14px', background: C.card,
                           borderTop: `1px solid ${C.borderStrong}`,
-                          width: gridMin,
+                          // matches the rows: never narrower than the tracks, and
+                          // stretches with them. A fixed width ended the band
+                          // before the sheet did and left a grey tail.
+                          minWidth: gridMin,
                         }}>
                           {/* The band spans the sheet, but its label rides at the
                               left edge. A full-width sticky band showed you its
@@ -1564,7 +1675,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           <span style={tdCell}>
                             <MultiSelect
                               C={C}
-                              minWidth={140}
+                              // fit the cell; let the open list be wider
+                              minWidth={0}
+                              panelWidth={190}
+                              // this row's own venue first, then "+N": the cell
+                              // has room for one name and a count, not three
+                              lead={g.property}
+                              maxNames={1}
                               placeholder={t.properties}
                               options={PROPERTIES.map((pp) => ({ value: pp.code, label: propName(pp.code, lang) }))}
                               selected={venuesOf(g)}
@@ -1579,26 +1696,20 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             />
                           </span>
 
-                          {/* Every department runs a day and a night half. For
-                              security the shift IS the hours — a fixed twelve on,
-                              twelve off — so picking one sets the Time columns
-                              too. Everyone else keeps their own hours. */}
+                          {/* Day or night, for every department alike. The hours
+                              live in the Time columns, where an admin sets them —
+                              a shift that also wrote the clock meant two places
+                              could disagree about the same row. */}
                           <span style={tdCell}>
                             <select
                               style={miniInput(C)}
                               value={g.shift || ''}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                const hrs = g.department === SHIFT_DEPT ? SECURITY_HOURS[v] : null
-                                setGroupTime(g.key, hrs
-                                  ? { shift: v, from: hrs.from, to: hrs.to }
-                                  : { shift: v })
-                              }}
+                              onChange={(e) => setGroupTime(g.key, { shift: e.target.value })}
                               aria-label={t.shiftColumn}
                             >
                               <option value="">—</option>
                               {SHIFTS.map((sh) => (
-                                <option key={sh.key} value={sh.key}>{shiftLabel(sh.key, lang, g.department)}</option>
+                                <option key={sh.key} value={sh.key}>{shiftLabel(sh.key, lang)}</option>
                               ))}
                             </select>
                           </span>
@@ -1695,7 +1806,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 //
 // Module level on purpose: defined inside the parent's body, its identity changed
 // every render, React remounted it, and the search text died on each keystroke.
-function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false }) {
+function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false, shift, dept, shiftOf, onSetShift }) {
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
   // Nothing is listed until something is typed. Forty names on screen is a wall
@@ -1707,7 +1818,31 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
           .toLowerCase().includes(needle))
     : []
   const picked = staff.filter((m) => chosen.includes(m.id))
-  const shown = [...picked, ...matches]
+  // Any department can run a day/night split, so anyone can be asked.
+  const canSetShift = typeof shiftOf === 'function'
+  const mineShift = (m) => (canSetShift ? shiftOf(m) : '')
+  // You cannot set the shift of someone you have to name to summon, so the row's
+  // own team is listed unsearched: this row's shift first, then whoever has none
+  // yet, then the other shift.
+  //
+  // Up to a point. Four guards is a list; forty names is the wall the search box
+  // exists to avoid, so past the cap the box does its job again.
+  const TEAM_LIMIT = 12
+  const rank = (m) => {
+    const sh = mineShift(m)
+    if (shift && sh === shift) return 0
+    if (!sh) return 1
+    return 2
+  }
+  const team = dept
+    ? staff.filter((m) => !chosen.includes(m.id) && !m.inactive && m.department === dept)
+    : []
+  const suggested = needle ? [] : (team.length && team.length <= TEAM_LIMIT
+    ? [...team].sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''))
+    : (shift
+      ? staff.filter((m) => !chosen.includes(m.id) && !m.inactive && mineShift(m) === shift)
+      : []))
+  const shown = [...picked, ...suggested, ...matches]
 
   return (
     <div>
@@ -1727,19 +1862,26 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
         )}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div style={canSetShift
+        ? { display: 'flex', flexDirection: 'column', gap: 6 }
+        : { display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {staff.length === 0 && <span style={{ fontSize: 12.5, color: C.tl }}>{t.noStaffInScope}</span>}
-        {staff.length > 0 && !needle && picked.length === 0 && (
+        {staff.length > 0 && !needle && picked.length === 0 && suggested.length === 0 && (
           <span style={{ fontSize: 12.5, color: C.faint }}>{t.typeToFindPerson}</span>
+        )}
+        {suggested.length > 0 && shift && (
+          <span style={{ width: '100%', fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', color: C.tl }}>
+            {t.onThisShift} · {shiftLabel(shift, lang)}
+          </span>
         )}
         {needle && matches.length === 0 && (
           <span style={{ fontSize: 12.5, color: C.faint }}>{t.noMatch}</span>
         )}
         {shown.map((m) => {
           const on = chosen.includes(m.id)
-          return (
+          const sh = mineShift(m)
+          const nameChip = (
             <button
-              key={m.id}
               type="button"
               onClick={() => onToggle(m.id)}
               title={[m.department ? deptName(m.department, lang) : null, propName(m.property, lang)].filter(Boolean).join(' · ')}
@@ -1749,21 +1891,64 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
                 border: `1.5px solid ${on ? C.maroon : C.border}`,
                 background: on ? C.maroon : C.card,
                 color: on ? '#fff' : C.tl,
+                flex: canSetShift ? 1 : undefined,
+                minWidth: 0, textAlign: 'left',
               }}
             >
               {on && <Icon name="check" size={12} color="#fff" />}
-              {personName(m, lang)}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {personName(m, lang)}
+              </span>
               {m.inactive && (
                 <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
                   · {t.inactiveStaff}
                 </span>
               )}
               {!m.inactive && isVisiting(m) && (
-                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, flexShrink: 0 }}>
                   · {propName(m.property, lang)}
                 </span>
               )}
+              {/* Off a Security row there is no switch, so a mismatch is said in
+                  words instead. Doubling a shift is allowed either way. */}
+              {!canSetShift && !m.inactive && shift && sh && sh !== shift && (
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                  · {shiftLabel(sh, lang)} ({t.otherShift})
+                </span>
+              )}
             </button>
+          )
+          if (!canSetShift || m.inactive) {
+            return <span key={m.id} style={{ display: 'inline-flex' }}>{nameChip}</span>
+          }
+          return (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {nameChip}
+              {/* This person's shift, set from here. Outside the name button,
+                  because a button inside a button is invalid and the inner one
+                  stops taking clicks. Tapping the active one clears it. */}
+              <span style={{ display: 'inline-flex', flexShrink: 0, border: `1.5px solid ${C.border}`, borderRadius: 999, overflow: 'hidden' }}>
+                {SHIFTS.map((s2) => {
+                  const active = sh === s2.key
+                  return (
+                    <button
+                      key={s2.key}
+                      type="button"
+                      onClick={() => onSetShift(m.id, active ? '' : s2.key)}
+                      title={`${t.staffShift}: ${shiftLabel(s2.key, lang)}`}
+                      aria-pressed={active}
+                      style={{
+                        border: 'none', padding: '4px 8px', fontSize: 11, fontWeight: 800,
+                        background: active ? C.maroon : 'transparent',
+                        color: active ? '#fff' : C.faint, cursor: 'pointer',
+                      }}
+                    >
+                      {shiftLabel(s2.key, lang)}
+                    </button>
+                  )
+                })}
+              </span>
+            </div>
           )
         })}
       </div>
@@ -2044,6 +2229,10 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
               : [...value.people, id],
           })}
           isVisiting={() => false}
+          shift={value.shift || ''}
+          dept={value.dept || ''}
+          shiftOf={personShift}
+          onSetShift={setPersonShift}
         />
       </Field>
     </Modal>

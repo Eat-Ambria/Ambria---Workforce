@@ -9,6 +9,9 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import PoweredBy from '../common/PoweredBy'
 
+// Pages that are a table rather than a column of cards.
+const WIDE_ROUTES = ['/tasks']
+
 export default function AppLayout() {
   const C = useColors()
   const isMobile = useIsMobile()
@@ -37,7 +40,11 @@ export default function AppLayout() {
             flex: 1,
             padding: 16,
             paddingBottom: isMobile ? 'calc(20px + env(safe-area-inset-bottom, 0px))' : 24,
-            maxWidth: 1100,
+            // 1100 keeps prose and cards readable on a wide screen, which is
+            // right for almost every page. The roster is a sixteen-column sheet:
+            // capping it there left empty margins on both sides and made the
+            // last columns scroll off, which is the opposite of readable.
+            maxWidth: WIDE_ROUTES.includes(location.pathname) ? 1560 : 1100,
             width: '100%',
             margin: '0 auto',
           }}

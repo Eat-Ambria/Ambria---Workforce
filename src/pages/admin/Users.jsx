@@ -6,7 +6,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import {
-  ROLES, DEPARTMENTS, DEPARTMENT_MAP, DESIGNATIONS, PROPERTIES, PROPERTY_MAP, propName, deptName, personName,
+  ROLES, DEPARTMENTS, DEPARTMENT_MAP, DESIGNATIONS, PROPERTIES, PROPERTY_MAP, propName, deptName, personName, shiftLabel,
 } from '../../constants/org'
 import { navForRole, ALWAYS_VISIBLE } from '../../constants/nav'
 import { normalizePhone, typedPhone, isValidPhone } from '../../lib/phone'
@@ -69,7 +69,7 @@ export default function Users() {
     setListLoading(true)
     let query = supabase
       .from('users')
-      .select('id, username, name, name_hi, role, property, department, phone, designation, is_active, access', { count: 'exact' })
+      .select('id, username, name, name_hi, role, property, department, shift, phone, designation, is_active, access', { count: 'exact' })
     // one list or the other, never both. is_active is NULL on rows created
     // before the column existed — those are working accounts, not disabled ones.
     query = showInactive
@@ -195,6 +195,7 @@ export default function Users() {
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 3 }}>
                       {u.designation ? `${u.designation} · ` : ''}
                       {deptName(u.department, lang) || '—'}
+                      {u.shift ? ` · ${shiftLabel(u.shift, lang)}` : ''}
                       {' · '}
                       {propName(u.property, lang)}
                     </div>
@@ -346,6 +347,8 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
       role: form.role,
       property: form.property,
       department: form.department || null,
+      // shift is deliberately absent: the roster owns it, and sending it from
+      // here would wipe it on every unrelated edit to a person's record
       designation: form.designation || null,
       phone: normalizePhone(form.phone), // canonical form so login matches any format
       is_active: form.is_active,

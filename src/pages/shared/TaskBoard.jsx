@@ -449,6 +449,14 @@ export default function TaskBoard() {
                         {r.department ? ` · ${deptName(r.department, lang)}` : ''}
                       </div>
                     )}
+                    {/* on the card too, so a stack of finished requests says who
+                        passed each one without opening them one at a time */}
+                    {r.approved_by_name && (
+                      <div style={{ fontSize: 12, color: C.faint, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Icon name="check" size={12} color={C.green} />
+                        {t.approvedByAdmin} {nameOf(r.approved_by, r.approved_by_name)}
+                      </div>
+                    )}
                     {r.due_date && (
                       <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: od ? '#EA580C' : C.tl, fontWeight: od ? 700 : 400 }}>
                         <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? TR_ORANGE : C.tl} /> {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(r.due_date)}
@@ -1000,6 +1008,10 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       resolved_at: nowISO(),
       resolution_photos: resPhotos,
       resolution_note: note.trim() || (resPhotos.length ? null : t.closedByAdminNote),
+      // a different action from approving submitted work, but the same question:
+      // which admin signed this off
+      approved_by: user.id,
+      approved_by_name: user.name,
     }
     const { error } = await supabase.from('work_board').update(patch).eq('id', row.id)
     setBusy(false)
@@ -1014,7 +1026,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   }
 
   // Closed by mistake. Goes back to whoever had it, or to Open if nobody did —
-  // and the rating is cleared, since it was given for work now unfinished.
+  // and the rating is cleared, since it was given for work now unfinished. The
+  // approver goes with it: a name left on a request that is open again credits
+  // somebody with a decision they have not made about it in this state.
   async function reopen() {
     if (!(await confirm({ message: t.reopenRepairConfirm, confirmLabel: t.reopen, danger: false }))) return
     setBusy(true); setErr('')
@@ -1022,6 +1036,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       status: row.assigned_to ? 'assigned' : 'open',
       resolved_at: null,
       rating: null,
+      approved_by: null,
+      approved_by_name: null,
     }).eq('id', row.id)
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -1057,7 +1073,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     actions = (
       <>
         <Button variant="ghost" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 1 }}>{t.reject || 'Send Back'}</Button>
-        <Button variant="success" disabled={busy} onClick={() => setStatus('completed', { resolved_at: nowISO() })} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
+        {/* who passed it, so the board can answer that later */}
+        <Button variant="success" disabled={busy} onClick={() => setStatus('completed', { resolved_at: nowISO(), approved_by: user.id, approved_by_name: user.name })} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
       </>
     )
   } else if (['approved', 'completed'].includes(s) && admin && !ownWork) {
@@ -1240,9 +1257,19 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       )}
 
       {/* resolution shown once submitted / completed */}
-      {['approval_requested', 'completed', 'approved'].includes(s) && (row.resolution_note || (row.resolution_photos || []).length > 0) && (
+      {/* approved_by_name is in the condition on purpose: a fix can be submitted
+          with no note and no photo, and the sign-off must still be visible. */}
+      {['approval_requested', 'completed', 'approved'].includes(s) && (row.resolution_note || (row.resolution_photos || []).length > 0 || row.approved_by_name) && (
         <div style={{ background: C.bg, borderRadius: 10, padding: 12, marginTop: 4 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{t.completed} — {row.assigned_to_name}</div>
+          {/* Who signed it off. Both admins and the super admin see this; it is
+              the whole point of storing it. */}
+          {row.approved_by_name && (
+            <div style={{ fontSize: 12.5, color: C.tl, fontWeight: 600, marginBottom: 6 }}>
+              <Icon name="check" size={13} color={C.green} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              {t.approvedByAdmin} {row.approved_by_name}
+            </div>
+          )}
           {row.resolution_note && <p style={{ fontSize: 13.5, color: C.tl, marginBottom: 8 }}>{row.resolution_note}</p>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {(row.resolution_photos || []).map((u, i) => (

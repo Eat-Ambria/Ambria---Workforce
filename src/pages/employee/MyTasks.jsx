@@ -6,8 +6,9 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import {
-  TASK_STATUS, TASK_CATEGORIES, isTaskOverdue, isAdminRole,
+  TASK_STATUS, TASK_CATEGORIES, isTaskOverdue,
   taskFrequency, frequencyLabel, FREQUENCY_MAP, notDueToday, scheduleText, staffingLabel,
+  propName,
 } from '../../constants/org'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
@@ -88,6 +89,14 @@ export default function MyTasks() {
   const [status, setStatus] = useState(location.state?.status || 'all')
   const [issueStatus, setIssueStatus] = useState(location.state?.issueStatus || 'all')
   const [active, setActive] = useState(null) // task open in work modal
+
+  // Somebody based at one venue never needs to be told which venue. Somebody
+  // covering two does — otherwise the same round at each reads as one card
+  // printed twice, which is what it looked like.
+  const showVenue = useMemo(
+    () => new Set(tasks.map((x) => x.property)).size > 1,
+    [tasks]
+  )
 
   const load = useCallback(async () => {
     if (!user) return
@@ -234,7 +243,8 @@ export default function MyTasks() {
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {sorted.map((task) => (
-            <TaskRow key={task.id} task={task} C={C} t={t} today={today} hi={lang === 'hi'} onOpen={() => setActive(task)} />
+            <TaskRow key={task.id} task={task} C={C} t={t} today={today} hi={lang === 'hi'}
+              showVenue={showVenue} onOpen={() => setActive(task)} />
           ))}
         </div>
       )}
@@ -273,7 +283,7 @@ function Chip({ children, active, onClick, C, full }) {
 // show the Hindi task title when the app is in Hindi and one exists
 const taskTitle = (task, hi) => (hi && task.title_hi ? task.title_hi : task.title)
 
-function TaskRow({ task, C, t, today, onOpen, hi }) {
+function TaskRow({ task, C, t, today, onOpen, hi, showVenue }) {
   const sc = statusColors(task.status, C)
   const isc = task.issue_status ? statusColors(task.issue_status, C) : null
   const od = isTaskOverdue(task, today)
@@ -287,6 +297,14 @@ function TaskRow({ task, C, t, today, onOpen, hi }) {
           <div style={{ fontWeight: 700, fontSize: 15 }}>{taskTitle(task, hi)}</div>
           {/* the roster's own wording for how often this comes back */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            {/* Leads the row: two cards identical in every other field are two
+                venues, and this is the field that says so. */}
+            {showVenue && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, padding: '2px 8px 2px 6px', borderRadius: 999, border: `1.5px solid ${C.borderStrong || C.border}`, color: C.text }}>
+                <Icon name="pin" size={11} color={C.tl} />
+                {propName(task.property, hi ? 'hi' : 'en')}
+              </span>
+            )}
             <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.02em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 999, background: freq.tint, color: freq.ink }}>
               {frequencyLabel(fk, hi ? 'hi' : 'en')}
             </span>
@@ -346,12 +364,14 @@ function WorkModal({ task, onClose, onSaved, user }) {
   // issue is an independent dimension — it never blocks the task workflow
   const hasActiveIssue = [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING].includes(task.issue_status)
 
-  // Photo proof is the default, but a supervisory round has nothing to
-  // photograph — the roster can switch it off per task (tasks.photo_required).
-  // An admin's own task never insists on one either: the rule exists to prove
-  // the work TO an admin. They can still attach photos.
-  const showCapture = task.photo_required !== false         // offer the camera
-  const needsPhoto = showCapture && !isAdminRole(user?.role) // ...and insist on it
+  // The roster's camera tick is the whole rule (tasks.photo_required): a
+  // supervisory round has nothing to photograph, so it can be switched off per
+  // task. It used to be overridden for admins — the photo proves the work TO an
+  // admin, so one proving it to themselves seemed like theatre — but that made
+  // the tick do nothing on their own rostered work, and an admin on the roster
+  // is doing the work like anyone else.
+  const showCapture = task.photo_required !== false  // offer the camera
+  const needsPhoto = showCapture                     // ...and insist on it
   const canStart = !needsPhoto || beforePhotos.length > 0   // "before" photo to start
   const canComplete = !needsPhoto || photos.length > 0      // "after" photo to submit
 
