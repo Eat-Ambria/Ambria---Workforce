@@ -22,6 +22,9 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 // up fast and bury the ones people still care about. The rest are one tap away.
 const COMPLETED_DAYS = 7
 
+// overdue accent, the same one the dashboard and Daily Task use
+const TR_ORANGE = '#EA580C'
+
 const PRIOS = { low: 'tl', normal: 'blue', high: 'yellow', urgent: 'red' }
 // 'low' is kept above so older rows still render, but it is not offered on new ones
 const PRIO_CHOICES = ['normal', 'high', 'urgent']
@@ -448,7 +451,7 @@ export default function TaskBoard() {
                     )}
                     {r.due_date && (
                       <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: od ? '#EA580C' : C.tl, fontWeight: od ? 700 : 400 }}>
-                        <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? '#EA580C' : C.tl} /> {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(r.due_date)}
+                        <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? TR_ORANGE : C.tl} /> {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(r.due_date)}
                       </div>
                     )}
                     {(r.category || 'other') !== 'other' && (
@@ -919,6 +922,42 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   }
 
   // admins can permanently delete a completed request to clear it out
+  // Overdue, somebody's name on it, and an admin looking at it. All three have
+  // to be true before there is anything to remind anyone about.
+  const overdue = row.due_date && row.due_date < todayISO()
+    && !['approved', 'completed'].includes(row.status)
+  const canRemind = admin && overdue && !!row.assigned_to
+
+  const [reminded, setReminded] = useState(false)
+  async function remind() {
+    setBusy(true); setErr('')
+    // One a day. Checked against the table rather than local state, so a second
+    // admin on another device cannot send the same nudge an hour later.
+    const since = `${todayISO()}T00:00:00Z`
+    const { data: already } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('type', 'fix_reminder')
+      .eq('entity_id', String(row.id))
+      .eq('for_user', row.assigned_to)
+      .gte('created_at', since)
+      .limit(1)
+    if (already?.length) { setBusy(false); setErr(t.remindAlreadyToday); return }
+
+    const { error } = await supabase.from('notifications').insert({
+      type: 'fix_reminder',
+      task_text: row.title,
+      for_user: row.assigned_to,
+      by_user: user.id,
+      by_name: user.name,
+      property: row.property,
+      entity_id: String(row.id),
+    })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    setReminded(true)
+  }
+
   async function del() {
     if (!(await confirm({ message: t.deleteRequestConfirm }))) return
     setBusy(true); setErr('')
@@ -1038,10 +1077,17 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     <Modal open onClose={onClose} title={fixTitle(row, lang === 'hi')}
       footer={(
         <>
-          <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
+          <Button variant="ghost" onClick={onClose} style={{ flex: '1 1 88px' }}>{t.close}</Button>
+          {/* Only on an overdue request that somebody is already holding. */}
+          {canRemind && (
+            <Button variant="ghost" disabled={busy || reminded} onClick={remind} style={{ flex: '1 1 150px', whiteSpace: 'nowrap' }}>
+              <Icon name="bell" size={15} color={reminded ? C.green : TR_ORANGE} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+              {reminded ? t.remindSent : t.remindAssignee}
+            </Button>
+          )}
           {/* admins delete any request; the poster can delete their own */}
           {canDelete && (
-            <Button variant="danger" disabled={busy} onClick={del} style={{ flex: 1 }}>
+            <Button variant="danger" disabled={busy} onClick={del} style={{ flex: '1 1 110px', whiteSpace: 'nowrap' }}>
               <Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}
             </Button>
           )}
@@ -1050,7 +1096,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
               variant="success"
               disabled={busy}
               onClick={() => (closing ? completeNow() : setClosing(true))}
-              style={{ flexShrink: 0 }}
+              style={{ flex: '1 1 165px', whiteSpace: 'nowrap' }}
             >
               <Icon name={closing ? 'check' : 'camera'} size={15} color="#fff" style={{ marginRight: 4 }} />
               {closing ? t.markDone : t.closeItMyself}

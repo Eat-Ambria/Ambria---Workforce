@@ -92,8 +92,11 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
           {children}
         </div>
 
+        {/* The footer wraps. Four actions — close, remind, delete, finish — do not
+            fit one line in a phone-width dialog, and a row that refuses to wrap
+            clips the last button instead of moving it down. */}
         {footer && (
-          <div style={{ padding: 16, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
+          <div style={{ padding: 16, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {footer}
           </div>
         )}

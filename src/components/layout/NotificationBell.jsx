@@ -38,6 +38,9 @@ function meta(n, hi) {
     // Work somebody did and then logged. The admins hear about it; the person
     // who did it obviously already knows.
     case 'fix_logged': return { icon: 'check', link: '/task-board', title: hi ? 'काम हो गया — दर्ज किया' : 'Work done and logged', body: item + who }
+    // An admin nudging whoever is holding an overdue repair. Orange, not red:
+    // it is late, not broken.
+    case 'fix_reminder': return { icon: 'bell', link: '/task-board', title: hi ? 'याद दिलाया गया — यह अब भी बाकी है' : 'Reminder — this is still pending', body: item + who }
     case 'fix_approved': return { icon: 'check', link: '/task-board', title: hi ? 'आपका मरम्मत अनुरोध मंज़ूर हुआ' : 'Your repair was approved', body: item }
     case 'fix_closed_by_admin': return { icon: 'check', link: '/task-board', title: hi ? 'एडमिन ने आपकी रिक्वेस्ट पूरी मार्क की' : 'Admin marked your repair complete', body: item }
     case 'valet_booking': return { icon: 'valet', link: '/valet', title: hi ? 'नई वैले बुकिंग' : 'New valet booking', body: item }
