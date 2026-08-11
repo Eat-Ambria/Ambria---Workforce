@@ -41,6 +41,9 @@ export default function AdminTasks() {
   const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'issuesDone', 'completed', 'all']
 
   const [members, setMembers] = useState([])
+  // The app header's height, so the tab row can sit directly under it. Measured,
+  // because the header is not a fixed size across breakpoints.
+  const [appHeaderH, setAppHeaderH] = useState(0)
   const [list, setList] = useState([])       // current page of rows for the active tab
   const [counts, setCounts] = useState({})   // per-tab totals (server counts)
   const [loading, setLoading] = useState(true)       // first load
@@ -117,6 +120,13 @@ export default function AdminTasks() {
       if (data) setReview(data)
     })()
   }, [location.state])
+
+  useEffect(() => {
+    const measure = () => setAppHeaderH(document.querySelector('header')?.offsetHeight || 0)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   // people list for the filter + assign dropdowns — staff and fellow admins,
   // scoped to this admin, loaded once
@@ -220,7 +230,18 @@ export default function AdminTasks() {
           "Roster" is where the work is handed out: it used to hide behind a
           button and open as a dialog, which is the wrong container for a
           121-row document. */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      {/* Stays put: switching view is the one thing you should never have to
+          scroll up for. Opaque, and stretched past the page padding, because rows
+          pass underneath it and any gap or tint reads as a rendering fault.
+          data-tabs-bar is how the roster measures this from its own component. */}
+      <div
+        data-tabs-bar
+        style={{
+          position: 'sticky', top: appHeaderH, zIndex: 70,
+          display: 'flex', gap: 8, flexWrap: 'wrap',
+          background: C.bg, padding: '10px 12px', margin: '0 -12px 8px',
+        }}
+      >
         <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
         <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
         <PropChip C={C} full active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</PropChip>

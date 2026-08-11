@@ -64,9 +64,9 @@ const COLS_NARROW_PICK = '34px 170px 104px 128px 118px'
 const COL_W = {
   // Trimmed so the sheet fits a laptop beside the sidebar. Every pixel here is
   // one the last columns do not have to be scrolled to reach.
-  pick: 34, num: 32, task: 240,
-  weekly: 84, monthly: 84, day: 36,
-  assigned: 140, venue: 184, shift: 92, time: 108, actions: 96,
+  pick: 34, num: 34, task: 240,
+  weekly: 88, monthly: 88, day: 37,
+  assigned: 185, venue: 205, time: 112, actions: 96,
 }
 const TASK_W = COL_W.task
 
@@ -83,7 +83,6 @@ const sheetTracks = ({ picking }) => [
   ...Array(7).fill(COL_W.day),
   COL_W.assigned,
   COL_W.venue,
-  COL_W.shift,
   COL_W.time,
   COL_W.actions,
 ].filter(Boolean)
@@ -118,10 +117,10 @@ const SUM_SHORT = {
 // visible width and sat over the day ticks — the columns you scroll sideways
 // to reach were the ones it was covering.
 const thCell = {
-  padding: '12px 12px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
+  padding: '13px 14px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
   textTransform: 'uppercase', letterSpacing: '0.1em',
 }
-const tdCell = { padding: '11px 12px' }
+const tdCell = { padding: '13px 14px' }
 // inputStyle is built for a form field; inside a 100px sheet cell it needs to
 // give back the padding and the font size
 const miniInput = (C) => ({
@@ -380,10 +379,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // top: 0, so anything else pinned to 0 disappears behind it — and its height
   // differs between phone and desktop, so it is measured, not assumed.
   const [headerH, setHeaderH] = useState(0)
+  // The filter bar's own height, live: the column header sticks below it, and the
+  // bar wraps to two or three rows depending on width.
+  const [barH, setBarH] = useState(0)
+  // Does the sheet fit without a sideways scroll? If it does, the wrapper stops
+  // being a scrollport and the column header can stick to the page.
+  const sheetRef = useRef(null)
+  const [sheetFits, setSheetFits] = useState(false)
   const listRef = useRef(null)
   const barRef = useRef(null)
   useEffect(() => {
-    const measure = () => setHeaderH(document.querySelector('header')?.offsetHeight || 0)
+    // the app header plus the tab row above us — both stick, so both count
+    const measure = () => setHeaderH(
+      (document.querySelector('header')?.offsetHeight || 0)
+      + (document.querySelector('[data-tabs-bar]')?.offsetHeight || 0)
+    )
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
@@ -396,7 +406,16 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   // several venues at once: the same daily round usually applies to more than
   // one, and setting it up venue by venue is how they drift apart
-  const [props, setProps] = useState([defaultProperty || PROPERTIES[0].code])
+  // Which venues the sheet covers. Not a filter and not state: with the venue
+  // chips gone there is nothing to change it, and the Roster tab has no other
+  // venue control — so it is simply the admin's reach. Everything for an
+  // all-venues admin, their own venue for anyone else.
+  const props = useMemo(
+    () => (canSeeAllProps
+      ? PROPERTIES.map((pp) => pp.code)
+      : [defaultProperty || (user.property !== 'all' ? user.property : null) || PROPERTIES[0].code]),
+    [canSeeAllProps, defaultProperty, user.property]
+  )
   const [freqFilter, setFreqFilter] = useState('all')  // which frequency band is shown
   const [rows, setRows] = useState([])        // every task row for these venues
   // Where each job runs across ALL five venues, not just the loaded ones:
@@ -409,26 +428,52 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // revert the moment the popover reopened.
   const [shiftEdits, setShiftEdits] = useState({})   // { userId: 'day' | 'night' | '' }
   const [shiftApplied, setShiftApplied] = useState({})
+  // Which venue a person does a given job at: { 'groupKey|userId': 'mk' }. Only
+  // holds deliberate choices — the default is worked out from the person, so an
+  // untouched assignment has no entry here and nothing to save.
+  const [personVenue, setPersonVenue] = useState({})
   const [groups, setGroups] = useState([])    // one per distinct job, with its chosen people
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   // group keys ticked for bulk deletion; `picking` shows the checkbox column
   const [picking, setPicking] = useState(false)
+
+  const tracks = sheetTracks({ picking })
+  // Fixed pixels everywhere except Task. The sum still counts Task's minimum, so
+  // gridMin stays the width below which the sheet scrolls rather than squeezes.
+  const flatCols = tracks
+    .map((n) => (n === COL_W.task ? TASK_TRACK : `${n}px`))
+    .join(' ')
+  const gridMin = tracks.reduce((a, b) => a + b, 0)
+
   const [picked, setPicked] = useState(() => new Set())
   const [err, setErr] = useState('')
   const [deptTab, setDeptTab] = useState('all')       // which department's round is shown
   // The row whose people picker is open, and where on screen to draw it. Screen
   // coordinates rather than a nested panel: see the portal below.
-  const [assignAt, setAssignAt] = useState(null) // { key, top, left, width }
-  const openAssign = (e, key) => {
+  const [assignAt, setAssignAt] = useState(null) // { key, mode, top, left, width, maxH }
+  const openAssign = (e, key, mode = 'people') => {
     const r = e.currentTarget.getBoundingClientRect()
-    setAssignAt((cur) => (cur?.key === key ? null : {
-      key,
-      // below the cell, or above it when there is no room underneath
-      top: r.bottom + 6 + 320 > window.innerHeight ? Math.max(8, r.top - 326) : r.bottom + 6,
-      left: Math.min(r.left, window.innerWidth - 292),
-      width: Math.max(280, r.width),
-    }))
+    setAssignAt((cur) => {
+      if (cur?.key === key && cur?.mode === mode) return null
+      const GAP = 6, EDGE = 10, WANT = 430, MIN = 200, W = 380
+      // Both sides measured, because choosing a side is not enough: a fixed
+      // height flipped upward from a row near the top of the window drew itself
+      // over the page header with its first names above the fold.
+      const below = window.innerHeight - r.bottom - GAP - EDGE
+      const above = r.top - GAP - EDGE
+      // below by default; upward only when below is too tight AND above is roomier
+      const up = below < MIN + 60 && above > below
+      const maxH = Math.max(MIN, Math.min(WANT, up ? above : below))
+      return {
+        key,
+        mode,
+        top: up ? Math.max(EDGE, r.top - GAP - maxH) : r.bottom + GAP,
+        left: Math.min(Math.max(EDGE, r.left), Math.max(EDGE, window.innerWidth - W - EDGE)),
+        width: Math.max(W, r.width),
+        maxH,
+      }
+    })
   }
   const [form, setForm] = useState(null)               // add/edit form, null = closed
   const [saved, setSaved] = useState(false)            // the 'changes saved' toast
@@ -480,6 +525,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // the slow part. Those from elsewhere are labelled with their own venue, and
   // the cover dates below record the arrangement.
   const staff = useMemo(() => [...members, ...formerStaff], [members, formerStaff])
+  // find() inside a map is a scan per person per row; the sheet asks this
+  // question a few hundred times on every render
+  const staffById = useMemo(() => new Map(staff.map((m) => [m.id, m])), [staff])
   // what a person's shift is right now, pending edits winning over written ones
   const personShift = useCallback(
     (m) => (m ? (shiftEdits[m.id] ?? shiftApplied[m.id] ?? m.shift ?? '') : ''),
@@ -488,9 +536,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const setPersonShift = useCallback((id, next) => {
     setShiftEdits((prev) => ({ ...prev, [id]: next }))
   }, [])
-  // find() inside a map is a scan per person per row; the sheet asks this
-  // question a few hundred times on every render
-  const staffById = useMemo(() => new Map(staff.map((m) => [m.id, m])), [staff])
+
+  // Their home venue if the task runs there, otherwise the row you opened. A
+  // gardener based at Manaktala doing a job that runs at four venues is doing
+  // Manaktala's, unless somebody says otherwise.
+  const defaultVenue = useCallback((g, id, venues) => {
+    const home = staffById.get(id)?.property
+    if (home && home !== 'all' && venues.includes(home)) return home
+    return g.property
+  }, [staffById])
+  const venueForPerson = useCallback(
+    (g, id, venues) => personVenue[`${g.key}|${id}`] || defaultVenue(g, id, venues),
+    [personVenue, defaultVenue]
+  )
+  const setVenueForPerson = useCallback((gKey, id, code) => {
+    setPersonVenue((prev) => ({ ...prev, [`${gKey}|${id}`]: code }))
+  }, [])
 
   // someone on this roster who is not based at any of the selected venues
   const isVisiting = useCallback(
@@ -563,6 +624,24 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   useEffect(() => { load() }, [load])
 
+  // Both measurements come from the elements themselves. The viewport would be
+  // the wrong thing to ask: the same sheet opens inside a 1240px modal, where it
+  // does not fit however wide the window is.
+  useEffect(() => {
+    const bar = barRef.current
+    const sheet = sheetRef.current
+    if (!bar && !sheet) return
+    const measure = () => {
+      if (bar) setBarH(bar.offsetHeight || 0)
+      if (sheet) setSheetFits(sheet.clientWidth >= gridMin)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (bar) ro.observe(bar)
+    if (sheet) ro.observe(sheet)
+    return () => ro.disconnect()
+  }, [gridMin, loading, picking])
+
   // One small form for both adding and editing a row. Inline inputs inside a
   // five-column grid were unusable on anything narrow, and a row being edited
   // looked nothing like a row being read.
@@ -598,7 +677,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     }])
     // straight to it — a row appended below the fold looks like nothing happened
     setTimeout(() => {
-      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+      // the window, not the wrapper: that box has no height cap, so no vertical
+      // overflow, so nothing to scroll. The new row is the first one on the sheet,
+      // and goToList already stops clear of everything sticky above it.
+      goToList()
     }, 0)
   }
 
@@ -712,7 +794,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     return [...shownGroups].sort((a, b) => {
       const sa = startOf(a)
       const sb = startOf(b)
-      return deptRank(a) - deptRank(b)
+      // An unsaved row sits at the TOP, whatever department it is destined for.
+      // You add a task in order to type in it, so it belongs in front of you; it
+      // has no place in the order until it has been saved into one.
+      return (a.isNew ? 0 : 1) - (b.isNew ? 0 : 1)
+        || deptRank(a) - deptRank(b)
         || freqRank(a) - freqRank(b)
         || orderRank(a) - orderRank(b)
         || (sa ? 0 : 1) - (sb ? 0 : 1)
@@ -896,12 +982,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     return g.venues.length !== at.length || g.venues.some((v) => !at.includes(v))
   })
 
+  // Somebody already on this row who has been pointed at another venue. A choice
+  // matching where they already are is not a change.
+  const venueMoves = useMemo(() => {
+    const out = []
+    groups.forEach((g) => {
+      if (g.isNew) return
+      const at = venuesOf(g)
+      ;(g.people || []).forEach((id) => {
+        const row = g.rows.find((r) => r.assigned_to === id)
+        if (!row) return
+        const want = personVenue[`${g.key}|${id}`]
+        if (want && want !== row.property) out.push({ id, row, to: want })
+      })
+    })
+    return out
+  }, [groups, venuesOf, personVenue])
+
   // A shift edit that matches what is already stored is not a change.
   const shiftCount = Object.entries(shiftEdits)
     .filter(([id, v]) => v !== (shiftApplied[id] ?? staffById.get(id)?.shift ?? '')).length
 
   const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.removed || x.reshifted || x.resorted).length
-  const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount === 0
+  const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount + venueMoves.length === 0
 
   // Shared by save() and createJob(): both write a Hindi title, and a title
   // that fails to translate is saved without one rather than lost.
@@ -911,6 +1014,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   async function save() {
     setBusy(true); setErr('')
+    // person + venue for every placement this save makes, so cover is recorded
+    // against where they actually landed. Keyed, because the same pair can come
+    // from a people-tick and a venue-tick in one save.
+    const placed = new Set()
+    const place = (id, prop) => { if (id && prop) placed.add(`${id}|${prop}`) }
     try {
       for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted, resorted } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
@@ -963,8 +1071,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         // people added: the spare unassigned row takes the first one, the rest
         // become new rows — so a job never accumulates empty duplicates
         let reuse = spare && !dropped.includes(spare) ? spare : null
+        const gVenues = venuesOf(g)
         for (const id of added) {
           const person = staff.find((m) => m.id === id)
+          const prop = venueForPerson(g, id, gVenues)
+          place(id, prop)
+          // the spare row belongs to this venue, so it can only take somebody who
+          // is going to this venue
+          if (reuse && prop !== g.property) reuse = null
           if (reuse) {
             const { error } = await supabase.from('tasks')
               .update({ assigned_to: id, assignee_name: person?.name || null }).eq('id', reuse.id)
@@ -973,7 +1087,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           } else {
             const { error } = await supabase.from('tasks').insert({
               id: newId('t_'),
-              property: g.property,
+              property: prop,
               department: g.department || person?.department || user.department || 'k',
               // a second person on the SAME job gets the same everything —
               // frequency, window, SOP, photo rule — or the roster would show one
@@ -1006,28 +1120,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // recorded as being on cover, so tomorrow's roster still lists them
       // without the "other venues" switch. Dates are optional: no end date
       // means until further notice.
-      const visitors = [...new Set(
-        plan.flatMap(({ added }) => added)
-      )].filter((id) => isVisiting(staff.find((m) => m.id === id)))
-      if (visitors.length) {
-        const rows = visitors.flatMap((id) => props.map((prop) => ({
+      const coverRows = [...placed]
+        .map((k) => k.split('|'))
+        .filter(([id, prop]) => !memberInProperty(staffById.get(id), prop))
+        .map(([id, prop]) => ({
           user_id: id,
           property: prop,
           // open-ended from today; the Cover screen is where dates get set
           from_date: todayISO(),
           to_date: null,
           created_by: user.id,
-        })))
+        }))
+      if (coverRows.length) {
         // ignore a failure here: the assignment itself already succeeded, and a
         // missing cover record must not undo it
         await supabase.from('staff_deployments')
-          .upsert(rows, { onConflict: 'user_id,property,from_date' })
+          .upsert(coverRows, { onConflict: 'user_id,property,from_date' })
       }
 
       // Rows typed straight into the sheet. createJob does the insert, so a
       // row born on the sheet and one born in the dialog land identically.
       for (const g of groups.filter((x) => x.isNew && x.title.trim())) {
         await createJobRow(g)
+        ;(g.properties || []).forEach((v) => (g.people || []).forEach((id) => place(id, v)))
       }
 
       // Venues ticked or unticked on an existing job. Ticked = the job starts
@@ -1040,6 +1155,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         const at = jobVenues(g)
         for (const v of g.venues.filter((v2) => !at.includes(v2))) {
           await createJobRow({ ...g, properties: [v] })
+          ;(g.people || []).forEach((id) => place(id, v))
         }
         for (const v of at.filter((v2) => !g.venues.includes(v2))) {
           const gone = now.find((x) => x.property === v)
@@ -1060,6 +1176,16 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         }
       }
 
+      // Somebody pointed at a different venue for this job. Their row moves
+      // rather than being deleted and remade: the work already recorded against
+      // it, and its place in the order, belong to that row.
+      for (const { id, row, to } of venueMoves) {
+        const { error } = await supabase.from('tasks')
+          .update({ property: to }).eq('id', row.id)
+        if (error) throw error
+        place(id, to)
+      }
+
       // Whose shift changed. A person, not a row — one write each, and it
       // applies to every job they hold, which is the point of it being on them.
       for (const [id, sh] of Object.entries(shiftEdits)) {
@@ -1071,6 +1197,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         setShiftApplied((prev) => ({ ...prev, ...shiftEdits }))
         setShiftEdits({})
       }
+      // the reload below re-reads every row's property, so the pending choices
+      // have nothing left to say
+      setPersonVenue({})
 
       // Re-read from the database rather than trusting what is in memory: the
       // save has just rewritten these rows, and a stale count on the button is
@@ -1116,17 +1245,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       const chosen = d.people?.length ? d.people : []
       const combos = venues.flatMap((prop) => {
         if (!chosen.length) return [{ prop, id: null }]
-        // People belong to venues. Copying the whole picked list to every venue
-        // would put a Pushpanjali gardener on the Restro round; each person only
-        // lands where they actually work. (Someone on 'all' — Sandeep — matches
-        // every venue, which is correct.)
+        // "Everywhere" named no venues, so a named list of people is filtered by
+        // who actually works where — otherwise a Pushpanjali gardener lands on
+        // the Restro round. (Someone on 'all' matches every venue, correctly.)
         //
-        // This used to apply to the all-properties path only, so the sheet's own
-        // venue ticks fanned every picked guard out to every ticked venue — one
-        // body on the same 12:30 round at four properties. To put someone at
-        // another venue deliberately, assign them on that venue's row: the
-        // picker lists visiting staff and records the cover.
-        const here = chosen.filter((id) => memberInProperty(staffById.get(id), prop))
+        // Named venues are different: ticking Exotica with Ajay picked names both,
+        // and filtering that is answering an instruction by doing nothing. Anyone
+        // placed outside their own venue is recorded as cover further down, and
+        // the panel says so before you save.
+        const here = d.allProps
+          ? chosen.filter((id) => memberInProperty(staffById.get(id), prop))
+          : chosen
         // no one picked for this venue: leave a row for its admin to fill,
         // rather than skipping the venue and calling it common
         return here.length ? here.map((id) => ({ prop, id })) : [{ prop, id: null }]
@@ -1229,14 +1358,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     })
   }, [dragKey, blockOf, sheetRows])
 
-  const tracks = sheetTracks({ picking })
-  // Fixed pixels everywhere except Task. The sum still counts Task's minimum, so
-  // gridMin stays the width below which the sheet scrolls rather than squeezes.
-  const flatCols = tracks
-    .map((n) => (n === COL_W.task ? TASK_TRACK : `${n}px`))
-    .join(' ')
-  const gridMin = tracks.reduce((a, b) => a + b, 0)
-
   // one source of truth for the row tracks, so a checkbox column can never
   // appear in the header and not in the rows
   const gridCols = picking
@@ -1268,7 +1389,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         {inline ? t.discardChanges : t.cancel}
       </Button>
       <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
-        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount})`}
+        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount + venueMoves.length})`}
       </Button>
     </>
   )
@@ -1312,19 +1433,31 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             <Icon name={picking ? 'close' : 'check'} size={14} color={picking ? '#fff' : C.tl} />
             {picking ? t.cancel : t.selectRows}
           </button>
-          {canSeeAllProps && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: wide ? '1 1 190px' : '1 1 100%', minWidth: 0 }}>
-              <Icon name="pin" size={15} color={C.tl} />
-              <MultiSelect
-                C={C}
-                placeholder={t.properties}
-                options={PROPERTIES.map((p) => ({ value: p.code, label: propName(p.code, lang) }))}
-                selected={props}
-                // never leave the roster with nothing selected — it would show an
-                // empty table with no way to tell why
-                onChange={(next) => setProps(next.length ? next : props)}
-              />
-            </div>
+          {/* Only while selecting, and only over the rows on screen: with a venue
+              or a department filtered, "all" cannot honestly mean rows you are not
+              being shown. Tapping it again clears them. */}
+          {picking && (
+            <button
+              type="button"
+              onClick={() => setPicked((prev) => {
+                const next = new Set(prev)
+                if (allShownPicked) shownGroups.forEach((g) => next.delete(g.key))
+                else shownGroups.forEach((g) => next.add(g.key))
+                return next
+              })}
+              aria-pressed={allShownPicked}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                padding: '8px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+                background: allShownPicked ? C.maroon : C.card,
+                color: allShownPicked ? '#fff' : C.maroon,
+                border: `1px solid ${allShownPicked ? C.maroon : C.borderStrong}`,
+                cursor: 'pointer',
+              }}
+            >
+              <Icon name="check" size={14} color={allShownPicked ? '#fff' : C.maroon} />
+              {t.all} ({shownGroups.length})
+            </button>
           )}
 
           {/* Selects, not chips: ten chips over two sideways-scrolling rows took a
@@ -1392,11 +1525,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           <div
             style={{
               position: 'fixed', top: assignAt.top, left: assignAt.left,
-              width: assignAt.width, maxHeight: 320, overflowY: 'auto', zIndex: 201,
+              width: assignAt.width, maxHeight: assignAt.maxH, overflowY: 'auto', zIndex: 201,
               background: C.card, border: `1px solid ${C.borderStrong}`,
               borderRadius: 12, boxShadow: C.shadowLg, padding: 10,
             }}
           >
+            {assignAt.mode === 'people' && (
             <PeoplePicker
               C={C}
               t={t}
@@ -1410,7 +1544,99 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               dept={(groups.find((x) => x.key === assignAt.key) || {}).department || ''}
               shiftOf={personShift}
               onSetShift={setPersonShift}
+              venues={(() => {
+                const ag = groups.find((x) => x.key === assignAt.key)
+                return ag ? venuesOf(ag) : []
+              })()}
+              venueOf={(id) => {
+                const ag = groups.find((x) => x.key === assignAt.key)
+                return ag ? venueForPerson(ag, id, venuesOf(ag)) : ''
+              }}
+              onSetVenue={(id, code) => setVenueForPerson(assignAt.key, id, code)}
             />
+            )}
+            {assignAt.mode === 'venues' && (() => {
+              const ag = groups.find((x) => x.key === assignAt.key)
+              if (!ag) return null
+              const at = venuesOf(ag)
+              const codes = PROPERTIES.map((pp) => pp.code)
+              // A row cannot untick the venue it IS — see the delete button.
+              const commit = (next) => {
+                const keep = ag.isNew ? next : [...new Set([...next, ag.property])]
+                if (!keep.length) return
+                setGroupTime(ag.key, ag.isNew ? { properties: keep } : { venues: keep })
+              }
+              const allOn = codes.every((c) => at.includes(c))
+              return (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 7 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', color: C.tl }}>
+                      {t.properties}
+                    </span>
+                    {/* All, and the same button takes it back off */}
+                    <button
+                      type="button"
+                      onClick={() => commit(allOn ? [ag.property] : codes)}
+                      style={{
+                        border: `1.5px solid ${allOn ? C.maroon : C.border}`, borderRadius: 999,
+                        background: allOn ? C.maroon : 'transparent', color: allOn ? '#fff' : C.maroon,
+                        fontSize: 11, fontWeight: 800, padding: '3px 10px', cursor: 'pointer',
+                      }}
+                    >
+                      {t.all}
+                    </button>
+                  </div>
+                  {/* Who this leaves working outside their own venue. The cover
+                      record gets written either way; saying it here is the
+                      difference between an arrangement and a surprise. */}
+                  {(() => {
+                    const picked = (ag.people || []).map((id) => staffById.get(id)).filter(Boolean)
+                    const vs = at.filter((v) => picked.some((m) => !memberInProperty(m, v)))
+                    if (!vs.length) return null
+                    return (
+                      <div style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.5, marginBottom: 7 }}>
+                        {t.willCoverAt} {vs.map((v) => propName(v, lang)).join(', ')}
+                      </div>
+                    )
+                  })()}
+                  {/* Pills, wrapping, filled when on — the same reading as the
+                      people above. A column of five full-width rows pushed the
+                      venues below the fold of their own panel. */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {PROPERTIES.map((pp) => {
+                      const on = at.includes(pp.code)
+                      const locked = !ag.isNew && pp.code === ag.property
+                      return (
+                        <button
+                          key={pp.code}
+                          type="button"
+                          onClick={() => (locked ? null : commit(on ? at.filter((v) => v !== pp.code) : [...at, pp.code]))}
+                          title={locked ? `${propName(pp.code, lang)} — ${t.properties}` : propName(pp.code, lang)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '5px 10px', borderRadius: 999,
+                            fontSize: 12.5, fontWeight: 600,
+                            border: `1.5px solid ${on ? C.maroon : C.border}`,
+                            background: on ? C.maroon : C.card,
+                            color: on ? '#fff' : C.tl,
+                            cursor: locked ? 'default' : 'pointer',
+                          }}
+                        >
+                          {/* Always occupied, so a tick cannot change the width
+                              and re-wrap the row under the cursor. */}
+                          <span style={{ width: 12, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                            {locked
+                              ? <Icon name="lock" size={11} color="#fff" />
+                              : (on ? <Icon name="check" size={12} color="#fff" /> : null)}
+                          </span>
+                          {propName(pp.code, lang)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </>,
         document.body
@@ -1426,37 +1652,37 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                   department, task, the seven days, weekly, monthly, who, where,
                   when. The department bands and frequency headers are gone —
                   they repeated on every block what each row already says. */}
-              {/* The sheet scrolls inside itself, both ways. It has to: a sticky
-                  header cannot stick to the page from inside an overflow
-                  container — setting overflow-x also makes the box a vertical
-                  scrollport, and sticky then anchors to that box. Giving the box
-                  a height turns that from a bug into the behaviour we want, and
-                  the header parks at its top edge. */}
+              {/* The page scrolls, not this box — see the height note below. */}
               <div
                 ref={listRef}
                 style={{
-                  // Horizontal only, and no height cap. With one, the box had
-                  // vertical overflow of its own and swallowed the page's scroll
-                  // whenever the pointer was over the sheet — which is most of
-                  // the screen. Without it there is nothing to scroll vertically
-                  // inside the box, so the wheel goes to the page where it
-                  // belongs. The cost is the header, which can no longer stick:
-                  // sticky resolves against the nearest scrollport, and that is
-                  // this box, not the page.
-                  overflowX: 'auto',
+                  // No height cap, ever. With one, the box had vertical overflow
+                  // of its own and swallowed the page's scroll whenever the
+                  // pointer was over the sheet — which is most of the screen.
+                  //
+                  // And no sideways scrollport unless the columns are actually
+                  // wider than the box. `overflow-x: auto` makes it a scrollport
+                  // on both axes, and a sticky header inside a box that never
+                  // scrolls vertically pins itself to a line that does not move.
+                  // When the sheet fits, this is `visible` and the header sticks
+                  // to the page instead.
+                  overflowX: sheetFits ? 'visible' : 'auto',
                   border: `1px solid ${C.borderStrong}`,
                   borderRadius: 10,
                 }}
+                ref={sheetRef}
               >
                 <div style={{ minWidth: gridMin }}>
 
                   <div style={{
                     display: 'grid', gridTemplateColumns: flatCols,
                     background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}`,
-                    // no sticky: see the wrapper — the box is the scrollport,
-                    // so sticking to its top would pin the header to a line that
-                    // does not move
-                    zIndex: 30,
+                    // Sticky only while the wrapper is not a scrollport — see it
+                    // above. Below the filter bar, and under it in z-order so the
+                    // bar covers it rather than the two fighting.
+                    ...(sheetFits
+                      ? { position: 'sticky', top: headerH + barH, zIndex: 55 }
+                      : null),
                   }}>
                     {picking && <span style={thCell} />}
                     <span style={{ ...thCell, textAlign: 'center' }}>#</span>
@@ -1473,9 +1699,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                         {lang === 'hi' ? dayShort(d, lang) : DAY_INITIAL[d]}
                       </span>
                     ))}
-                    <span style={thCell}>{t.assigned}</span>
+                    <span style={{ ...thCell, textAlign: 'center' }}>{t.assigned}</span>
                     <span style={thCell}>{t.properties}</span>
-                    <span style={thCell}>{t.shiftColumn}</span>
                     <span style={thCell}>{t.time}</span>
                     <span style={thCell} />
                   </div>
@@ -1654,7 +1879,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               type="button"
                               onClick={(e) => openAssign(e, g.key)}
                               style={{
-                                width: '100%', textAlign: 'left', fontSize: 11.5, lineHeight: 1.35,
+                                width: '100%', textAlign: 'center', fontSize: 11.5, lineHeight: 1.35,
                                 background: 'transparent', color: names.length ? C.maroon : C.faint,
                                 fontWeight: names.length ? 700 : 600, padding: 0,
                               }}
@@ -1662,7 +1887,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               {names.length ? names.join(', ') : `+ ${t.assign}`}
                             </button>
                             {g.staffing && (
-                              <span style={{ display: 'block', fontSize: 10.5, color: C.faint, marginTop: 2 }}>
+                              <span style={{ display: 'block', fontSize: 10.5, color: C.faint, marginTop: 2, textAlign: 'center' }}>
                                 {staffingLabel(g.staffing, lang)}
                               </span>
                             )}
@@ -1672,47 +1897,28 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               the same round usually runs at all of them. An
                               existing row is one job at one venue, and changing
                               it MOVES that job, so it stays a single choice. */}
+                          {/* Text, not a control. Editing happens in the assign
+                              panel with the names, because who does a job and
+                              where it runs are one decision — and a dropdown in
+                              a cell this wide could not show its own answer. */}
                           <span style={tdCell}>
-                            <MultiSelect
-                              C={C}
-                              // fit the cell; let the open list be wider
-                              minWidth={0}
-                              panelWidth={190}
-                              // this row's own venue first, then "+N": the cell
-                              // has room for one name and a count, not three
-                              lead={g.property}
-                              maxNames={1}
-                              placeholder={t.properties}
-                              options={PROPERTIES.map((pp) => ({ value: pp.code, label: propName(pp.code, lang) }))}
-                              selected={venuesOf(g)}
-                              onChange={(next) => {
-                                // A row cannot untick the venue it IS. Removing a
-                                // job from where you are standing is the delete
-                                // button's job, and that one asks first.
-                                const keep = g.isNew ? next : [...new Set([...next, g.property])]
-                                if (!keep.length) return
-                                setGroupTime(g.key, g.isNew ? { properties: keep } : { venues: keep })
+                            <button
+                              type="button"
+                              onClick={(e) => openAssign(e, g.key, 'venues')}
+                              style={{
+                                ...miniInput(C), textAlign: 'left', cursor: 'pointer',
+                                // wraps rather than truncates: which venues is the
+                                // whole question this column answers
+                                whiteSpace: 'normal', height: 'auto',
+                                fontSize: 11.5, lineHeight: 1.35, padding: '5px 8px',
                               }}
-                            />
+                            >
+                              {venuesOf(g).length
+                                ? venuesOf(g).map((v) => propName(v, lang)).join(', ')
+                                : '—'}
+                            </button>
                           </span>
 
-                          {/* Day or night, for every department alike. The hours
-                              live in the Time columns, where an admin sets them —
-                              a shift that also wrote the clock meant two places
-                              could disagree about the same row. */}
-                          <span style={tdCell}>
-                            <select
-                              style={miniInput(C)}
-                              value={g.shift || ''}
-                              onChange={(e) => setGroupTime(g.key, { shift: e.target.value })}
-                              aria-label={t.shiftColumn}
-                            >
-                              <option value="">—</option>
-                              {SHIFTS.map((sh) => (
-                                <option key={sh.key} value={sh.key}>{shiftLabel(sh.key, lang)}</option>
-                              ))}
-                            </select>
-                          </span>
 
                           <TimeCell
                             C={C}
@@ -1806,7 +2012,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 //
 // Module level on purpose: defined inside the parent's body, its identity changed
 // every render, React remounted it, and the search text died on each keystroke.
-function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false, shift, dept, shiftOf, onSetShift }) {
+function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false, shift, dept, shiftOf, onSetShift, venues, venueOf, onSetVenue }) {
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
   // Nothing is listed until something is typed. Forty names on screen is a wall
@@ -1821,27 +2027,21 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   // Any department can run a day/night split, so anyone can be asked.
   const canSetShift = typeof shiftOf === 'function'
   const mineShift = (m) => (canSetShift ? shiftOf(m) : '')
-  // You cannot set the shift of someone you have to name to summon, so the row's
-  // own team is listed unsearched: this row's shift first, then whoever has none
-  // yet, then the other shift.
-  //
-  // Up to a point. Four guards is a list; forty names is the wall the search box
-  // exists to avoid, so past the cap the box does its job again.
-  const TEAM_LIMIT = 12
+  // Everyone active, unsearched. A roster job often has to go to somebody from
+  // another team, and stopping at the department made those people look
+  // unavailable. The order does the narrowing instead of a filter: this row's own
+  // department first — and inside it this row's shift, then whoever has no shift
+  // yet, then the other shift — and the rest of the staff after them.
   const rank = (m) => {
+    if (dept && m.department !== dept) return 5
     const sh = mineShift(m)
     if (shift && sh === shift) return 0
     if (!sh) return 1
     return 2
   }
-  const team = dept
-    ? staff.filter((m) => !chosen.includes(m.id) && !m.inactive && m.department === dept)
-    : []
-  const suggested = needle ? [] : (team.length && team.length <= TEAM_LIMIT
-    ? [...team].sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''))
-    : (shift
-      ? staff.filter((m) => !chosen.includes(m.id) && !m.inactive && mineShift(m) === shift)
-      : []))
+  const suggested = needle ? [] : staff
+    .filter((m) => !chosen.includes(m.id) && !m.inactive)
+    .sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''))
   const shown = [...picked, ...suggested, ...matches]
 
   return (
@@ -1862,9 +2062,14 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
         )}
       </div>
 
-      <div style={canSetShift
-        ? { display: 'flex', flexDirection: 'column', gap: 6 }
-        : { display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {/* The names scroll, not the panel: thirty-five people would otherwise push
+          the venue pills below the bottom of it. */}
+      <div style={{
+        ...(canSetShift
+          ? { display: 'flex', flexDirection: 'column', gap: 6 }
+          : { display: 'flex', flexWrap: 'wrap', gap: 6 }),
+        maxHeight: 226, overflowY: 'auto', paddingRight: 2,
+      }}>
         {staff.length === 0 && <span style={{ fontSize: 12.5, color: C.tl }}>{t.noStaffInScope}</span>}
         {staff.length > 0 && !needle && picked.length === 0 && suggested.length === 0 && (
           <span style={{ fontSize: 12.5, color: C.faint }}>{t.typeToFindPerson}</span>
@@ -1891,7 +2096,9 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
                 border: `1.5px solid ${on ? C.maroon : C.border}`,
                 background: on ? C.maroon : C.card,
                 color: on ? '#fff' : C.tl,
-                flex: canSetShift ? 1 : undefined,
+                // a floor, so the name is never the thing that gives way: the
+                // controls beside it wrap to a second line instead
+                flex: canSetShift ? '1 1 110px' : undefined,
                 minWidth: 0, textAlign: 'left',
               }}
             >
@@ -1904,7 +2111,9 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
                   · {t.inactiveStaff}
                 </span>
               )}
-              {!m.inactive && isVisiting(m) && (
+              {/* Their home venue — but not when the row carries a venue select,
+                  which states the venue for this job right beside it. */}
+              {!m.inactive && !canSetShift && isVisiting(m) && (
                 <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, flexShrink: 0 }}>
                   · {propName(m.property, lang)}
                 </span>
@@ -1918,12 +2127,35 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
               )}
             </button>
           )
+          // Former staff keep a bare name: there is nothing to set for someone
+          // who has left, only a record that they were on this job.
           if (!canSetShift || m.inactive) {
             return <span key={m.id} style={{ display: 'inline-flex' }}>{nameChip}</span>
           }
+          const askVenue = typeof onSetVenue === 'function' && (venues || []).length > 1
+          const theirVenue = askVenue ? venueOf(m.id) : ''
           return (
-            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               {nameChip}
+              {/* Where this person does it — one venue, out of the ones the task
+                  runs at. A single choice, because nobody is at two properties
+                  at 12:30. */}
+              {askVenue && (
+                <select
+                  value={theirVenue}
+                  onChange={(e) => onSetVenue(m.id, e.target.value)}
+                  aria-label={t.properties}
+                  style={{
+                    flexShrink: 0, maxWidth: 112, border: `1.5px solid ${C.border}`,
+                    borderRadius: 999, padding: '4px 6px', fontSize: 11.5, fontWeight: 700,
+                    color: C.text, background: C.card, cursor: 'pointer',
+                  }}
+                >
+                  {venues.map((v) => (
+                    <option key={v} value={v}>{propName(v, lang)}</option>
+                  ))}
+                </select>
+              )}
               {/* This person's shift, set from here. Outside the name button,
                   because a button inside a button is invalid and the inner one
                   stops taking clicks. Tapping the active one clears it. */}

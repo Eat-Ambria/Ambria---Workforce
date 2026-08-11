@@ -724,6 +724,10 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   })
   const [photos, setPhotos] = useState([])
   const [voice, setVoice] = useState('')
+  // Can this device record at all? A phone with no microphone, or a browser where
+  // permission was refused, cannot — and a required field nobody can fill is a
+  // fault that never gets reported. Those fall back to typing it.
+  const canRecord = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [fieldErr, setFieldErr] = useState({}) // per-field validation shown inline
@@ -748,6 +752,10 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     const fe = {}
     if (!form.title.trim()) fe.title = `${t.title} ${t.isRequired}`
     if (!form.priority) fe.priority = `${t.priority} ${t.isRequired}`
+    // what is wrong: recorded, or typed where recording is impossible
+    if (!voice && !(!canRecord && form.description.trim())) {
+      fe.voice = canRecord ? t.voiceRequired : t.voiceOrTypeRequired
+    }
     // Only an admin gets the assignee field, so only an admin can be required
     // to fill it. Demanding it from staff made Submit do nothing at all: no
     // field to fill, no ref to scroll to, no error to read.
@@ -834,7 +842,14 @@ function PostModal({ user, members = [], onClose, onSaved }) {
           onChange={(v) => setForm((f) => ({ ...f, description_hi: v }))}
         />
       )}
-      <Field label={`${t.voiceNote} (${t.optional})`} hint={t.voiceInsteadHint}>
+      {/* Required, with the same exception as the public form: a device that
+          cannot record takes a typed description instead. */}
+      <Field
+        label={t.voiceNote}
+        required
+        hint={canRecord ? t.voiceRequired : t.voiceOrTypeRequired}
+        error={fieldErr.voice}
+      >
         <VoiceRecorder folder="work-voice" value={voice} onChange={setVoice} />
       </Field>
       {admin && (
@@ -929,6 +944,69 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     onSaved()
   }
 
+  // Sending back is a two-step action: the reason is the point of it, and a
+  // single tap cannot carry one.
+  const [backMode, setBackMode] = useState(false)
+  const [backNote, setBackNote] = useState('')
+  const [backVoice, setBackVoice] = useState('')
+  // Same exception as raising a request: an admin on a device that cannot record
+  // must still be able to reject work, so those type the reason instead.
+  const canRecord = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  const backReasonGiven = backVoice || (!canRecord && backNote.trim())
+
+  async function sendBack() {
+    if (!backReasonGiven) {
+      setErr(canRecord ? t.sendBackVoiceRequired : t.sendBackTypeRequired)
+      return
+    }
+    setBusy(true); setErr('')
+    // Guarded like approve: if another admin has already dealt with it, this
+    // changes nothing rather than dragging a finished request back open.
+    const { data, error } = await supabase
+      .from('work_board')
+      .update({
+        status: 'in_progress',
+        rejection_note: backNote.trim() || null,
+        rejection_voice_url: backVoice || null,
+      })
+      .eq('id', row.id)
+      .eq('status', 'approval_requested')
+      .select('id')
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    if (!data?.length) { setErr(t.alreadyApproved); onSaved(); return }
+    setBackMode(false)
+    onSaved()
+  }
+
+  // The first approval wins. The update names the status it expects to find, so
+  // a second admin working from a screen that has not caught up matches no rows
+  // and overwrites nobody — rather than replacing the first admin's name with
+  // their own on a request that was already passed.
+  async function approve() {
+    setBusy(true); setErr('')
+    const { data, error } = await supabase
+      .from('work_board')
+      .update({
+        status: 'completed',
+        resolved_at: nowISO(),
+        approved_by: user.id,
+        approved_by_name: user.name,
+      })
+      .eq('id', row.id)
+      .eq('status', 'approval_requested')
+      .select('id')
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    if (!data?.length) {
+      // somebody got there first; the reload brings back who and when
+      setErr(t.alreadyApproved)
+      onSaved()
+      return
+    }
+    onSaved()
+  }
+
   // admins can permanently delete a completed request to clear it out
   // Overdue, somebody's name on it, and an admin looking at it. All three have
   // to be true before there is anything to remind anyone about.
@@ -1013,9 +1091,16 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       approved_by: user.id,
       approved_by_name: user.name,
     }
-    const { error } = await supabase.from('work_board').update(patch).eq('id', row.id)
+    // same race, same guard: not if it has already been finished by someone else
+    const { data: done, error } = await supabase.from('work_board')
+      .update(patch)
+      .eq('id', row.id)
+      .neq('status', 'completed')
+      .neq('status', 'approved')
+      .select('id')
     setBusy(false)
     if (error) { setErr(error.message); return }
+    if (!done?.length) { setErr(t.alreadyApproved); onSaved(); return }
     if (row.assigned_to && row.assigned_to !== user.id) {
       await supabase.from('notifications').insert({
         type: 'fix_closed_by_admin', task_text: row.title, for_user: row.assigned_to,
@@ -1072,9 +1157,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   } else if (s === 'approval_requested' && admin && !ownWork) {
     actions = (
       <>
-        <Button variant="ghost" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 1 }}>{t.reject || 'Send Back'}</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => setBackMode(true)} style={{ flex: 1 }}>{t.reject || 'Send Back'}</Button>
         {/* who passed it, so the board can answer that later */}
-        <Button variant="success" disabled={busy} onClick={() => setStatus('completed', { resolved_at: nowISO(), approved_by: user.id, approved_by_name: user.name })} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
+        <Button variant="success" disabled={busy} onClick={approve} style={{ flex: 2 }}>{t.approve || 'Approve'}</Button>
       </>
     )
   } else if (['approved', 'completed'].includes(s) && admin && !ownWork) {
@@ -1089,6 +1174,41 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // close it without waiting for the assignee — available on any unfinished repair
   const canCloseNow = admin && !ownWork && ['open', 'assigned', 'in_progress'].includes(s)
   // (delete is handled by the always-available button in the footer below)
+
+  if (backMode) {
+    return (
+      <Modal
+        open
+        onClose={() => setBackMode(false)}
+        title={fixTitle(row, lang === 'hi')}
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => setBackMode(false)} style={{ flex: 1 }}>{t.cancel}</Button>
+            <Button variant="danger" disabled={busy || !backReasonGiven} onClick={sendBack} style={{ flex: 2 }}>
+              {t.reject || 'Send Back'}
+            </Button>
+          </>
+        )}
+      >
+        <Field
+          label={t.sendBackReason}
+          required
+          hint={canRecord ? t.sendBackReasonHint : t.sendBackTypeRequired}
+        >
+          <VoiceRecorder folder="work-voice" value={backVoice} onChange={setBackVoice} />
+        </Field>
+        <Field label={`${t.notes} (${t.optional})`}>
+          <textarea
+            rows={3}
+            value={backNote}
+            onChange={(e) => setBackNote(e.target.value)}
+            style={{ ...inputStyle(C), resize: 'vertical' }}
+          />
+        </Field>
+        {err && <p style={{ fontSize: 13, color: C.red, marginTop: 4 }}>{err}</p>}
+      </Modal>
+    )
+  }
 
   return (
     <Modal open onClose={onClose} title={fixTitle(row, lang === 'hi')}
@@ -1143,6 +1263,22 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         )}
       </div>
 
+      {/* Why it came back, for as long as that is still the open question. Once
+          the work is done it has been answered; the fields are kept rather than
+          cleared so the recording is not orphaned in storage. */}
+      {!['completed', 'approved'].includes(s) && (row.rejection_note || row.rejection_voice_url) && (
+        <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderLeft: `3px solid ${TR_ORANGE}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: TR_ORANGE, marginBottom: 6 }}>
+            {t.sentBackReasonLabel}
+          </div>
+          {row.rejection_note && (
+            <p style={{ fontSize: 13.5, color: C.text, marginBottom: row.rejection_voice_url ? 8 : 0, whiteSpace: 'pre-line' }}>
+              {row.rejection_note}
+            </p>
+          )}
+          {row.rejection_voice_url && <AudioPlayer src={row.rejection_voice_url} label={t.voiceNote} />}
+        </div>
+      )}
       {row.description && <p style={{ fontSize: 14, color: C.tl, marginBottom: 12, whiteSpace: 'pre-line' }}>{fixDesc(row, lang === 'hi')}</p>}
       {row.voice_url && (
         <div style={{ marginBottom: 12 }}>

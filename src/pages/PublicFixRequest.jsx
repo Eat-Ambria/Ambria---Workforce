@@ -271,6 +271,10 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   const [people, setPeople] = useState([])
   const [photos, setPhotos] = useState([])
   const [voice, setVoice] = useState('')
+  // Can this device record at all? A phone with no microphone, or a browser where
+  // permission was refused, cannot — and a required field nobody can fill is a
+  // fault that never gets reported. Those fall back to typing it.
+  const canRecord = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
@@ -329,6 +333,15 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
     if (!form.name.trim()) { setError(hi ? 'नाम भरना ज़रूरी है।' : 'Name is required.'); return }
     if (form.phone.length !== 10) { setError(hi ? 'फ़ोन नंबर 10 अंकों का होना चाहिए।' : 'Phone number must be exactly 10 digits.'); return }
     if (!form.title.trim()) { setError(hi ? 'शीर्षक भरना ज़रूरी है।' : 'A title is required.'); return }
+    // What is wrong, in the reporter's own words: recorded normally, typed only
+    // where recording is impossible.
+    const saidIt = voice || (!canRecord && form.issue.trim())
+    if (!saidIt) {
+      setError(canRecord
+        ? (hi ? 'बोलकर बताएँ कि दिक्कत क्या है।' : 'Record a voice note saying what the problem is.')
+        : (hi ? 'दिक्कत क्या है यह लिखें।' : 'Type what the problem is.'))
+      return
+    }
 
     setBusy(true); setError('')
     const issue = form.issue.trim()
@@ -558,7 +571,11 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       )}
 
       <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'या बोलकर बताएँ (वैकल्पिक)' : 'Or record it instead (optional)'}</label>
+        <label style={fieldLabel}>
+          {canRecord
+            ? (hi ? 'बोलकर बताएँ कि दिक्कत क्या है' : 'Record what the problem is')
+            : (hi ? 'लिखकर बताएँ (यह डिवाइस रिकॉर्ड नहीं कर सकता)' : 'Type it (this device cannot record)')}
+        </label>
         <VoiceRecorder folder="work-voice" value={voice} onChange={setVoice} />
       </div>
 

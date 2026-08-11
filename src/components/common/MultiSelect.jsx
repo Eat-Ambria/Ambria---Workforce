@@ -11,7 +11,7 @@ import Icon from './Icon'
 // this one. A native <select> would have done the job, but its option list is
 // drawn by the operating system — unstyleable — so sitting next to this component
 // the two looked like they came from different applications.
-export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false, single = false, minWidth = 150, panelWidth, lead, maxNames = 3 }) {
+export default function MultiSelect({ C, placeholder, options, selected, onChange, searchable = false, single = false, minWidth = 150 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -43,23 +43,14 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
   }
 
   // Name what is chosen. "2 selected" tells you the one thing you already knew —
-  // you picked them. Past the room available the rest become "+N" and the full
-  // list goes in the tooltip.
-  //
-  // `lead` puts one value first: in a table cell the row's own venue is the one
-  // the reader is placing everything else against, and declaration order would
-  // reliably clip it off the end. `maxNames` is how many fit before counting
-  // takes over — a narrow cell wants one name, not three and an ellipsis.
-  const chosen = options.filter((o) => sel.has(o.value))
-  const ordered = lead && sel.has(lead)
-    ? [...chosen.filter((o) => o.value === lead), ...chosen.filter((o) => o.value !== lead)]
-    : chosen
-  const names = ordered.map((o) => o.label)
+  // you picked them. Past three names it would not fit, so the rest become "+N"
+  // and the full list goes in the tooltip.
+  const names = options.filter((o) => sel.has(o.value)).map((o) => o.label)
   const label = names.length === 0 ? placeholder
     : single ? names[0]
     : names.length === options.length && options.length > 1 ? `${t.all} (${names.length})`
-    : names.length <= maxNames ? names.join(', ')
-    : `${names.slice(0, maxNames).join(', ')} +${names.length - maxNames}`
+    : names.length <= 3 ? names.join(', ')
+    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
 
   return (
     <div ref={ref} style={{ position: 'relative', flex: 1, minWidth }}>
@@ -75,9 +66,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0,
-          // The panel may be wider than the control that opens it. In a table
-          // cell the control has to fit its column; the list of names does not.
-          right: panelWidth ? 'auto' : 0, minWidth: panelWidth || 'auto', zIndex: 50, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: C.shadowLg || C.shadow, padding: 8, maxHeight: 320, overflowY: 'auto' }}>
+          right: 0, zIndex: 50, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: C.shadowLg || C.shadow, padding: 8, maxHeight: 320, overflowY: 'auto' }}>
           {searchable && (
             <input autoFocus placeholder={t.search} value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle(C), marginBottom: 8 }} />
           )}
