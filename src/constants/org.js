@@ -64,19 +64,27 @@ const RETIRED_DEPARTMENTS = {
 }
 
 // Lookup: every live department plus every retired code, for display only.
-// Security is covered around the clock in two halves. Nobody else works shifts,
-// so their day is simply the 9-to-5 and `shift` stays null on their rows.
+// Every department runs a day and a night half. What differs is the hours:
+// security is a fixed twelve-on, twelve-off round the clock, while everyone else
+// works whatever their row's Time column says — a gardener's night shift is not
+// the same twelve hours as a guard's.
 export const SHIFT_DEPT = 's'
 export const SHIFTS = [
-  { key: 'day',   from: '08:00', to: '20:00', en: '8 AM – 8 PM', hi: '8 AM – 8 PM' },
-  { key: 'night', from: '20:00', to: '08:00', en: '8 PM – 8 AM', hi: '8 PM – 8 AM' },
+  { key: 'day', en: 'Day', hi: 'दिन' },
+  { key: 'night', en: 'Night', hi: 'रात' },
 ]
-export const DEFAULT_SHIFT = { from: '09:00', to: '17:00', en: '9 AM – 5 PM', hi: '9 AM – 5 PM' }
-export const hasShifts = (dept) => dept === SHIFT_DEPT
-export const shiftLabel = (key, lang) => {
+// Only security's hours are fixed by the shift itself.
+export const SECURITY_HOURS = {
+  day: { from: '08:00', to: '20:00', label: '8 AM – 8 PM' },
+  night: { from: '20:00', to: '08:00', label: '8 PM – 8 AM' },
+}
+export const shiftLabel = (key, lang, dept) => {
   const sh = SHIFTS.find((x) => x.key === key)
-  if (!sh) return lang === 'hi' ? DEFAULT_SHIFT.hi : DEFAULT_SHIFT.en
-  return lang === 'hi' ? sh.hi : sh.en
+  if (!sh) return '—'
+  const name = lang === 'hi' ? sh.hi : sh.en
+  // security's two shifts ARE their hours, so the label says them
+  const hours = dept === SHIFT_DEPT ? SECURITY_HOURS[key]?.label : null
+  return hours ? `${name} ${hours}` : name
 }
 
 export const DEPARTMENT_MAP = DEPARTMENTS.reduce(

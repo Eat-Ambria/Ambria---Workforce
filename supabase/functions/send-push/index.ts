@@ -41,6 +41,7 @@ function render(n: Record<string, unknown>, lang: string) {
     fix_assigned: ['Fix request assigned to you', 'फिक्स रिक्वेस्ट सौंपी गई', 'task-board'],
     fix_new: ['New fix request raised', 'नई फिक्स रिक्वेस्ट', 'task-board'],
     fix_approval: ['Fix awaiting approval', 'फिक्स मंज़ूरी के लिए', 'task-board'],
+    fix_logged: ['Work done and logged', 'काम हो गया — दर्ज किया', 'task-board'],
     fix_approved: ['Your fix was approved', 'आपकी फिक्स मंज़ूर हुई', 'task-board'],
     valet_booking: ['New valet booking', 'नई वैले बुकिंग', 'valet'],
     quiz_completed: ['Quiz completed', 'क्विज़ पूरा हुआ', 'training'],
@@ -60,7 +61,7 @@ function render(n: Record<string, unknown>, lang: string) {
   const entry = M[n.type as string]
   const title = entry ? (hi ? entry[1] : entry[0]) : 'Ambria WorkForce'
   const path = entry ? entry[2] : 'dashboard'
-  const needsWho = ['task_done', 'task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'quiz_completed'].includes(n.type as string)
+  const needsWho = ['task_done', 'task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'fix_logged', 'quiz_completed'].includes(n.type as string)
   return { title, body: item + (needsWho ? who : ''), url: BASE + path, tag: `${n.type}-${n.entity_id ?? ''}` }
 }
 

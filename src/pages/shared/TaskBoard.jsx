@@ -301,12 +301,14 @@ export default function TaskBoard() {
             {/* Recording finished work is a different act from asking for work,
                 so it is a different button — not a checkbox inside the request
                 form that everyone would miss. */}
-            {admin && (
-              <Button variant="ghost" onClick={() => setLogging(true)}>
-                <Icon name="check" size={16} color={C.maroon} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                {t.logWork}
-              </Button>
-            )}
+            {/* Everyone, not just admins. A guard who re-seats a loose camera
+                or a gardener who clears a blocked drain has done the work — the
+                log exists so that work is on the record, and gating it by role
+                only recorded the half of it done by admins. */}
+            <Button variant="ghost" onClick={() => setLogging(true)}>
+              <Icon name="check" size={16} color={C.maroon} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              {t.logWork}
+            </Button>
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Icon name="plus" size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
               {t.taskBoard}
@@ -588,6 +590,9 @@ function LogWorkModal({ user, onClose, onSaved }) {
   const superAdmin = isSuperAdmin(user?.role)
   const [form, setForm] = useState({
     title: '', title_hi: '', note: '', category: 'other',
+    // General repair belongs to no trade, so the logger says whose work it was;
+    // their own department is the sensible starting point.
+    dept: user.department || '',
     property: user.property && user.property !== 'all' ? user.property : 'pp',
   })
   const [photos, setPhotos] = useState([])
@@ -604,11 +609,12 @@ function LogWorkModal({ user, onClose, onSaved }) {
       title_hi: form.title_hi.trim() || null,
       category: form.category || 'other',
       property: superAdmin ? form.property : (user.property && user.property !== 'all' ? user.property : 'pp'),
-      department: catDept(form.category) || user.department || null,
+      department: catDept(form.category) || form.dept || user.department || null,
       posted_by: user.id,
       posted_by_name: user.name,
-      // The admin did it themselves, so they are both sides of it. Recording the
-      // assignee is what puts the work against their name later.
+      // Whoever logged it did it, so they are both sides of it. Recording the
+      // assignee is what puts the work against their name later — and what lets
+      // their admin see it on the property's board.
       assigned_to: user.id,
       assigned_to_name: user.name,
       priority: 'normal',
@@ -657,6 +663,20 @@ function LogWorkModal({ user, onClose, onSaved }) {
           {FIX_CATEGORIES.map((c) => <option key={c} value={c}>{fixCatLabel(c, t, lang)}</option>)}
         </select>
       </Field>
+
+      {/* Only for General repair. Kitchen and the trades already name their own
+          team; asking again would let one row claim two. This is what decides
+          which department's admin finds the work on their board. */}
+      {form.category === 'other' && (
+        <Field label={t.department} hint={t.fixDeptOwnerHint}>
+          <select style={inputStyle(C)} value={form.dept} onChange={set('dept')}>
+            <option value="">— {t.department} —</option>
+            {DEPARTMENTS.map((d) => (
+              <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       {superAdmin && (
         <Field label={t.propertyLabel} hint={t.propertyWorkHint}>

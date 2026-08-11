@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../lib/supabase'
 import { newId } from '../../lib/id'
 import { todayISO } from '../../lib/time'
@@ -10,7 +11,7 @@ import {
   memberInProperty, personName, PRIORITIES,
   FREQUENCY_MAP, taskFrequency, frequencyLabel,
   WEEK_DAYS, dayName, dayShort, staffingLabel, monthlyDate, taskDays,
-  SHIFTS, hasShifts, shiftLabel,
+  SHIFTS, SHIFT_DEPT, SECURITY_HOURS, shiftLabel,
 } from '../../constants/org'
 import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
@@ -62,21 +63,20 @@ const COLS_NARROW_PICK = '34px 170px 104px 128px 118px'
 // cannot.
 const COL_W = {
   pick: 34, num: 38, task: 260,
-  daily: 208, weekly: 96, monthly: 96, day: 32,
-  assigned: 150, venue: 104, shift: 124, time: 116, actions: 104,
+  weekly: 96, monthly: 96, day: 40,
+  assigned: 150, venue: 156, shift: 160, time: 116, actions: 104,
 }
 const TASK_W = COL_W.task
 
-const sheetTracks = ({ picking, showVenue }) => [
+const sheetTracks = ({ picking }) => [
   picking && COL_W.pick,
   COL_W.num,
   COL_W.task,
-  COL_W.daily,
   COL_W.weekly,
   COL_W.monthly,
   ...Array(7).fill(COL_W.day),
   COL_W.assigned,
-  showVenue && COL_W.venue,
+  COL_W.venue,
   COL_W.shift,
   COL_W.time,
   COL_W.actions,
@@ -197,7 +197,16 @@ const normRange = (block) => fmtRange(...Object.values(parseRange(block)))
 
 // The seven day columns, Sunday first as the sheet draws them (WEEK_DAYS is
 // Monday-first because that is how the database numbers them).
+// the order frequencies read in, so a department groups the same way every time
+const FREQUENCY_KEYS = ['daily', 'dailyMS', 'sunday', 'alternate', 'alternateMS', 'weekly', 'monthly']
+
 const DAY_COLS = [7, 1, 2, 3, 4, 5, 6]
+
+// Two letters, not one. "S M T W T F S" has Sunday and Saturday both as S and
+// Tuesday and Thursday both as T — the first six boxes were being ticked for
+// Mon-Sat when they are actually Sun-Fri, and the row then correctly refused to
+// call itself a range because Saturday was missing from the middle.
+const DAY_INITIAL = { 1: 'M', 2: 'Tu', 3: 'W', 4: 'Th', 5: 'F', 6: 'Sa', 7: 'Su' }
 
 // 1 -> "1st". Hindi just takes the number — Devanagari ordinals for dates are
 // not how anyone writes a monthly rota.
@@ -209,32 +218,78 @@ const ordinal = (n, lang) => {
 
 // Which days a row shows as ticked. Weekly means one day; monthly is not a
 // weekday pattern at all, so it ticks nothing.
-// The ticks belong to Alternate and to nothing else. A daily row shows none:
-// asking "which days" of a job that runs every day is the question that made a
-// plain daily task draw three ticks, because taskDays() falls back to
-// alternateDays() — Mon/Wed/Fri — when a row has no day list of its own.
-const altDays = (g) => (['alternate', 'alternateMS'].includes(freqOf(g)) ? taskDays(g) : [])
+// Which days the row actually runs on — the ticks are the schedule now, so they
+// have to be right for every frequency, not just alternate. Daily is spelled out
+// as all seven rather than deferred to taskDays(), whose fallback is Mon/Wed/Fri
+// and is meant for alternate work only.
+const rowDays = (g) => {
+  const fk = freqOf(g)
+  if (fk === 'monthly') return []
+  if (fk === 'weekly' || fk === 'sunday') return [Number(g.weekDay) || 7]
+  if (fk === 'daily') return [1, 2, 3, 4, 5, 6, 7]
+  if (fk === 'dailyMS') return [1, 2, 3, 4, 5, 6]
+  return taskDays(g)
+}
+
+// A run of consecutive days — Sat-Sun, Mon-Thu. Sunday is 7, so a set that wraps
+// round the end of the week (Sun, Mon) is not a run, which is right: nobody
+// reads "Sun-Mon" as a range.
+const isRun = (d) => d.length >= 2 && d[d.length - 1] - d[0] === d.length - 1
+
+// The same rule as setDays(), in the shape the form keeps its fields in: it
+// stores a frequency KEY and lets freqSpec() turn that into columns at save
+// time, where the sheet edits the columns directly.
+const daysToForm = (days) => {
+  const d = [...new Set(days.map(Number))].sort((a, b) => a - b)
+  if (d.length === 7) return { freq: 'daily', weekDays: null, weekDay: '', monthWeek: '' }
+  if (d.length === 6 && !d.includes(7)) return { freq: 'dailyMS', weekDays: null, weekDay: '', monthWeek: '' }
+  if (d.length === 1) return { freq: 'weekly', weekDays: null, weekDay: d[0], monthWeek: '' }
+  return {
+    freq: d.includes(7) ? 'alternate' : 'alternateMS',
+    weekDays: d, weekDay: '', monthWeek: '',
+  }
+}
+
+// ...and back, so the chips show what the form currently holds.
+const formDays = (v) => {
+  if (v.freq === 'monthly') return []
+  if (v.freq === 'weekly' || v.freq === 'sunday') return [Number(v.weekDay) || 7]
+  if (v.freq === 'daily') return [1, 2, 3, 4, 5, 6, 7]
+  if (v.freq === 'dailyMS') return [1, 2, 3, 4, 5, 6]
+  return (v.weekDays || []).map(Number).sort((a, b) => a - b)
+}
 
 // A row runs on ONE schedule. Each setter therefore clears the other three
 // rather than layering on top of them — a sheet that let a job claim both
 // "daily" and "every Wednesday" would be lying about what the staff will see.
 const BLANK = { weekDays: null, weekDay: '', monthWeek: '', skipSunday: false }
-const setDaily = (v) => (v === 'dailyMS'
-  ? { ...BLANK, category: 'daily', skipSunday: true }
-  : { ...BLANK, category: 'daily' })
 const setWeekly = (d) => ({ ...BLANK, category: 'weekly', weekDay: Number(d) })
 const setMonthly = (w) => ({ ...BLANK, category: 'monthly', monthWeek: Number(w) })
-// Saturday and Sunday, and nothing else — the shortcut's "on" state. Reading it
-// off the days rather than a category keeps it honest: tick Sat and Sun by hand
-// and the button lights up too, because that is the same schedule.
-const isWeekendOnly = (g) => {
-  const d = ['alternate', 'alternateMS'].includes(freqOf(g)) ? taskDays(g) : []
-  return d.length === 2 && d.includes(6) && d.includes(7)
-}
 
-const setAlternate = (days) => {
+// Ticked days in, a schedule out. A run and a gapped set both land on
+// `alternate` because that is the one thing the scheduler does with a day list;
+// the difference between them is a label, not a mechanism.
+const setDays = (days) => {
   const d = [...new Set(days.map(Number))].sort((a, b) => a - b)
+  if (d.length === 7) return { ...BLANK, category: 'daily' }
+  if (d.length === 6 && !d.includes(7)) return { ...BLANK, category: 'daily', skipSunday: true }
+  if (d.length === 1) return { ...BLANK, category: 'weekly', weekDay: d[0] }
   return { ...BLANK, category: 'alternate', weekDays: d, skipSunday: !d.includes(7) }
+}
+// What the row calls itself, read back off the days. "Alternate" is reserved for
+// the case it actually describes — days with gaps between them.
+const scheduleChip = (g, t, lang) => {
+  const fk = freqOf(g)
+  if (fk === 'monthly') return { text: freqLabel('monthly', lang), days: '' }
+  if (fk === 'weekly' || fk === 'sunday') {
+    return { text: `${freqLabel('weekly', lang)} · ${dayShort(Number(g.weekDay) || 7, lang)}`, days: '' }
+  }
+  if (fk === 'daily') return { text: t.freqEveryDay, days: '' }
+  const d = rowDays(g)
+  if (fk === 'dailyMS' || isRun(d)) {
+    return { text: `${dayShort(d[0], lang)} – ${dayShort(d[d.length - 1], lang)}`, days: '' }
+  }
+  return { text: freqLabel(fk, lang), days: d.map((x) => dayShort(x, lang)).join(' · ') }
 }
 
 // Start and end, stacked. Behind memo() and deliberately given no `lang`:
@@ -351,7 +406,19 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [picked, setPicked] = useState(() => new Set())
   const [err, setErr] = useState('')
   const [deptTab, setDeptTab] = useState('all')       // which department's round is shown
-  const [expandedKey, setExpandedKey] = useState(null) // row whose people picker is open
+  // The row whose people picker is open, and where on screen to draw it. Screen
+  // coordinates rather than a nested panel: see the portal below.
+  const [assignAt, setAssignAt] = useState(null) // { key, top, left, width }
+  const openAssign = (e, key) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    setAssignAt((cur) => (cur?.key === key ? null : {
+      key,
+      // below the cell, or above it when there is no room underneath
+      top: r.bottom + 6 + 320 > window.innerHeight ? Math.max(8, r.top - 326) : r.bottom + 6,
+      left: Math.min(r.left, window.innerWidth - 292),
+      width: Math.max(280, r.width),
+    }))
+  }
   const [form, setForm] = useState(null)               // add/edit form, null = closed
   const [saved, setSaved] = useState(false)            // the 'changes saved' toast
 
@@ -419,7 +486,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // meant four separate reads of what is one document.
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, shift, status, started_at, before_photo, completion_photo')
+      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, shift, sort_order, status, started_at, before_photo, completion_photo')
       .in('property', props)
       .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
@@ -438,6 +505,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         monthWeek: r.month_week || '', skipSunday: !!r.skip_sunday,
         weekDays: Array.isArray(r.week_days) && r.week_days.length ? r.week_days.map(Number) : null,
         priority: r.priority || 'medium', dueDate: r.due_date || '', shift: r.shift || '',
+        sortOrder: r.sort_order ?? null,
         photoRequired: r.photo_required !== false, rows: [],
       })
       byTitle.get(key).rows.push(r)
@@ -455,15 +523,42 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // One small form for both adding and editing a row. Inline inputs inside a
   // five-column grid were unusable on anything narrow, and a row being edited
   // looked nothing like a row being read.
-  const openAdd = () => setForm({
-    mode: 'add', dept: deptTab === 'all' ? '' : deptTab,
-    title: '', titleHi: '', from: '', to: '', photoRequired: true, people: [], weekDay: '',
-    // a new row states its own frequency now that the roster shows them all at once
-    freq: freqFilter === 'all' ? 'daily' : freqFilter, monthWeek: '', sop: '', staffing: '',
-    priority: 'medium', dueDate: '', weekDays: null,
-    // a common task ignores the property filter and lands at every venue
-    allProps: false,
-  })
+  // A new row is a group with no rows behind it. Same shape as a loaded one, so
+  // every cell in the sheet edits it without knowing it is new.
+  const addRow = () => {
+    const key = `new:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`
+    setGroups((prev) => [...prev, {
+      key,
+      isNew: true,
+      rows: [],
+      title: '',
+      title_hi: '',
+      department: deptTab === 'all' ? (DEPARTMENTS[0]?.code || '') : deptTab,
+      // a new job can go to several venues at once; an existing one lives at
+      // exactly one, which is why only new rows get the multi-select
+      properties: [...props],
+      property: props[0],
+      category: 'daily',
+      skipSunday: false,
+      weekDays: null,
+      weekDay: '',
+      monthWeek: '',
+      from: '',
+      to: '',
+      shift: '',
+      people: [],
+      sop: '',
+      staffing: '',
+      priority: 'medium',
+      dueDate: '',
+      photoRequired: true,
+    }])
+    // straight to it — a row appended below the fold looks like nothing happened
+    setTimeout(() => {
+      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+    }, 0)
+  }
+
   const openEdit = (g) => setForm({
     mode: 'edit', key: g.key, dept: g.department || '',
     title: g.title, titleHi: g.title_hi || '', from: g.from || '', to: g.to || '',
@@ -473,15 +568,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     weekDays: g.weekDays || null,
   })
 
-  // A new job is written now; an edit to an existing one still goes through the
-  // roster's Save with the rest of the pending changes. Different actions: one
-  // creates a thing, the other amends a sheet you are part-way through editing.
-  async function applyForm(v) {
-    if (v.mode === 'add') {
-      // the dialog stays open on failure, so nothing typed is lost
-      if (await createJob(v)) setForm(null)
-      return
-    }
+  // The dialog only edits now — new jobs are typed straight into the sheet — so
+  // this just folds the values back into the group and lets Save carry them.
+  function applyForm(v) {
     setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
       ...g, title: v.title, title_hi: v.titleHi, from: v.from, to: v.to,
       photoRequired: v.photoRequired, people: v.people,
@@ -550,11 +639,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // alone was not enough at 459 rows: nothing marked where one department ended.
   const sheetRows = useMemo(() => {
     const deptOrder = DEPARTMENTS.map((d) => d.code)
-    // Department, then the clock. Frequency used to be the second key, which
-    // grouped the block into runs of daily / alternate / weekly — the sub-blocks
-    // the bands used to label. A department now reads as one shift from morning
-    // to evening, which is how the printed roster is worked through, and each
-    // row says its own frequency on its chip.
+    const freqOrder = FREQUENCY_KEYS
+    // Department, then frequency, then whatever order was dragged, then the
+    // clock. Frequency is back as a key because without it a department read
+    // daily, weekly, alternate, daily — like never sat with like.
     //
     // Sort on the SAVED row, not the edited group: ticking a day changes the
     // frequency, and ranking on live values would slide the row out from under
@@ -564,6 +652,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       const d = saved(g).department ?? g.department
       return deptOrder.indexOf(d) < 0 ? 99 : deptOrder.indexOf(d)
     }
+    const freqRank = (g) => {
+      const r = saved(g)
+      const fk = r.category ? freqOf(r) : freqOf(g)
+      const i = freqOrder.indexOf(fk)
+      return i < 0 ? 99 : i
+    }
+    // a row nobody has ordered sits after the ones somebody has
+    const orderRank = (g) => (g.sortOrder ?? Number.MAX_SAFE_INTEGER)
     // Sort on the PARSED start, not the raw text. A monthly row's time_block
     // reads "1st Week", and comparing that as a string drops it between 12:15
     // and 2:00 because both begin with a "1". Parsed, it has no clock time at
@@ -574,6 +670,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       const sa = startOf(a)
       const sb = startOf(b)
       return deptRank(a) - deptRank(b)
+        || freqRank(a) - freqRank(b)
+        || orderRank(a) - orderRank(b)
         || (sa ? 0 : 1) - (sb ? 0 : 1)
         || sa.localeCompare(sb)
         || (a.title || '').localeCompare(b.title || '')
@@ -611,6 +709,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   // removes the job from EVERY person at this venue, not just one of them
   async function deleteGroup(g) {
+    // nothing on the server yet — no confirmation for throwing away a blank
+    if (g.isNew) {
+      setGroups((prev) => prev.filter((x) => x.key !== g.key))
+      return
+    }
     const ok = await confirm({
       message: t.deleteJobConfirm.replace('{n}', g.rows.length),
       detail: g.title,
@@ -680,7 +783,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     && !(r.before_photo?.length) && !(r.completion_photo?.length)
 
   // what each group needs on save: people to add, rows to drop
-  const plan = useMemo(() => groups.map((g) => {
+  const plan = useMemo(() => groups.filter((g) => !g.isNew).map((g) => {
     const before = g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to)
     const added = g.people.filter((id) => !before.includes(id))
     const dropped = g.rows.filter((r) => r.assigned_to && !g.people.includes(r.assigned_to))
@@ -704,7 +807,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // Moving a job to another venue rewrites property on every copy of it.
     const removed = (g.property || '') !== (g.rows[0]?.property || '')
     const reshifted = (g.shift || '') !== (g.rows[0]?.shift || '')
-    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted }
+    const resorted = (g.sortOrder ?? null) !== (g.rows[0]?.sort_order ?? null)
+    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted, resorted }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
@@ -714,24 +818,49 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const editedKeys = useMemo(() => new Set(
     plan.filter((x) => x.added.length || x.dropped.length || x.renamed || x.rehindied
       || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped
-      || x.reprioed || x.redued || x.redaysed || x.removed || x.reshifted).map((x) => x.g.key)
+      || x.reprioed || x.redued || x.redaysed || x.removed || x.reshifted || x.resorted).map((x) => x.g.key)
   ), [plan])
   const isEdited = (g) => editedKeys.has(g.key)
 
-  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.removed || x.reshifted).length
-  const nothingToSave = addCount + dropCount + renameCount === 0
+  // The same job at three venues is three groups — that is how the key is
+  // built. Gathered back up, they answer "where does this run".
+  const jobVenues = useCallback((g) => groups
+    .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
+    .map((x) => x.property), [groups])
+
+  // What the tick list currently shows: the pending choice if one has been made
+  // on this row, otherwise wherever the job runs today.
+  const venuesOf = useCallback(
+    (g) => (g.isNew ? (g.properties || []) : (g.venues || jobVenues(g))),
+    [jobVenues]
+  )
+
+  // a new row counts towards Save the moment it has a title to save
+  const newRows = groups.filter((g) => g.isNew && g.title.trim())
+
+  // ...and so does a venue ticked or unticked on an existing one
+  const venueEdits = groups.filter((g) => {
+    if (g.isNew || !g.venues) return false
+    const at = jobVenues(g)
+    return g.venues.length !== at.length || g.venues.some((v) => !at.includes(v))
+  })
+
+  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.removed || x.reshifted || x.resorted).length
+  const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length === 0
+
+  // Shared by save() and createJob(): both write a Hindi title, and a title
+  // that fails to translate is saved without one rather than lost.
+  const hiFor = async (title) => {
+    try { return await translateToHindi(title) } catch { return null }
+  }
 
   async function save() {
     setBusy(true); setErr('')
     try {
-      const hiFor = async (title) => {
-        try { return await translateToHindi(title) } catch { return null }
-      }
-
-      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted } of plan) {
+      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted, resorted } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
         // frequency or SOP — applies to every copy of it
-        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed || removed || reshifted) {
+        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed || removed || reshifted || resorted) {
           const patch = {}
           if (renamed) patch.title = g.title.trim()
           // What is in the box is what gets saved. Only fall back to translating
@@ -758,6 +887,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           }
           if (removed) patch.property = g.property
           if (reshifted) patch.shift = g.shift || null
+          if (resorted) patch.sort_order = g.sortOrder ?? null
           const { error } = await supabase.from('tasks')
             .update(patch)
             .in('id', g.rows.map((r) => r.id))
@@ -839,11 +969,37 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           .upsert(rows, { onConflict: 'user_id,property,from_date' })
       }
 
+      // Rows typed straight into the sheet. createJob does the insert, so a
+      // row born on the sheet and one born in the dialog land identically.
+      for (const g of groups.filter((x) => x.isNew && x.title.trim())) {
+        await createJobRow(g)
+      }
+
+      // Venues ticked or unticked on an existing job. Ticked = the job starts
+      // running there; unticked = that venue's copy goes. Both are computed
+      // against where it runs NOW, not against what the sheet last loaded.
+      for (const g of groups.filter((x) => !x.isNew && x.venues)) {
+        const now = groups
+          .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
+        const at = now.map((x) => x.property)
+        for (const v of g.venues.filter((v2) => !at.includes(v2))) {
+          await createJobRow({ ...g, properties: [v] })
+        }
+        for (const v of at.filter((v2) => !g.venues.includes(v2))) {
+          const gone = now.find((x) => x.property === v)
+          const ids = (gone?.rows || []).map((r) => r.id)
+          if (ids.length) {
+            const { error } = await supabase.from('tasks').delete().in('id', ids)
+            if (error) throw error
+          }
+        }
+      }
+
       // Re-read from the database rather than trusting what is in memory: the
       // save has just rewritten these rows, and a stale count on the button is
       // how you end up saving the same change twice.
       setForm(null)
-      setExpandedKey(null)
+      setAssignAt(null)
       await load()
       setSaved(true)
       onSaved?.()
@@ -857,13 +1013,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // Writes one new job straight to the database — called from the Add dialog,
   // not from save(). Creating is a complete action on its own; leaving it half
   // done in a pending row is what made it look like it had failed.
+  // The sheet holds category/skipSunday; createJob wants the frequency key the
+  // dialog used. One adapter, rather than a second insert path that can drift.
+  const createJobRow = (g) => createJob({
+    title: g.title, titleHi: g.title_hi, dept: g.department,
+    properties: g.properties,
+    freq: freqOf(g), weekDay: g.weekDay, weekDays: g.weekDays, monthWeek: g.monthWeek,
+    from: g.from, to: g.to, shift: g.shift, sop: g.sop, staffing: g.staffing,
+    photoRequired: g.photoRequired, people: g.people,
+    batch: true,
+  })
+
   async function createJob(d) {
     setBusy(true); setErr('')
     try {
       const title = d.title.trim()
       const title_hi = (d.titleHi || '').trim() || await hiFor(title)
       // A common task goes everywhere; a normal one follows the sheet's filter.
-      const venues = d.allProps ? PROPERTIES.map((pp) => pp.code) : props
+      // A row added on the sheet names its own venues — several of them, since
+      // the same round usually runs everywhere. The old dialog named none and
+      // fell back to whatever the filter had selected.
+      const venues = d.allProps
+        ? PROPERTIES.map((pp) => pp.code)
+        : (d.properties?.length ? d.properties : (d.property ? [d.property] : props))
       const chosen = d.people?.length ? d.people : []
       const combos = venues.flatMap((prop) => {
         if (!chosen.length) return [{ prop, id: null }]
@@ -899,6 +1071,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           week_days: spec.category === 'alternate' && d.weekDays?.length ? d.weekDays : null,
           month_week: spec.category === 'monthly' && d.monthWeek ? Number(d.monthWeek) : null,
           skip_sunday: !!spec.skipSunday,
+          shift: d.shift || null,
           priority: 'medium',
           assigned_to: id || null,
           assignee_name: person?.name || null,
@@ -908,9 +1081,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       })
       const { error } = await supabase.from('tasks').insert(inserts)
       if (error) throw error
-      await load()
-      setSaved(true)
-      onSaved?.()
+      // save() reloads and toasts once for the whole batch; doing it per row
+      // would reload the sheet out from under the loop
+      if (!d.batch) {
+        await load()
+        setSaved(true)
+        onSaved?.()
+      }
       return true
     } catch (e) {
       setErr(e.message || String(e))
@@ -922,12 +1099,37 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
   // Discarding is not "close" when there is nothing to close: on the tab it
   // means throw away the unsaved edits and re-read the roster.
-  const discard = () => { setForm(null); setExpandedKey(null); load() }
+  const discard = () => { setForm(null); setAssignAt(null); load() }
 
-  // With one venue selected every row would repeat its name — the filter at the
-  // top already said it once. The column returns the moment there are two.
-  const showVenue = props.length > 1
-  const tracks = sheetTracks({ picking, showVenue })
+  // Which row is being dragged. Only the key: the sheet re-sorts from
+  // sortOrder, so the move is a renumber, not a splice of the rendered list.
+  const [dragKey, setDragKey] = useState(null)
+
+  // A block is one department + one frequency. Dropping outside your own block
+  // would have to change the schedule to keep the sheet honest, and that is not
+  // what dragging a row means.
+  const blockOf = useCallback((g) => {
+    const r = g.rows[0] || {}
+    return `${r.department ?? g.department}|${freqOf(r.category ? r : g)}`
+  }, [])
+
+  const dropOn = useCallback((target) => {
+    const from = dragKey
+    setDragKey(null)
+    if (!from || from === target.key) return
+    setGroups((prev) => {
+      const moving = prev.find((x) => x.key === from)
+      if (!moving || blockOf(moving) !== blockOf(target)) return prev
+      // renumber the whole block in tens, so a later drag has room between rows
+      const block = sheetRows.filter((x) => blockOf(x) === blockOf(target) && x.key !== from)
+      const at = block.findIndex((x) => x.key === target.key)
+      block.splice(at < 0 ? block.length : at, 0, moving)
+      const order = new Map(block.map((x, i) => [x.key, (i + 1) * 10]))
+      return prev.map((x) => (order.has(x.key) ? { ...x, sortOrder: order.get(x.key) } : x))
+    })
+  }, [dragKey, blockOf, sheetRows])
+
+  const tracks = sheetTracks({ picking })
   const flatCols = tracks.map((n) => `${n}px`).join(' ')
   const gridMin = tracks.reduce((a, b) => a + b, 0)
 
@@ -962,7 +1164,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         {inline ? t.discardChanges : t.cancel}
       </Button>
       <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
-        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount})`}
+        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + venueEdits.length})`}
       </Button>
     </>
   )
@@ -1068,10 +1270,43 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         <span style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, flex: '1 1 320px', minWidth: 0 }}>
           {t.rosterNote}
         </span>
-        <Button variant="primary" onClick={openAdd} style={{ padding: '8px 14px', fontSize: 13, flexShrink: 0 }}>
+        <Button variant="primary" onClick={addRow} style={{ padding: '8px 14px', fontSize: 13, flexShrink: 0 }}>
           <Icon name="plus" size={14} color="#fff" style={{ marginRight: 4 }} />{t.addTaskRow}
         </Button>
       </div>
+
+      {/* Anchored to the cell you clicked and drawn on top of the page.
+          A portal because the sheet scrolls sideways: a panel inside that
+          container gets clipped at the table's edge, and the names you were
+          searching for are the part that disappears. */}
+      {assignAt && createPortal(
+        <>
+          <div
+            onClick={() => setAssignAt(null)}
+            style={{ position: 'fixed', inset: 0, zIndex: 200 }}
+          />
+          <div
+            style={{
+              position: 'fixed', top: assignAt.top, left: assignAt.left,
+              width: assignAt.width, maxHeight: 320, overflowY: 'auto', zIndex: 201,
+              background: C.card, border: `1px solid ${C.borderStrong}`,
+              borderRadius: 12, boxShadow: C.shadowLg, padding: 10,
+            }}
+          >
+            <PeoplePicker
+              C={C}
+              t={t}
+              lang={lang}
+              staff={staff}
+              autoFocus
+              chosen={(groups.find((x) => x.key === assignAt.key) || {}).people || []}
+              onToggle={(id) => togglePerson(assignAt.key, id)}
+              isVisiting={isVisiting}
+            />
+          </div>
+        </>,
+        document.body
+      )}
 
       {loading ? <Loader label={t.loading} /> : (
         <>
@@ -1118,7 +1353,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     {picking && <span style={thCell} />}
                     <span style={{ ...thCell, textAlign: 'center' }}>#</span>
                     <span style={thCell}>{t.task}</span>
-                    <span style={thCell}>{t.frequency}</span>
                     <span style={thCell}>{t.weekly}</span>
                     <span style={thCell}>{t.monthly}</span>
                     {/* The seven day letters, on one line. They carry the
@@ -1127,12 +1361,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                         first header two lines tall and knocked the letters out
                         of line with each other. */}
                     {DAY_COLS.map((d) => (
-                      <span key={d} style={{ ...thCell, textAlign: 'center', padding: '11px 2px', color: FREQ_MAP.alternate.ink }}>
-                        {dayShort(d, lang).slice(0, lang === 'hi' ? 2 : 1)}
+                      <span key={d} style={{ ...thCell, textAlign: 'center', padding: '11px 1px', color: FREQ_MAP.alternate.ink }}>
+                        {lang === 'hi' ? dayShort(d, lang) : DAY_INITIAL[d]}
                       </span>
                     ))}
                     <span style={thCell}>{t.assigned}</span>
-                    {showVenue && <span style={thCell}>{t.properties}</span>}
+                    <span style={thCell}>{t.properties}</span>
                     <span style={thCell}>{t.shiftColumn}</span>
                     <span style={thCell}>{t.time}</span>
                     <span style={thCell} />
@@ -1164,16 +1398,31 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     const g = item.g
                     const f = FREQ_MAP[freqOf(g)] || FREQ_MAP.daily
                     const edited = isEdited(g)
-                    const bg = edited ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card)
-                    const days = altDays(g)
-                    const weekendOnly = isWeekendOnly(g)
-                    const open = expandedKey === g.key
+                    const bg = (g.isNew || edited) ? C.maroonSoft : (i % 2 ? C.cardAlt : C.card)
+                    const days = rowDays(g)
+                    const chip = scheduleChip(g, t, lang)
                     const names = (g.people || [])
                       .map((id) => staffById.get(id))
                       .filter(Boolean)
                       .map((m) => personName(m, lang))
                     return (
-                      <div key={g.key} style={{ borderTop: `1px solid ${C.border}`, background: bg, boxShadow: `inset 3px 0 0 ${f.ink}` }}>
+                      <div
+                        key={g.key}
+                        draggable={!g.isNew}
+                        onDragStart={() => setDragKey(g.key)}
+                        onDragEnd={() => setDragKey(null)}
+                        onDragOver={(e) => { if (dragKey && dragKey !== g.key) e.preventDefault() }}
+                        onDrop={(e) => { e.preventDefault(); dropOn(g) }}
+                        style={{
+                        borderTop: `1px solid ${C.border}`,
+                        background: bg,
+                        opacity: dragKey === g.key ? 0.45 : 1,
+                        cursor: g.isNew ? 'default' : 'grab',
+                        boxShadow: `inset 3px 0 0 ${f.ink}`,
+                        // dashed while it exists only in the browser
+                        outline: g.isNew ? `1px dashed ${C.maroon}` : 'none',
+                        outlineOffset: -1,
+                      }}>
                         <div style={{ display: 'grid', gridTemplateColumns: flatCols, alignItems: 'center' }}>
                           {picking && (
                             <span style={{ ...tdCell, display: 'grid', placeItems: 'center' }} onClick={(e) => e.stopPropagation()}>
@@ -1192,9 +1441,19 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           </span>
 
                           <div style={{ ...tdCell, minWidth: 0 }}>
-                            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>
-                              {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
-                            </div>
+                            {g.isNew ? (
+                              <input
+                                autoFocus
+                                style={{ ...miniInput(C), fontSize: 13, fontWeight: 700, padding: '6px 8px' }}
+                                value={g.title}
+                                placeholder={t.newTaskTitle}
+                                onChange={(e) => setGroupTime(g.key, { title: e.target.value })}
+                              />
+                            ) : (
+                              <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>
+                                {lang === 'hi' && g.title_hi ? g.title_hi : g.title}
+                              </div>
+                            )}
                             {/* What the ticks add up to. Weekly and Monthly have
                                 their own columns to announce themselves; daily
                                 and alternate had nothing, so ticking three days
@@ -1211,14 +1470,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 color: f.ink, background: f.tint,
                                 borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap',
                               }}>
-                                {weekendOnly ? t.freqSatSun.toUpperCase() : freqLabel(freqOf(g), lang)}
+                                {g.isNew ? t.notSavedYet : chip.text}
                               </span>
-                              {/* the days themselves, for the patterns a label
-                                  cannot name — "Alternate" does not say which three.
-                                  Sat-Sun names its own two, so it needs no list. */}
-                              {!weekendOnly && ['alternate', 'alternateMS'].includes(freqOf(g)) && (
+                              {/* only a gapped set needs its days spelled out —
+                                  a run has already named its ends */}
+                              {chip.days && (
                                 <span style={{ fontSize: 10, color: C.tl, whiteSpace: 'nowrap' }}>
-                                  {days.map((d) => dayShort(d, lang)).join(' · ')}
+                                  {chip.days}
                                 </span>
                               )}
                             </div>
@@ -1229,42 +1487,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
                           {/* Four controls, one schedule. Picking in any of them
                               clears the other three. */}
-                          {/* Two buttons rather than a dropdown: there are exactly
-                              two answers, and a closed select shows neither of
-                              them until you open it. Here both are on the sheet
-                              and the live one is filled in. */}
-                          <span style={{ ...tdCell, display: 'flex', gap: 4 }}>
-                            {/* Sat-Sun is not a third kind of "daily" — it is two
-                                days, which the model already calls alternate. The
-                                button is a shortcut for ticking Sat and Sun, and
-                                it lights up only when those two are exactly what
-                                is ticked. */}
-                            {[
-                              { k: 'dailyMS', label: t.freqDailyMonSat },
-                              { k: 'daily', label: t.freqDailyMonSun },
-                              { k: 'weekend', label: t.freqSatSun },
-                            ].map((opt) => {
-                              const on = opt.k === 'weekend' ? weekendOnly : freqOf(g) === opt.k
-                              return (
-                                <button
-                                  key={opt.k}
-                                  type="button"
-                                  onClick={() => setGroupTime(g.key, opt.k === 'weekend' ? setAlternate([6, 7]) : setDaily(opt.k))}
-                                  aria-pressed={on}
-                                  style={{
-                                    flex: 1, padding: '5px 2px', borderRadius: 7,
-                                    fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer',
-                                    background: on ? FREQ_MAP.daily.ink : C.white,
-                                    color: on ? '#fff' : C.tl,
-                                    border: `1px solid ${on ? FREQ_MAP.daily.ink : C.border}`,
-                                  }}
-                                >
-                                  {opt.label}
-                                </button>
-                              )
-                            })}
-                          </span>
-
                           <span style={tdCell}>
                             <select
                               style={miniInput(C)}
@@ -1306,7 +1528,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                     // unticking the last day would leave a
                                     // schedule of no days at all
                                     if (!next.length) return
-                                    setGroupTime(g.key, setAlternate(next))
+                                    setGroupTime(g.key, setDays(next))
                                   }}
                                   style={{ width: 15, height: 15, accentColor: FREQ_MAP.alternate.ink, cursor: 'pointer' }}
                                 />
@@ -1319,7 +1541,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           <span style={tdCell}>
                             <button
                               type="button"
-                              onClick={() => setExpandedKey(open ? null : g.key)}
+                              onClick={(e) => openAssign(e, g.key)}
                               style={{
                                 width: '100%', textAlign: 'left', fontSize: 11.5, lineHeight: 1.35,
                                 background: 'transparent', color: names.length ? C.maroon : C.faint,
@@ -1335,39 +1557,50 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             )}
                           </span>
 
-                          {showVenue && (
-                            <span style={tdCell}>
-                              <select
-                                style={miniInput(C)}
-                                value={g.property || ''}
-                                onChange={(e) => setGroupTime(g.key, { property: e.target.value })}
-                                aria-label={t.properties}
-                              >
-                                {PROPERTIES.map((pp) => (
-                                  <option key={pp.code} value={pp.code}>{propName(pp.code, lang)}</option>
-                                ))}
-                              </select>
-                            </span>
-                          )}
-
-                          {/* A dropdown with one option is furniture. Only
-                              security has two shifts to pick between; for
-                              everyone else this states the 9-to-5 and stops. */}
+                          {/* A new job can be created at several venues in one go —
+                              the same round usually runs at all of them. An
+                              existing row is one job at one venue, and changing
+                              it MOVES that job, so it stays a single choice. */}
                           <span style={tdCell}>
-                            {hasShifts(g.department) ? (
-                              <select
-                                style={miniInput(C)}
-                                value={g.shift || 'day'}
-                                onChange={(e) => setGroupTime(g.key, { shift: e.target.value })}
-                                aria-label={t.shiftColumn}
-                              >
-                                {SHIFTS.map((sh) => (
-                                  <option key={sh.key} value={sh.key}>{shiftLabel(sh.key, lang)}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: 11, color: C.faint }}>{shiftLabel(null, lang)}</span>
-                            )}
+                            <MultiSelect
+                              C={C}
+                              minWidth={140}
+                              placeholder={t.properties}
+                              options={PROPERTIES.map((pp) => ({ value: pp.code, label: propName(pp.code, lang) }))}
+                              selected={venuesOf(g)}
+                              onChange={(next) => {
+                                // A row cannot untick the venue it IS. Removing a
+                                // job from where you are standing is the delete
+                                // button's job, and that one asks first.
+                                const keep = g.isNew ? next : [...new Set([...next, g.property])]
+                                if (!keep.length) return
+                                setGroupTime(g.key, g.isNew ? { properties: keep } : { venues: keep })
+                              }}
+                            />
+                          </span>
+
+                          {/* Every department runs a day and a night half. For
+                              security the shift IS the hours — a fixed twelve on,
+                              twelve off — so picking one sets the Time columns
+                              too. Everyone else keeps their own hours. */}
+                          <span style={tdCell}>
+                            <select
+                              style={miniInput(C)}
+                              value={g.shift || ''}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                const hrs = g.department === SHIFT_DEPT ? SECURITY_HOURS[v] : null
+                                setGroupTime(g.key, hrs
+                                  ? { shift: v, from: hrs.from, to: hrs.to }
+                                  : { shift: v })
+                              }}
+                              aria-label={t.shiftColumn}
+                            >
+                              <option value="">—</option>
+                              {SHIFTS.map((sh) => (
+                                <option key={sh.key} value={sh.key}>{shiftLabel(sh.key, lang, g.department)}</option>
+                              ))}
+                            </select>
                           </span>
 
                           <TimeCell
@@ -1399,19 +1632,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           </div>
                         </div>
 
-                        {open && (
-                          <div style={{ padding: '10px', borderTop: `1px solid ${C.border}`, background: C.card }}>
-                            <PeoplePicker
-                              C={C}
-                              t={t}
-                              lang={lang}
-                              staff={staff}
-                              chosen={g.people}
-                              onToggle={(id) => togglePerson(g.key, id)}
-                              isVisiting={isVisiting}
-                            />
-                          </div>
-                        )}
                       </div>
                     )
                   })}
@@ -1580,6 +1800,14 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
   const { lang } = useLang()
   const set = (patch) => onChange({ ...value, ...patch })
   const valid = value.title.trim() && value.dept
+  // the same chip the sheet shows, so the form previews exactly what it creates
+  const preview = scheduleChip({
+    category: value.freq === 'dailyMS' ? 'daily'
+      : value.freq === 'alternateMS' ? 'alternate' : value.freq,
+    skipSunday: ['dailyMS', 'alternateMS'].includes(value.freq),
+    weekDays: value.weekDays,
+    weekDay: value.weekDay,
+  }, t, lang)
 
   return (
     <Modal
@@ -1660,41 +1888,43 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
       {/* Frequency first: it decides whether a day, a week of the month, or
           neither is worth asking for. "(Mon-Sat)" is the Sunday rule; "Sunday
           only" is the light work done while clients walk the property. */}
-      {/* The same four choices the sheet offers, in the same order, obeying
-          the same rule: one of them is the schedule and picking it clears the
-          rest. A form that spoke a different vocabulary from the sheet it adds
-          to would teach the wrong thing twice. */}
+      {/* The sheet's nine controls, in the sheet's order. Tick the days the job
+          runs on and the frequency follows; Weekly and Monthly are for the two
+          schedules a weekday pattern cannot express. */}
       <Field label={t.frequency} required hint={t.frequencyHint}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[
-            { k: 'dailyMS', label: t.freqDailyMonSat },
-            { k: 'daily', label: t.freqDailyMonSun },
-            { k: 'weekend', label: t.freqSatSun },
-          ].map((opt) => {
-            const on = opt.k === 'weekend'
-              ? (value.freq === 'alternate' && (value.weekDays || []).length === 2
-                 && value.weekDays.includes(6) && value.weekDays.includes(7))
-              : value.freq === opt.k
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {DAY_COLS.map((d) => {
+            const chosen = formDays(value)
+            const on = chosen.includes(d)
             return (
               <button
-                key={opt.k}
+                key={d}
                 type="button"
-                onClick={() => set(opt.k === 'weekend'
-                  ? { freq: 'alternate', weekDays: [6, 7], weekDay: '', monthWeek: '' }
-                  : { freq: opt.k, weekDays: null, weekDay: '', monthWeek: '' })}
+                onClick={() => {
+                  const next = on ? chosen.filter((x) => x !== d) : [...chosen, d]
+                  // a job with no days never comes round again
+                  if (!next.length) return
+                  set(daysToForm(next))
+                }}
                 aria-pressed={on}
+                aria-label={dayName(d, lang)}
                 style={{
-                  flex: '1 1 90px', padding: '9px 8px', borderRadius: 9,
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                  border: `1.5px solid ${on ? FREQ_MAP.daily.ink : C.border}`,
-                  background: on ? FREQ_MAP.daily.ink : C.card,
+                  minWidth: 44, padding: '8px 6px', borderRadius: 9,
+                  fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                  border: `1.5px solid ${on ? FREQ_MAP.alternate.ink : C.border}`,
+                  background: on ? FREQ_MAP.alternate.ink : C.card,
                   color: on ? '#fff' : C.tl,
                 }}
               >
-                {opt.label}
+                {lang === 'hi' ? dayShort(d, lang) : DAY_INITIAL[d]}
               </button>
             )
           })}
+        </div>
+        {/* what those ticks add up to, in the sheet's words, before you save */}
+        <div style={{ fontSize: 12, fontWeight: 700, color: FREQ_MAP.alternate.ink, marginTop: 7 }}>
+          {preview.text}
+          {preview.days && <span style={{ fontWeight: 500, color: C.tl }}>{`  ${preview.days}`}</span>}
         </div>
       </Field>
 
@@ -1730,38 +1960,6 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
           </Field>
         </div>
       </div>
-
-      {/* Alternate is set by ticking days, here as it is on the sheet. Ticking
-          anything makes the job alternate; it is the only control that does. */}
-      <Field label={t.freqAlternate} hint={t.repeatOnDaysHint}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {WEEK_DAYS.map((d) => {
-            const chosen = value.freq === 'alternate' ? (value.weekDays || []) : []
-            const on = chosen.includes(d.v)
-            return (
-              <button
-                key={d.v}
-                type="button"
-                onClick={() => {
-                  const next = on ? chosen.filter((x) => x !== d.v) : [...chosen, d.v].sort((a, b) => a - b)
-                  // a job with no days never comes back; nobody means to make one
-                  if (!next.length) return
-                  set({ freq: 'alternate', weekDays: next, weekDay: '', monthWeek: '' })
-                }}
-                aria-pressed={on}
-                style={{
-                  minWidth: 46, padding: '7px 6px', borderRadius: 9, fontSize: 12.5, fontWeight: 700,
-                  border: `1.5px solid ${on ? FREQ_MAP.alternate.ink : C.border}`,
-                  background: on ? FREQ_MAP.alternate.ink : C.card,
-                  color: on ? '#fff' : C.tl,
-                }}
-              >
-                {dayShort(d.v, lang)}
-              </button>
-            )
-          })}
-        </div>
-      </Field>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 140px' }}>

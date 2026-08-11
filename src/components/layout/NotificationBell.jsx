@@ -35,6 +35,9 @@ function meta(n, hi) {
     case 'fix_assigned': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'मरम्मत अनुरोध सौंपा गया' : 'Repair request assigned to you', body: item }
     case 'fix_new': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'नया मरम्मत अनुरोध' : 'New repair request raised', body: item + who }
     case 'fix_approval': return { icon: 'inbox', link: '/task-board', title: hi ? 'मरम्मत मंज़ूरी के लिए' : 'Repair awaiting approval', body: item + who }
+    // Work somebody did and then logged. The admins hear about it; the person
+    // who did it obviously already knows.
+    case 'fix_logged': return { icon: 'check', link: '/task-board', title: hi ? 'काम हो गया — दर्ज किया' : 'Work done and logged', body: item + who }
     case 'fix_approved': return { icon: 'check', link: '/task-board', title: hi ? 'आपका मरम्मत अनुरोध मंज़ूर हुआ' : 'Your repair was approved', body: item }
     case 'fix_closed_by_admin': return { icon: 'check', link: '/task-board', title: hi ? 'एडमिन ने आपकी रिक्वेस्ट पूरी मार्क की' : 'Admin marked your repair complete', body: item }
     case 'valet_booking': return { icon: 'valet', link: '/valet', title: hi ? 'नई वैले बुकिंग' : 'New valet booking', body: item }
