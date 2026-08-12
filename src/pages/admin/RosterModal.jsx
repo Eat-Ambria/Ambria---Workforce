@@ -1208,9 +1208,16 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       for (const g of groups.filter((x) => !x.isNew && x.venues)) {
         // where it runs, including venues outside the sheet's filter
         const at = jobVenues(g)
+        // what the row will run at once this save lands — the choices a person's
+        // venue is picked from
+        const gv = g.venues
         for (const v of g.venues.filter((v2) => !at.includes(v2))) {
-          await createJobRow({ ...g, properties: [v] })
-          ;(g.people || []).forEach((id) => place(id, v))
+          // Only the people whose venue for this job IS this one. Carrying the
+          // whole picked list is how somebody ended up on the same round at two
+          // properties while their own row named one.
+          const going = (g.people || []).filter((id) => venueForPerson(g, id, gv) === v)
+          await createJobRow({ ...g, properties: [v], people: going })
+          going.forEach((id) => place(id, v))
         }
         for (const v of at.filter((v2) => !g.venues.includes(v2))) {
           // this job's own rows at that venue — one group holds all of them now
