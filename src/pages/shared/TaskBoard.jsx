@@ -907,9 +907,18 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
   const [note, setNote] = useState(row.resolution_note || '')
   const [resPhotos, setResPhotos] = useState(Array.isArray(row.resolution_photos) ? row.resolution_photos : [])
+  // The spoken half of the answer. Separate from row.voice_url, which is the
+  // reporter saying what was wrong — a request can carry both.
+  const [resVoice, setResVoice] = useState(row.resolution_voice_url || '')
   const [reassigning, setReassigning] = useState(false) // admin editing the assignment
   const [editingText, setEditingText] = useState(false) // fixing the wording / the Hindi
   const [closing, setClosing] = useState(false)         // admin closing it out themselves
+  // The panel opens below the fold of a scrolling modal, so the button looked
+  // like it did nothing. Bring it to the reader the moment it appears.
+  const closeRef = useRef(null)
+  useEffect(() => {
+    if (closing) closeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [closing])
   const [rating, setRating] = useState(row.rating || 0)  // 1..5 stars given by admin
   const [viewing, setViewing] = useState(null)           // { photos, index } in the lightbox
 
@@ -1085,7 +1094,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       status: 'completed',
       resolved_at: nowISO(),
       resolution_photos: resPhotos,
-      resolution_note: note.trim() || (resPhotos.length ? null : t.closedByAdminNote),
+      resolution_voice_url: resVoice || null,
+      resolution_note: note.trim() || (resPhotos.length || resVoice ? null : t.closedByAdminNote),
       // a different action from approving submitted work, but the same question:
       // which admin signed this off
       approved_by: user.id,
@@ -1143,7 +1153,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   }
   function submitForApproval() {
     if (resPhotos.length === 0) { setErr(t.photoRequired || 'Add a photo of the completed work'); return }
-    setStatus('approval_requested', { resolution_note: note || null, resolution_photos: resPhotos })
+    setStatus('approval_requested', { resolution_note: note || null, resolution_photos: resPhotos, resolution_voice_url: resVoice || null })
   }
 
   // footer actions depend on status + who's looking
@@ -1369,13 +1379,18 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           note. Optional, because sometimes there is nothing left to photograph —
           but then the note says the request was closed without proof. */}
       {closing && canCloseNow && (
-        <div style={{ background: C.gBg, border: `1px solid ${C.green}22`, borderRadius: 12, padding: 12, marginTop: 4 }}>
+        <div ref={closeRef} style={{ background: C.gBg, border: `1px solid ${C.green}22`, borderRadius: 12, padding: 12, marginTop: 4 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, marginBottom: 8 }}>{t.closeOnBehalf}</div>
           <Field label={`${t.uploadPhoto} (${t.optional})`} hint={t.closeOnBehalfHint}>
             <PhotoCapture folder="work_board" value={resPhotos} onChange={setResPhotos} />
           </Field>
           <Field label={`${t.completionNote} (${t.optional})`}>
             <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+          {/* Optional, unlike the recording on the way in: an answer already has
+              a note and photos to stand on. */}
+          <Field label={`${t.completionVoice} (${t.optional})`}>
+            <VoiceRecorder folder="work-voice" value={resVoice} onChange={setResVoice} />
           </Field>
         </div>
       )}
@@ -1389,13 +1404,16 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           <Field label={`${t.completionNote || 'Note'} (${t.optional})`}>
             <textarea rows={2} style={{ ...inputStyle(C), resize: 'vertical' }} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
+          <Field label={`${t.completionVoice} (${t.optional})`}>
+            <VoiceRecorder folder="work-voice" value={resVoice} onChange={setResVoice} />
+          </Field>
         </>
       )}
 
       {/* resolution shown once submitted / completed */}
       {/* approved_by_name is in the condition on purpose: a fix can be submitted
           with no note and no photo, and the sign-off must still be visible. */}
-      {['approval_requested', 'completed', 'approved'].includes(s) && (row.resolution_note || (row.resolution_photos || []).length > 0 || row.approved_by_name) && (
+      {['approval_requested', 'completed', 'approved'].includes(s) && (row.resolution_note || (row.resolution_photos || []).length > 0 || row.resolution_voice_url || row.approved_by_name) && (
         <div style={{ background: C.bg, borderRadius: 10, padding: 12, marginTop: 4 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{t.completed} — {row.assigned_to_name}</div>
           {/* Who signed it off. Both admins and the super admin see this; it is
@@ -1407,6 +1425,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
             </div>
           )}
           {row.resolution_note && <p style={{ fontSize: 13.5, color: C.tl, marginBottom: 8 }}>{row.resolution_note}</p>}
+          {row.resolution_voice_url && (
+            <div style={{ marginBottom: 8 }}>
+              <AudioPlayer src={row.resolution_voice_url} label={t.completionVoice} />
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {(row.resolution_photos || []).map((u, i) => (
               <img

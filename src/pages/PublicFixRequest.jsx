@@ -219,6 +219,10 @@ function StatTile({ C, label, value, tone }) {
 function RequestCard({ C, hi, r, isMine }) {
   const lang = hi ? 'hi' : 'en'
   const s = stat(r.status)
+  const [showWork, setShowWork] = useState(false)
+  const done = ['completed', 'approved'].includes(r.status)
+  const workPhotos = Array.isArray(r.resolution_photos) ? r.resolution_photos : []
+  const hasWork = done && (r.resolution_note || r.resolution_voice_url || workPhotos.length > 0)
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C[s.tone]}`, borderRadius: 14, padding: 14, boxShadow: C.shadow }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
@@ -254,6 +258,69 @@ function RequestCard({ C, hi, r, isMine }) {
         <div style={{ fontSize: 12, color: C.tl, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
           <Icon name="user" size={13} color={C.faint} />
           {hi ? 'किसे सौंपा:' : 'Assigned to:'} {r.assigned_to_name}
+        </div>
+      )}
+
+      {/* Who signed it off. Only where there is a name: requests finished before
+          the sign-off was recorded have nobody to credit, and a blank label would
+          read as a missing person rather than missing history. */}
+      {done && r.approved_by_name && (
+        <div style={{ fontSize: 12, color: C.tl, marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Icon name="check" size={13} color={C.green} />
+          {hi ? 'पूरा किया:' : 'Completed by:'} {r.approved_by_name}
+        </div>
+      )}
+
+      {/* What was actually done. Folded away by default — several of these run to
+          a paragraph, and a dozen of them open at once is a wall to scroll past. */}
+      {hasWork && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowWork((v) => !v)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: 'transparent', border: 'none', padding: 0,
+              fontSize: 12.5, fontWeight: 700, color: C.maroon, cursor: 'pointer',
+            }}
+          >
+            <Icon
+              name="chevronRight"
+              size={14}
+              color={C.maroon}
+              style={{ transform: showWork ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}
+            />
+            {hi ? 'क्या किया गया' : 'What was done'}
+          </button>
+          {showWork && (
+            <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 11, marginTop: 7 }}>
+              {r.resolution_note && (
+                <p style={{ fontSize: 13, color: C.text, lineHeight: 1.5, whiteSpace: 'pre-line', margin: 0 }}>
+                  {r.resolution_note}
+                </p>
+              )}
+              {r.resolution_voice_url && (
+                <audio
+                  controls
+                  src={r.resolution_voice_url}
+                  style={{ width: '100%', marginTop: r.resolution_note ? 9 : 0 }}
+                />
+              )}
+              {workPhotos.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: (r.resolution_note || r.resolution_voice_url) ? 9 : 0 }}>
+                  {workPhotos.map((u) => (
+                    <a key={u} href={u} target="_blank" rel="noreferrer">
+                      <img
+                        src={u}
+                        alt=""
+                        style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 9, border: `1px solid ${C.border}` }}
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

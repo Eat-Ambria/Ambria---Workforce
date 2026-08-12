@@ -540,10 +540,15 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // Their home venue if the task runs there, otherwise the row you opened. A
   // gardener based at Manaktala doing a job that runs at four venues is doing
   // Manaktala's, unless somebody says otherwise.
+  // Where this person already does it, if they already do. Otherwise their home
+  // venue when the job runs there, and failing that the first venue it runs at —
+  // a group has no single venue of its own to fall back on any more.
   const defaultVenue = useCallback((g, id, venues) => {
+    const mine = (g.rows || []).find((r) => r.assigned_to === id)
+    if (mine?.property) return mine.property
     const home = staffById.get(id)?.property
     if (home && home !== 'all' && venues.includes(home)) return home
-    return g.property
+    return venues[0] || ''
   }, [staffById])
   const venueForPerson = useCallback(
     (g, id, venues) => personVenue[`${g.key}|${id}`] || defaultVenue(g, id, venues),
@@ -601,9 +606,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // department belongs in the key: Admin's "Full Safety Audit" and
       // Security's are two different jobs that happen to share a name, and
       // merging them silently dropped rows from the roster and the Summary
-      const key = `${r.property}||${r.department}||${r.category}||${r.title}||${r.area || ''}`
+      // No property: the same round at four venues is one job with four venues,
+      // not four jobs. Department stays, because Admin's "Full Safety Audit" and
+      // Security's are two different jobs that happen to share a name.
+      const key = `${r.department}||${r.category}||${r.title}||${r.area || ''}`
       if (!byTitle.has(key)) byTitle.set(key, {
-        key, property: r.property, title: r.title, title_hi: r.title_hi, area: r.area,
+        key, title: r.title, title_hi: r.title_hi, area: r.area,
         category: r.category, sop: r.description || '', staffing: r.staffing || '',
         time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
         monthWeek: r.month_week || '', skipSunday: !!r.skip_sunday,
@@ -617,7 +625,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     setGroups([...byTitle.values()].map((g) => ({
       ...g,
       ...parseRange(g.time_block),
-      people: g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to),
+      // Where it runs, straight off its own rows — including the venues whose
+      // copy nobody is assigned to yet.
+      venuesAt: [...new Set(g.rows.map((r) => r.property))],
+      people: [...new Set(g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to))],
     })))
     setLoading(false)
   }, [props])
@@ -791,20 +802,36 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // all and sinks to the end of its department, which is where a job with no
     // hour belongs.
     const startOf = (g) => parseRange(saved(g).time_block).from
-    return [...shownGroups].sort((a, b) => {
-      const sa = startOf(a)
-      const sb = startOf(b)
-      // An unsaved row sits at the TOP, whatever department it is destined for.
-      // You add a task in order to type in it, so it belongs in front of you; it
-      // has no place in the order until it has been saved into one.
-      return (a.isNew ? 0 : 1) - (b.isNew ? 0 : 1)
-        || deptRank(a) - deptRank(b)
-        || freqRank(a) - freqRank(b)
-        || orderRank(a) - orderRank(b)
-        || (sa ? 0 : 1) - (sb ? 0 : 1)
-        || sa.localeCompare(sb)
-        || (a.title || '').localeCompare(b.title || '')
+
+    // Decorate, sort, undecorate. Every one of these helpers costs something —
+    // parsing a time range, two indexOf scans, working out a frequency — and a
+    // comparator runs them on both sides of ~5,000 comparisons. Computed once per
+    // row instead, which is 538 times rather than 20,000, on every keystroke.
+    //
+    // An unsaved row sorts to the TOP whatever department it is destined for: you
+    // add a task in order to type in it, so it belongs in front of you, and it has
+    // no place in the real order until it has been saved into one.
+    const keyed = shownGroups.map((g) => {
+      const start = startOf(g)
+      return {
+        g,
+        isNew: g.isNew ? 0 : 1,
+        dept: deptRank(g),
+        freq: freqRank(g),
+        order: orderRank(g),
+        noTime: start ? 0 : 1,
+        start,
+        title: g.title || '',
+      }
     })
+    keyed.sort((a, b) => a.isNew - b.isNew
+      || a.dept - b.dept
+      || a.freq - b.freq
+      || a.order - b.order
+      || a.noTime - b.noTime
+      || a.start.localeCompare(b.start)
+      || a.title.localeCompare(b.title))
+    return keyed.map((k) => k.g)
   }, [shownGroups])
 
   // The same rows, cut into department blocks and frequency blocks inside them.
@@ -923,8 +950,15 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const rehindied = (g.title_hi || '') !== (g.rows[0]?.title_hi || '')
     const reprioed = (g.priority || 'medium') !== (g.rows[0]?.priority || 'medium')
     const redued = (g.dueDate || '') !== (g.rows[0]?.due_date || '')
-    const redaysed = JSON.stringify(g.weekDays || null)
-      !== JSON.stringify(g.rows[0]?.week_days?.length ? g.rows[0].week_days.map(Number) : null)
+    // A short list of day numbers, compared as one: JSON.stringify ran twice per
+    // row on every keystroke to answer this.
+    const savedDays = g.rows[0]?.week_days
+    const sameDays = (x, y) => {
+      const ax = x || []
+      const ay = y || []
+      return ax.length === ay.length && ax.every((v, i) => Number(v) === Number(ay[i]))
+    }
+    const redaysed = !sameDays(g.weekDays, savedDays?.length ? savedDays : null)
     const retimed = fmtRange(g.from, g.to) !== normRange(g.rows[0]?.time_block)
     const rephotoed = g.photoRequired !== (g.rows[0]?.photo_required !== false)
     const redayed = String(g.weekDay || '') !== String(g.rows[0]?.week_day || '')
@@ -933,11 +967,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       || String(g.monthWeek || '') !== String(g.rows[0]?.month_week || '')
     const resopped = (g.sop || '') !== (g.rows[0]?.description || '')
       || (g.staffing || '') !== (g.rows[0]?.staffing || '')
-    // Moving a job to another venue rewrites property on every copy of it.
-    const removed = (g.property || '') !== (g.rows[0]?.property || '')
     const reshifted = (g.shift || '') !== (g.rows[0]?.shift || '')
     const resorted = (g.sortOrder ?? null) !== (g.rows[0]?.sort_order ?? null)
-    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted, resorted }
+    return { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, reshifted, resorted }
   }), [groups])
 
   const addCount = plan.reduce((n, x) => n + x.added.length, 0)
@@ -947,7 +979,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const editedKeys = useMemo(() => new Set(
     plan.filter((x) => x.added.length || x.dropped.length || x.renamed || x.rehindied
       || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped
-      || x.reprioed || x.redued || x.redaysed || x.removed || x.reshifted || x.resorted).map((x) => x.g.key)
+      || x.reprioed || x.redued || x.redaysed || x.reshifted || x.resorted).map((x) => x.g.key)
   ), [plan])
   const isEdited = (g) => editedKeys.has(g.key)
 
@@ -957,13 +989,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // The loaded groups only cover the venues in the sheet's filter, so the spread
   // read across all of them is folded in: without it a round running everywhere
   // showed one tick, and ticking a venue it already ran at made a second copy.
+  // A job's own rows say where it runs. The spread is folded in for the venues
+  // this sheet did not load — a single-venue admin sees only theirs, and the tick
+  // list should still tell the truth about the rest.
   const jobVenues = useCallback((g) => {
-    const here = groups
-      .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
-      .map((x) => x.property)
+    const here = g.venuesAt || []
     const everywhere = jobSpread[`${g.department}||${g.rows?.[0]?.title || g.title}`] || []
     return [...new Set([...here, ...everywhere])]
-  }, [groups, jobSpread])
+  }, [jobSpread])
 
   // What the tick list currently shows: the pending choice if one has been made
   // on this row, otherwise wherever the job runs today.
@@ -988,7 +1021,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const out = []
     groups.forEach((g) => {
       if (g.isNew) return
-      const at = venuesOf(g)
       ;(g.people || []).forEach((id) => {
         const row = g.rows.find((r) => r.assigned_to === id)
         if (!row) return
@@ -997,13 +1029,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       })
     })
     return out
-  }, [groups, venuesOf, personVenue])
+  }, [groups, personVenue])
 
   // A shift edit that matches what is already stored is not a change.
   const shiftCount = Object.entries(shiftEdits)
     .filter(([id, v]) => v !== (shiftApplied[id] ?? staffById.get(id)?.shift ?? '')).length
 
-  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.removed || x.reshifted || x.resorted).length
+  const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.reshifted || x.resorted).length
   const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount + venueMoves.length === 0
 
   // Shared by save() and createJob(): both write a Hindi title, and a title
@@ -1020,10 +1052,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const placed = new Set()
     const place = (id, prop) => { if (id && prop) placed.add(`${id}|${prop}`) }
     try {
-      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, removed, reshifted, resorted } of plan) {
+      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, reshifted, resorted } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
         // frequency or SOP — applies to every copy of it
-        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed || removed || reshifted || resorted) {
+        if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed || reshifted || resorted) {
           const patch = {}
           if (renamed) patch.title = g.title.trim()
           // What is in the box is what gets saved. Only fall back to translating
@@ -1048,7 +1080,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             patch.description = g.sop?.trim() || null
             patch.staffing = g.staffing?.trim() || null
           }
-          if (removed) patch.property = g.property
           if (reshifted) patch.shift = g.shift || null
           if (resorted) patch.sort_order = g.sortOrder ?? null
           const { error } = await supabase.from('tasks')
@@ -1076,9 +1107,9 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           const person = staff.find((m) => m.id === id)
           const prop = venueForPerson(g, id, gVenues)
           place(id, prop)
-          // the spare row belongs to this venue, so it can only take somebody who
-          // is going to this venue
-          if (reuse && prop !== g.property) reuse = null
+          // a spare row sits at one particular venue, so it can only be handed
+          // to somebody who is going to that venue
+          if (reuse && prop !== reuse.property) reuse = null
           if (reuse) {
             const { error } = await supabase.from('tasks')
               .update({ assigned_to: id, assignee_name: person?.name || null }).eq('id', reuse.id)
@@ -1149,8 +1180,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // running there; unticked = that venue's copy goes. Both are computed
       // against where it runs NOW, not against what the sheet last loaded.
       for (const g of groups.filter((x) => !x.isNew && x.venues)) {
-        const now = groups
-          .filter((x) => !x.isNew && x.department === g.department && x.title === g.title)
         // where it runs, including venues outside the sheet's filter
         const at = jobVenues(g)
         for (const v of g.venues.filter((v2) => !at.includes(v2))) {
@@ -1158,8 +1187,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           ;(g.people || []).forEach((id) => place(id, v))
         }
         for (const v of at.filter((v2) => !g.venues.includes(v2))) {
-          const gone = now.find((x) => x.property === v)
-          const ids = (gone?.rows || []).map((r) => r.id)
+          // this job's own rows at that venue — one group holds all of them now
+          const ids = (g.rows || []).filter((r) => r.property === v).map((r) => r.id)
           if (ids.length) {
             const { error } = await supabase.from('tasks').delete().in('id', ids)
             if (error) throw error
@@ -1352,7 +1381,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // renumber the whole block in tens, so a later drag has room between rows
       const block = sheetRows.filter((x) => blockOf(x) === blockOf(target) && x.key !== from)
       const at = block.findIndex((x) => x.key === target.key)
-      block.splice(at < 0 ? block.length : at, 0, moving)
+      // Below the target when you dragged downward, above it when you dragged up.
+      // Splicing at the target's index is always "above", which meant a downward
+      // drag onto the next row put the row back where it started.
+      const wasAbove = sheetRows.findIndex((x) => x.key === from)
+        < sheetRows.findIndex((x) => x.key === target.key)
+      block.splice(at < 0 ? block.length : (wasAbove ? at + 1 : at), 0, moving)
       const order = new Map(block.map((x, i) => [x.key, (i + 1) * 10]))
       return prev.map((x) => (order.has(x.key) ? { ...x, sortOrder: order.get(x.key) } : x))
     })
@@ -1561,10 +1595,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               const at = venuesOf(ag)
               const codes = PROPERTIES.map((pp) => pp.code)
               // A row cannot untick the venue it IS — see the delete button.
+              // The last venue cannot be unticked: a job has to run somewhere, and
+              // removing it entirely is the delete button's job — that one asks.
               const commit = (next) => {
-                const keep = ag.isNew ? next : [...new Set([...next, ag.property])]
-                if (!keep.length) return
-                setGroupTime(ag.key, ag.isNew ? { properties: keep } : { venues: keep })
+                if (!next.length) return
+                setGroupTime(ag.key, ag.isNew ? { properties: next } : { venues: next })
               }
               const allOn = codes.every((c) => at.includes(c))
               return (
@@ -1576,7 +1611,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     {/* All, and the same button takes it back off */}
                     <button
                       type="button"
-                      onClick={() => commit(allOn ? [ag.property] : codes)}
+                      onClick={() => commit(allOn ? at.slice(0, 1) : codes)}
                       style={{
                         border: `1.5px solid ${allOn ? C.maroon : C.border}`, borderRadius: 999,
                         background: allOn ? C.maroon : 'transparent', color: allOn ? '#fff' : C.maroon,
@@ -1605,7 +1640,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {PROPERTIES.map((pp) => {
                       const on = at.includes(pp.code)
-                      const locked = !ag.isNew && pp.code === ag.property
+                      // the only untickable one is the last one left
+                      const locked = on && at.length === 1
                       return (
                         <button
                           key={pp.code}
@@ -1962,6 +1998,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             <JobForm
               value={form}
               staff={staff}
+              // from the component body — JobForm is module level and cannot
+              // reach them on its own
+              shiftOf={personShift}
+              onSetShift={setPersonShift}
               onChange={setForm}
               onCancel={() => setForm(null)}
               onSubmit={applyForm}
@@ -2211,7 +2251,7 @@ function TimeSelect({ C, t, value, after, onChange }) {
 // editing one — the same shape either way, so there is nothing new to learn the
 // second time. Nothing is written here: it hands the values back and the roster's
 // Save applies them with everything else.
-function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
+function JobForm({ value, staff, onChange, onCancel, onSubmit, busy, shiftOf, onSetShift }) {
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
@@ -2463,8 +2503,8 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy }) {
           isVisiting={() => false}
           shift={value.shift || ''}
           dept={value.dept || ''}
-          shiftOf={personShift}
-          onSetShift={setPersonShift}
+          shiftOf={shiftOf}
+          onSetShift={onSetShift}
         />
       </Field>
     </Modal>
