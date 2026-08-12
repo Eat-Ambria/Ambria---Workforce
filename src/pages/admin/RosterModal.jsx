@@ -386,6 +386,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // being a scrollport and the column header can stick to the page.
   const sheetRef = useRef(null)
   const [sheetFits, setSheetFits] = useState(false)
+  // The column header's own height. Everything sticky above the list adds up to
+  // where the list visibly begins, which is where a drag should start scrolling.
+  const headRef = useRef(null)
+  const [headH, setHeadH] = useState(0)
   const listRef = useRef(null)
   const barRef = useRef(null)
   useEffect(() => {
@@ -468,7 +472,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       return {
         key,
         mode,
-        top: up ? Math.max(EDGE, r.top - GAP - maxH) : r.bottom + GAP,
+        up,
+        // Upward, the panel is pinned by its BOTTOM edge to just above the row.
+        // Deriving a top from maxH positioned it by the space it was allowed
+        // rather than the height it needs, so a short panel floated hundreds of
+        // pixels clear of the row it belongs to.
+        bottom: up ? Math.max(EDGE, window.innerHeight - r.top + GAP) : undefined,
+        top: up ? undefined : r.bottom + GAP,
         left: Math.min(Math.max(EDGE, r.left), Math.max(EDGE, window.innerWidth - W - EDGE)),
         width: Math.max(W, r.width),
         maxH,
@@ -571,7 +581,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // meant four separate reads of what is one document.
     const { data } = await supabase
       .from('tasks')
-      .select('id, title, title_hi, description, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, shift, sort_order, status, started_at, before_photo, completion_photo')
+      .select('id, title, title_hi, description, description_hi, category, property, department, assigned_to, assignee_name, area, time_block, photo_required, week_day, week_days, month_week, skip_sunday, staffing, priority, due_date, shift, sort_order, status, started_at, before_photo, completion_photo')
       .in('property', props)
       .order('time_block', { ascending: true, nullsFirst: false })
       .order('title')
@@ -609,10 +619,16 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // No property: the same round at four venues is one job with four venues,
       // not four jobs. Department stays, because Admin's "Full Safety Audit" and
       // Security's are two different jobs that happen to share a name.
-      const key = `${r.department}||${r.category}||${r.title}||${r.area || ''}`
+      //
+      // Time does belong in it: the same round at 8 PM and on Thursday morning is
+      // two jobs, and without this they merged into one row that showed one time
+      // and hid the other. Normalised, so '1:30-2:00 PM' and '1:30 PM - 2:00 PM'
+      // stay one job — splitting a row over a space is the same bug reversed.
+      const key = `${r.department}||${r.category}||${r.title}||${r.area || ''}||${normRange(r.time_block)}`
       if (!byTitle.has(key)) byTitle.set(key, {
         key, title: r.title, title_hi: r.title_hi, area: r.area,
-        category: r.category, sop: r.description || '', staffing: r.staffing || '',
+        category: r.category, sop: r.description || '', sopHi: r.description_hi || '',
+        staffing: r.staffing || '',
         time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
         monthWeek: r.month_week || '', skipSunday: !!r.skip_sunday,
         weekDays: Array.isArray(r.week_days) && r.week_days.length ? r.week_days.map(Number) : null,
@@ -645,6 +661,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const measure = () => {
       if (bar) setBarH(bar.offsetHeight || 0)
       if (sheet) setSheetFits(sheet.clientWidth >= gridMin)
+      setHeadH(headRef.current?.offsetHeight || 0)
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -681,6 +698,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       shift: '',
       people: [],
       sop: '',
+      sopHi: '',
       staffing: '',
       priority: 'medium',
       dueDate: '',
@@ -699,7 +717,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     mode: 'edit', key: g.key, dept: g.department || '',
     title: g.title, titleHi: g.title_hi || '', from: g.from || '', to: g.to || '',
     photoRequired: g.photoRequired !== false, people: g.people, weekDay: g.weekDay || '',
-    freq: freqOf(g), monthWeek: g.monthWeek || '', sop: g.sop || '', staffing: g.staffing || '',
+    freq: freqOf(g), monthWeek: g.monthWeek || '', sop: g.sop || '', sopHi: g.sopHi || '',
+    staffing: g.staffing || '',
     priority: g.priority || 'medium', dueDate: g.dueDate || '',
     weekDays: g.weekDays || null,
   })
@@ -710,7 +729,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     setGroups((prev) => prev.map((g) => (g.key !== v.key ? g : {
       ...g, title: v.title, title_hi: v.titleHi, from: v.from, to: v.to,
       photoRequired: v.photoRequired, people: v.people,
-      sop: v.sop, staffing: v.staffing, monthWeek: v.monthWeek,
+      sop: v.sop, sopHi: v.sopHi, staffing: v.staffing, monthWeek: v.monthWeek,
       priority: v.priority, dueDate: v.dueDate, weekDays: v.weekDays,
       ...freqSpec(v.freq, v.weekDay),
     })))
@@ -966,6 +985,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       || !!g.skipSunday !== !!g.rows[0]?.skip_sunday
       || String(g.monthWeek || '') !== String(g.rows[0]?.month_week || '')
     const resopped = (g.sop || '') !== (g.rows[0]?.description || '')
+      || (g.sopHi || '') !== (g.rows[0]?.description_hi || '')
       || (g.staffing || '') !== (g.rows[0]?.staffing || '')
     const reshifted = (g.shift || '') !== (g.rows[0]?.shift || '')
     const resorted = (g.sortOrder ?? null) !== (g.rows[0]?.sort_order ?? null)
@@ -1078,6 +1098,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           }
           if (resopped) {
             patch.description = g.sop?.trim() || null
+            // typed Hindi wins; otherwise translate the English, and clear it
+            // outright when the SOP itself has been emptied
+            patch.description_hi = (g.sopHi || '').trim()
+              || (g.sop?.trim() ? await hiFor(g.sop.trim()) : null)
             patch.staffing = g.staffing?.trim() || null
           }
           if (reshifted) patch.shift = g.shift || null
@@ -1127,6 +1151,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               title: g.title,
               title_hi: (g.title_hi || '').trim() || await hiFor(g.title),
               description: g.sop?.trim() || null,
+              description_hi: (g.sopHi || '').trim()
+                || (g.sop?.trim() ? await hiFor(g.sop.trim()) : null),
               staffing: g.staffing?.trim() || null,
               area: g.area || null,
               time_block: fmtRange(g.from, g.to) || null,
@@ -1254,7 +1280,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     title: g.title, titleHi: g.title_hi, dept: g.department,
     properties: g.properties,
     freq: freqOf(g), weekDay: g.weekDay, weekDays: g.weekDays, monthWeek: g.monthWeek,
-    from: g.from, to: g.to, shift: g.shift, sop: g.sop, staffing: g.staffing,
+    from: g.from, to: g.to, shift: g.shift, sop: g.sop, sopHi: g.sopHi, staffing: g.staffing,
     photoRequired: g.photoRequired, people: g.people,
     batch: true,
   })
@@ -1264,6 +1290,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     try {
       const title = d.title.trim()
       const title_hi = (d.titleHi || '').trim() || await hiFor(title)
+      const sop = d.sop?.trim() || null
+      const sop_hi = (d.sopHi || '').trim() || (sop ? await hiFor(sop) : null)
       // A common task goes everywhere; a normal one follows the sheet's filter.
       // A row added on the sheet names its own venues — several of them, since
       // the same round usually runs everywhere. The old dialog named none and
@@ -1302,7 +1330,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           category: spec.category,
           title,
           title_hi,
-          description: d.sop?.trim() || null,
+          description: sop,
+          description_hi: sop_hi,
           staffing: d.staffing?.trim() || null,
           time_block: fmtRange(d.from, d.to) || null,
           photo_required: d.photoRequired !== false,
@@ -1362,6 +1391,39 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // Which row is being dragged. Only the key: the sheet re-sorts from
   // sortOrder, so the move is a renumber, not a splice of the rendered list.
   const [dragKey, setDragKey] = useState(null)
+
+  // While dragging, the wheel is dead and rows off-screen are out of reach. Near
+  // either edge the page scrolls itself, ramping up as the pointer gets closer.
+  useEffect(() => {
+    if (!dragKey) return undefined
+    const EDGE = 110      // how close to the boundary before it starts moving
+    const MAX = 22        // pixels per frame at full tilt
+    let speed = 0
+    let frame = 0
+    const onOver = (e) => {
+      const h = window.innerHeight
+      // Upward, the boundary is where the list actually starts — under the app
+      // header, the tab row, the filter bar and the column header. A fixed offset
+      // from the top of the window would sit behind all four.
+      const listTop = headerH + barH + headH
+      const top = e.clientY - (listTop + EDGE)
+      const bottom = e.clientY - (h - EDGE)
+      const ramp = (d) => Math.max(-1, Math.min(1, d / EDGE)) * MAX
+      speed = top < 0 ? ramp(top) : bottom > 0 ? ramp(bottom) : 0
+    }
+    // One loop, not one scroll per event: dragover fires at a rate the browser
+    // chooses, and scrolling inside it makes the speed depend on that rate.
+    const tick = () => {
+      if (speed) window.scrollBy(0, speed)
+      frame = requestAnimationFrame(tick)
+    }
+    document.addEventListener('dragover', onOver)
+    frame = requestAnimationFrame(tick)
+    return () => {
+      document.removeEventListener('dragover', onOver)
+      cancelAnimationFrame(frame)
+    }
+  }, [dragKey, headerH, barH, headH])
 
   // A block is one department + one frequency. Dropping outside your own block
   // would have to change the schedule to keep the sheet honest, and that is not
@@ -1558,7 +1620,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           />
           <div
             style={{
-              position: 'fixed', top: assignAt.top, left: assignAt.left,
+              position: 'fixed', left: assignAt.left,
+              ...(assignAt.up ? { bottom: assignAt.bottom } : { top: assignAt.top }),
               width: assignAt.width, maxHeight: assignAt.maxH, overflowY: 'auto', zIndex: 201,
               background: C.card, border: `1px solid ${C.borderStrong}`,
               borderRadius: 12, boxShadow: C.shadowLg, padding: 10,
@@ -1575,7 +1638,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               onToggle={(id) => togglePerson(assignAt.key, id)}
               isVisiting={isVisiting}
               shift={(groups.find((x) => x.key === assignAt.key) || {}).shift || ''}
-              dept={(groups.find((x) => x.key === assignAt.key) || {}).department || ''}
               shiftOf={personShift}
               onSetShift={setPersonShift}
               venues={(() => {
@@ -1661,9 +1723,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                           {/* Always occupied, so a tick cannot change the width
                               and re-wrap the row under the cursor. */}
                           <span style={{ width: 12, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                            {locked
-                              ? <Icon name="lock" size={11} color="#fff" />
-                              : (on ? <Icon name="check" size={12} color="#fff" /> : null)}
+                            {on ? <Icon name="check" size={12} color="#fff" /> : null}
                           </span>
                           {propName(pp.code, lang)}
                         </button>
@@ -1710,7 +1770,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               >
                 <div style={{ minWidth: gridMin }}>
 
-                  <div style={{
+                  <div ref={headRef} style={{
                     display: 'grid', gridTemplateColumns: flatCols,
                     background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}`,
                     // Sticky only while the wrapper is not a scrollport — see it
@@ -1852,8 +1912,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 </span>
                               )}
                             </div>
-                            {g.sop && (
-                              <div style={{ fontSize: 11, color: C.tl, lineHeight: 1.4, marginTop: 3 }}>{g.sop}</div>
+                            {/* the Hindi line when the sheet is in Hindi, falling
+                                back to the English until one has been written */}
+                            {(lang === 'hi' ? (g.sopHi || g.sop) : g.sop) && (
+                              <div style={{ fontSize: 11, color: C.tl, lineHeight: 1.4, marginTop: 3 }}>
+                                {lang === 'hi' ? (g.sopHi || g.sop) : g.sop}
+                              </div>
                             )}
                           </div>
 
@@ -2052,7 +2116,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 //
 // Module level on purpose: defined inside the parent's body, its identity changed
 // every render, React remounted it, and the search text died on each keystroke.
-function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false, shift, dept, shiftOf, onSetShift, venues, venueOf, onSetVenue }) {
+function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false, shift, shiftOf, onSetShift, venues, venueOf, onSetVenue }) {
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
   // Nothing is listed until something is typed. Forty names on screen is a wall
@@ -2067,22 +2131,20 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   // Any department can run a day/night split, so anyone can be asked.
   const canSetShift = typeof shiftOf === 'function'
   const mineShift = (m) => (canSetShift ? shiftOf(m) : '')
-  // Everyone active, unsearched. A roster job often has to go to somebody from
-  // another team, and stopping at the department made those people look
-  // unavailable. The order does the narrowing instead of a filter: this row's own
-  // department first — and inside it this row's shift, then whoever has no shift
-  // yet, then the other shift — and the rest of the staff after them.
-  const rank = (m) => {
-    if (dept && m.department !== dept) return 5
-    const sh = mineShift(m)
-    if (shift && sh === shift) return 0
-    if (!sh) return 1
-    return 2
-  }
-  const suggested = needle ? [] : staff
-    .filter((m) => !chosen.includes(m.id) && !m.inactive)
-    .sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''))
-  const shown = [...picked, ...suggested, ...matches]
+  // Everyone, alphabetically. A roster job often has to go to somebody from another
+  // team, so the list is not narrowed to a department — and with all of them on
+  // screen, the alphabet is how a reader finds a name they already have in mind.
+  //
+  // Former staff appear only if they are already on the job: there is a record to
+  // show, but nobody would be assigning them.
+  const byName = (a, b) => (a.name || '').localeCompare(b.name || '')
+  const suggested = needle ? [] : [...staff]
+    .filter((m) => !m.inactive || chosen.includes(m.id))
+    .sort(byName)
+  // Ticked names keep their place in the alphabet — the list is fully on screen,
+  // so a selection cannot scroll out of sight. Under a search it can, which is
+  // what that rule was written for, so there they lead.
+  const shown = needle ? [...picked, ...[...matches].sort(byName)] : suggested
 
   return (
     <div>
@@ -2479,6 +2541,16 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy, shiftOf, on
         />
       </Field>
 
+      {/* Same arrangement as the Hindi title: left blank it is written from the
+          English on save, and anything typed here wins over that. */}
+      <HindiInput
+        label={`${t.sopColumn} — ${t.hindiTitle}`}
+        hint={t.hindiForStaffHint}
+        source={value.sop || ''}
+        value={value.sopHi || ''}
+        onChange={(v) => set({ sopHi: v })}
+      />
+
       <Field label={t.photoRequired} hint={t.photoRequiredHint}>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: C.text, cursor: 'pointer' }}>
           <input
@@ -2502,7 +2574,6 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy, shiftOf, on
           })}
           isVisiting={() => false}
           shift={value.shift || ''}
-          dept={value.dept || ''}
           shiftOf={shiftOf}
           onSetShift={onSetShift}
         />
