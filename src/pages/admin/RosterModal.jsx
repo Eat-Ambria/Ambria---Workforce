@@ -708,9 +708,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // two jobs, and without this they merged into one row that showed one time
       // and hid the other. Normalised, so '1:30-2:00 PM' and '1:30 PM - 2:00 PM'
       // stay one job — splitting a row over a space is the same bug reversed.
-      const key = `${r.department}||${r.category}||${r.title}||${r.area || ''}||${normRange(r.time_block)}`
+      // Trimmed: a job is not two jobs because one of its rows carries a
+      // trailing space, and two rows that read the same and behave differently
+      // are worse than either of the things they could have been.
+      const title = (r.title || '').trim()
+      const key = `${r.department}||${r.category}||${title}||${r.area || ''}||${normRange(r.time_block)}`
       if (!byTitle.has(key)) byTitle.set(key, {
-        key, title: r.title, title_hi: r.title_hi, area: r.area,
+        key, title, title_hi: r.title_hi, area: r.area,
         category: r.category, sop: r.description || '', sopHi: r.description_hi || '',
         staffing: r.staffing || '',
         time_block: r.time_block, department: r.department, weekDay: r.week_day || '',
@@ -1172,13 +1176,19 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     property: prop,
     department: g.department || person?.department || user.department || 'k',
     category: g.category,
-    title: g.title,
-    title_hi: (g.title_hi || '').trim() || await hiFor(g.title),
+    // Trimmed, like createJob has always trimmed it. One pass doing so and the
+    // other not is how 'Staff Training ' and 'Staff Training' were written by
+    // the same save and then drawn as two identical-looking rows.
+    title: g.title.trim(),
+    title_hi: (g.title_hi || '').trim() || await hiFor(g.title.trim()),
     description: g.sop?.trim() || null,
     description_hi: (g.sopHi || '').trim()
       || (g.sop?.trim() ? await hiFor(g.sop.trim()) : null),
     staffing: g.staffing?.trim() || null,
-    area: g.area || null,
+    // Trimmed for the same reason as the title: the area is part of what makes
+    // this job this job, both to the sheet and to the unique index. A stray
+    // space splits one job into two that nothing can tell apart.
+    area: g.area?.trim() || null,
     time_block: fmtRange(g.from, g.to) || null,
     week_day: g.category === 'weekly' ? Number(g.weekDay || 1) : null,
     month_week: g.category === 'monthly' && g.monthWeek ? Number(g.monthWeek) : null,
@@ -1471,7 +1481,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           description: sop,
           description_hi: sop_hi,
           staffing: d.staffing?.trim() || null,
-          area: d.area || null,
+          area: d.area?.trim() || null,
           time_block: fmtRange(d.from, d.to) || null,
           photo_required: d.photoRequired !== false,
           week_day: spec.category === 'weekly' ? Number(spec.weekDay || 1) : null,

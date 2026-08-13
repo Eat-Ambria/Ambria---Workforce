@@ -914,9 +914,13 @@ function CreateModal({ user, members, record, onClose, onSaved }) {
         property: form.property,
         category: form.category,
         title: form.title.trim(),
-        description: form.description || null,
-        area: form.area || null,
-        time_block: form.time_block || null,
+        description: form.description?.trim() || null,
+        // Area and window are trimmed for the same reason the title is: the
+        // roster identifies a job by them, and so does the unique index on the
+        // table. A trailing space files one job under two names, and then draws
+        // it as two rows nothing can tell apart.
+        area: form.area?.trim() || null,
+        time_block: form.time_block?.trim() || null,
         priority: form.priority,
         due_date: form.due_date || null,
         assigned_to: form.assigned_to || null,
@@ -943,9 +947,9 @@ function CreateModal({ user, members, record, onClose, onSaved }) {
       category: form.category,
       title: form.title.trim(),
       title_hi,
-      description: form.description || null,
-      area: form.area || null,
-      time_block: form.time_block || null,
+      description: form.description?.trim() || null,
+      area: form.area?.trim() || null,
+      time_block: form.time_block?.trim() || null,
       priority: form.priority,
       due_date: form.due_date || null,
       assigned_to: i === 0 ? (form.assigned_to || null) : null,
@@ -956,14 +960,23 @@ function CreateModal({ user, members, record, onClose, onSaved }) {
     // The same person cannot hold the same job twice at one venue. Saying so
     // here means an accidental second save is a clear message rather than a
     // duplicate card on their phone — or a raw constraint error from the table.
+    //
+    // Asked exactly the way the index asks it — venue, person, department,
+    // frequency, title, area, window. Checking on title alone was stricter than
+    // the table: the same round at 9am and at 5pm is two jobs, and this refused
+    // the second one as a duplicate.
     const first = rows[0]
     if (first.assigned_to) {
-      const { data: clash } = await supabase.from('tasks')
+      let q = supabase.from('tasks')
         .select('id')
         .eq('property', first.property)
         .eq('title', first.title)
         .eq('assigned_to', first.assigned_to)
-        .limit(1)
+        .eq('department', first.department)
+        .eq('category', first.category)
+      q = first.area ? q.eq('area', first.area) : q.is('area', null)
+      q = first.time_block ? q.eq('time_block', first.time_block) : q.is('time_block', null)
+      const { data: clash } = await q.limit(1)
       if (clash?.length) { setBusy(false); setErr(t.taskAlreadyThere); return }
     }
     const { error } = await supabase.from('tasks').insert(rows)
