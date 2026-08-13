@@ -50,7 +50,10 @@ export default function PublicFixRequest() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('list')   // 'list' | 'form'
-  const [tab, setTab] = useState('open')     // 'open' | 'assigned' | 'completed'
+  // Lands on All. Open is empty as soon as an admin routes what came in, so the
+  // page used to greet most visitors with nothing at all while 37 requests sat
+  // one tap away.
+  const [tab, setTab] = useState('all')      // 'all' | 'open' | 'assigned' | 'completed'
   const [propFilter, setPropFilter] = useState('all') // filter the list by venue
   const [mine, setMine] = useState(() => readMine())
 
@@ -92,7 +95,12 @@ export default function PublicFixRequest() {
   // sections by status. Open shows ONLY unassigned requests; once assigned they
   // move to "Assigned" (incl. in-progress / awaiting approval); once approved
   // they move to "Completed".
+  //
+  // "All" is every request under the venue filter, in one list. It is also the
+  // only section that cannot hide anything: the three below name the statuses
+  // they want, so a request in some other state would appear in none of them.
   const groups = useMemo(() => ({
+    all: shownRows,
     open: shownRows.filter((r) => r.status === 'open'),
     assigned: shownRows.filter((r) => ['assigned', 'in_progress', 'approval_requested'].includes(r.status)),
     completed: shownRows.filter((r) => ['completed', 'approved'].includes(r.status)),
@@ -172,6 +180,7 @@ export default function PublicFixRequest() {
               <>
                 <Tabs
                   tabs={[
+                    { key: 'all', label: `${hi ? 'सभी' : 'All'} (${groups.all.length})` },
                     { key: 'open', label: `${hi ? 'खुले' : 'Open'} (${groups.open.length})` },
                     { key: 'assigned', label: `${hi ? 'सौंपे गए' : 'Assigned'} (${groups.assigned.length})` },
                     { key: 'completed', label: `${hi ? 'पूरे हुए' : 'Completed'} (${groups.completed.length})` },
@@ -183,11 +192,14 @@ export default function PublicFixRequest() {
                   <EmptyState
                     icon="inbox"
                     title={
-                      tab === 'open' ? (hi ? 'कोई खुला अनुरोध नहीं' : 'No open requests')
+                      tab === 'all' ? (hi ? 'अभी कोई अनुरोध नहीं' : 'No requests yet')
+                      : tab === 'open' ? (hi ? 'कोई खुला अनुरोध नहीं' : 'No open requests')
                       : tab === 'assigned' ? (hi ? 'कोई सौंपा गया अनुरोध नहीं' : 'No assigned requests')
                       : (hi ? 'कोई पूरा अनुरोध नहीं' : 'No completed requests')
                     }
-                    hint={tab === 'open' ? (hi ? 'ऊपर से नया अनुरोध जोड़ें' : 'Add one using the button above') : undefined}
+                    hint={['all', 'open'].includes(tab)
+                      ? (hi ? 'ऊपर से नया अनुरोध जोड़ें' : 'Add one using the button above')
+                      : undefined}
                   />
                 ) : (
                   <div style={{ display: 'grid', gap: 10 }}>

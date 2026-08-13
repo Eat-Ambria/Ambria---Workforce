@@ -29,6 +29,19 @@ const PRIOS = { low: 'tl', normal: 'blue', high: 'yellow', urgent: 'red' }
 // 'low' is kept above so older rows still render, but it is not offered on new ones
 const PRIO_CHOICES = ['normal', 'high', 'urgent']
 
+// What an empty tab says. Six tabs all reading "Nothing here yet" answered none
+// of the six questions being asked — an empty Overdue is good news, an empty
+// Open is not, and neither is "nothing here".
+const EMPTY_TITLE = {
+  all: 'noRepairRequests',
+  overdue: 'noOverdueRequests',
+  open: 'noOpenRequests',
+  in_progress: 'noInProgressRequests',
+  review: 'noAwaitingApproval',
+  completed: 'noCompletedRequests',
+  logged: 'noWorkLogged',
+}
+
 // status -> label + colors. Flow: open -> assigned -> in_progress -> approval_requested -> completed
 const STATUS_META = {
   open: { label: 'Open', tone: 'blue', bg: 'bBg' },
@@ -424,7 +437,7 @@ export default function TaskBoard() {
       )}
 
       {list.length === 0 ? (
-        <EmptyState icon={null} title={t.noData} />
+        <EmptyState icon={null} title={t[EMPTY_TITLE[tab]] || t.noData} />
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {list.map((r) => {
