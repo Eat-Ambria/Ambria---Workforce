@@ -373,8 +373,20 @@ function EmployeeDashboard({ user }) {
       // fix requests (task board) assigned to this member that are still open —
       // sorted by priority: urgent → high → normal → low
       const PRIO_RANK = { urgent: 0, high: 1, normal: 2, low: 3 }
-      const openFixes = (fixR.data || []).filter((r) => !['completed', 'approved'].includes(r.status))
+      const allFixes = fixR.data || []
+      const openFixes = allFixes.filter((r) => !['completed', 'approved'].includes(r.status))
       const fixRequests = [...openFixes].sort((a, b) => (PRIO_RANK[a.priority] ?? 9) - (PRIO_RANK[b.priority] ?? 9))
+      // Bucketed the way the board buckets them, so a number here and the tab it
+      // opens can never disagree. 'open' there covers open AND assigned — both
+      // mean handed over and not started.
+      const fc = (fn) => allFixes.filter(fn).length
+      const fixes = {
+        total: allFixes.length,
+        open: fc((r) => ['open', 'assigned'].includes(r.status)),
+        inProgress: fc((r) => r.status === 'in_progress'),
+        waiting: fc((r) => r.status === 'approval_requested'),
+        done: fc((r) => ['completed', 'approved'].includes(r.status)),
+      }
       // repair requests past their due date count toward the overdue total
       const fixOverdue = openFixes.filter((r) => r.due_date && r.due_date < today0).length
 
@@ -407,6 +419,7 @@ function EmployeeDashboard({ user }) {
         overdue: c((r) => isTaskOverdue(r, today)),
         dailyLate: c((r) => r.category === 'daily' && isTaskOverdue(r, today)),
         fixOverdue,
+        fixes,
         priorityTasks,
         fixRequests,
         training,
@@ -456,6 +469,26 @@ function EmployeeDashboard({ user }) {
                   onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
         <StatCell C={C} value={s.fixOverdue} label={t.taskBoard} tone={TR_ORANGE}
                   onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
+      </StatBlock>
+
+      {/* The same shape as the My Tasks block, and shown on the same terms —
+          including at zero. My Tasks reads four zeros for somebody with nothing
+          on; this one going missing instead would leave them unable to tell "no
+          repair work" from "the app did not look". */}
+      <StatBlock C={C} icon="taskBoard" tone={C.maroon} title={t.taskBoard}
+                 onView={() => navigate('/task-board', { state: { tab: 'all' } })}>
+        <StatCell C={C} value={s.fixes?.total || 0} label={t.total} tone={C.maroon}
+                  onClick={() => navigate('/task-board', { state: { tab: 'all' } })} />
+        <StatCell C={C} value={s.fixes?.open || 0} label={t.open} tone={C.yellow}
+                  onClick={() => navigate('/task-board', { state: { tab: 'open' } })} />
+        <StatCell C={C} value={s.fixes?.inProgress || 0} label={t.inProgress} tone={C.blue}
+                  onClick={() => navigate('/task-board', { state: { tab: 'in_progress' } })} />
+        {s.fixes?.waiting > 0 && (
+          <StatCell C={C} value={s.fixes?.waiting || 0} label={t.reviewQueue} tone={C.indigo}
+                    onClick={() => navigate('/task-board', { state: { tab: 'review' } })} />
+        )}
+        <StatCell C={C} value={s.fixes?.done || 0} label={t.completed} tone={C.green}
+                  onClick={() => navigate('/task-board', { state: { tab: 'completed' } })} />
       </StatBlock>
 
       {/* Priority tasks assigned by admin — high priority & still open */}
