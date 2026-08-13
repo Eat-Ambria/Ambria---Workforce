@@ -55,6 +55,7 @@ export default function PublicFixRequest() {
   // one tap away.
   const [tab, setTab] = useState('all')      // 'all' | 'open' | 'assigned' | 'completed'
   const [propFilter, setPropFilter] = useState('all') // filter the list by venue
+  const [query, setQuery] = useState('')              // ticket number or words
   const [mine, setMine] = useState(() => readMine())
 
   const load = useCallback(async () => {
@@ -82,10 +83,16 @@ export default function PublicFixRequest() {
   }, [load])
 
   // narrow to the selected property; counts + sections both reflect the filter
-  const shownRows = useMemo(
-    () => (propFilter === 'all' ? rows : rows.filter((r) => r.property === propFilter)),
-    [rows, propFilter]
-  )
+  // Venue first, then the search. "#142" or "142" finds one ticket; anything
+  // else is matched against the title and the description in both languages.
+  const shownRows = useMemo(() => {
+    const byProp = propFilter === 'all' ? rows : rows.filter((r) => r.property === propFilter)
+    const needle = query.trim().toLowerCase().replace(/^#/, '')
+    if (!needle) return byProp
+    return byProp.filter((r) => String(r.id) === needle
+      || `${r.title || ''} ${r.title_hi || ''} ${r.description || ''} ${r.description_hi || ''}`
+        .toLowerCase().includes(needle))
+  }, [rows, propFilter, query])
 
   const counts = useMemo(() => {
     const done = shownRows.filter((r) => ['completed', 'approved'].includes(r.status)).length
@@ -168,6 +175,17 @@ export default function PublicFixRequest() {
               </select>
             </div>
 
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+              <Icon name="search" size={16} color={C.tl} />
+              <input
+                style={inputStyle(C)}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={hi ? 'टिकट नंबर या शब्द से खोजें' : 'Search by ticket no. or words'}
+                aria-label={hi ? 'खोजें' : 'Search'}
+              />
+            </div>
+
             <div style={{ display: 'flex', gap: 10, margin: '14px 0 16px' }}>
               <StatTile C={C} label={hi ? 'कुल' : 'Total'} value={counts.total} tone={C.text} />
               <StatTile C={C} label={hi ? 'चल रहे' : 'Ongoing'} value={counts.ongoing} tone={C.yellow} />
@@ -245,6 +263,11 @@ function RequestCard({ C, hi, r, isMine }) {
             </span>
           )}
           <div style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>
+            {/* The row's own id. Quote it on the phone and an admin can find the
+                same request in one search. */}
+            <span style={{ color: C.faint, fontVariantNumeric: 'tabular-nums', marginRight: 6 }}>
+              #{r.id}
+            </span>
             {hi && r.title_hi ? r.title_hi : r.title}
             {isMine && (
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>

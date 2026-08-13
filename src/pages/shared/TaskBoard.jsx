@@ -99,6 +99,11 @@ function assignableFor(category, members) {
 // What the request says, in the reader's language. Written English and
 // auto-translated at creation, same as a task's title — and same fallback:
 // a request raised before the Hindi columns existed shows its English text.
+// The row's own id, which has been a sequence since the table was made. Shown
+// so a request can be referred to out loud — on the phone, in a WhatsApp
+// message, standing in front of the thing that is broken.
+const ticketNo = (r) => `#${r?.id ?? ''}`
+
 const fixTitle = (r, hi) => (hi && r?.title_hi ? r.title_hi : r?.title)
 const fixDesc = (r, hi) => (hi && r?.description_hi ? r.description_hi : r?.description)
 
@@ -116,6 +121,7 @@ export default function TaskBoard() {
   const [tab, setTab] = useState(location.state?.tab || 'all')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
   const [catFilter, setCatFilter] = useState('all')       // all | other (general) | kitchen
+  const [query, setQuery] = useState('')                  // ticket number or words
   const [prioFilter, setPrioFilter] = useState('all')     // all | urgent | high | normal | low
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
@@ -215,7 +221,22 @@ export default function TaskBoard() {
     [prioFilter]
   )
 
-  const visibleRows = useMemo(() => byPrio(byCat(scopedRows)), [scopedRows, byCat, byPrio])
+  // Typed "#142" or "142" finds that one ticket; anything else is words, matched
+  // against both titles and the description. Applied after the chips so their
+  // counts keep meaning what they say — the search narrows the list, it does not
+  // redefine what is being counted.
+  const needle = query.trim().toLowerCase().replace(/^#/, '')
+  const bySearch = useCallback((list) => {
+    if (!needle) return list
+    return list.filter((r) => String(r.id) === needle
+      || `${r.title || ''} ${r.title_hi || ''} ${r.description || ''} ${r.description_hi || ''}`
+        .toLowerCase().includes(needle))
+  }, [needle])
+
+  const visibleRows = useMemo(
+    () => bySearch(byPrio(byCat(scopedRows))),
+    [scopedRows, byCat, byPrio, bySearch]
+  )
 
   // Each filter counts with the OTHER already applied, so a number always says
   // what clicking it returns. Counting both from scopedRows is how a chip ends
@@ -383,6 +404,18 @@ export default function TaskBoard() {
           shrink at all — a flex item defaults to its content width and would
           push the row past the edge of the screen. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        {/* Ticket number or words. Sits with the other two because it narrows
+            the list the same way they do. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
+          <Icon name="search" size={16} color={C.tl} style={{ flexShrink: 0 }} />
+          <input
+            style={inputStyle(C)}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t.searchFix}
+            aria-label={t.searchFix}
+          />
+        </div>
         {/* Priorities with nothing in them are left out: an option that returns
             an empty list is a dead end. 'low' is not offered on new requests,
             but old rows still carry it, so it appears only if one does. */}
@@ -485,6 +518,12 @@ export default function TaskBoard() {
                         </Badge>
                       </div>
                     )}
+                    <span style={{
+                      fontSize: 11.5, fontWeight: 700, color: C.faint,
+                      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                    }}>
+                      {ticketNo(r)}
+                    </span>
                     {isFlaggedPriority(r.priority) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: pTone }} />
@@ -1267,6 +1306,12 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       )}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Badge color={C[(STATUS_META[s] || STATUS_META.open).tone]} bg={C[(STATUS_META[s] || STATUS_META.open).bg]}>{statusLabel(s, t)}</Badge>
+        <span style={{
+          fontSize: 12.5, fontWeight: 700, color: C.tl,
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {ticketNo(row)}
+        </span>
         {isFlaggedPriority(row.priority) && (
           <Badge color={C[PRIOS[row.priority] || 'blue']}>{prioLabel(row.priority, t)}</Badge>
         )}

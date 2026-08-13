@@ -1357,10 +1357,19 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // Exotica while it is at it.
       for (const { drop } of venueMoves) {
         for (const r of drop) {
-          const { error } = await supabase.from('tasks')
-            .update({ assigned_to: null, assignee_name: null }).eq('id', r.id)
-          if (error) throw error
-          freed.add(r.id)
+          if (untouched(r)) {
+            // The job no longer runs here. Leaving the row behind unassigned put
+            // it straight back on the board under "Unassigned" — a venue the
+            // admin had just taken it off.
+            const { error } = await supabase.from('tasks').delete().eq('id', r.id)
+            if (error) throw error
+          } else {
+            // worked on: kept, unassigned, because the record belongs to it
+            const { error } = await supabase.from('tasks')
+              .update({ assigned_to: null, assignee_name: null }).eq('id', r.id)
+            if (error) throw error
+            freed.add(r.id)
+          }
         }
       }
       for (const { g, id, add } of venueMoves) {
@@ -1503,8 +1512,20 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         .in('property', venues)
         .eq('title', title)
       if (readErr) throw readErr
-      const already = new Set((present || []).filter((r) => r.assigned_to).map(jobKey))
-      const fresh = inserts.filter((r) => !r.assigned_to || !already.has(jobKey(r)))
+      // A blank row is that venue's open slot, and the question to ask about it
+      // is different: not "is this person already on it" but "does this job here
+      // already have one". Waving every unassigned insert through is how one
+      // slot came to be written five times.
+      const slotKey = (r) => [r.property, r.title, r.time_block || ''].join('|')
+      const taken = new Set((present || []).filter((r) => r.assigned_to).map(jobKey))
+      const open = new Set((present || []).filter((r) => !r.assigned_to).map(slotKey))
+      const fresh = inserts.filter((r) => {
+        if (r.assigned_to) return !taken.has(jobKey(r))
+        // also within this batch, or two venues added at once would each add one
+        if (open.has(slotKey(r))) return false
+        open.add(slotKey(r))
+        return true
+      })
 
       if (fresh.length) {
         const { error } = await supabase.from('tasks').insert(fresh)
