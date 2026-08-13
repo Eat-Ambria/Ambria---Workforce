@@ -7,7 +7,7 @@ import { nowISO, todayISO, fmtDate, fmtDateTime } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { TASK_STATUS, TASK_CATEGORIES, dailyOverdueActive, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, overdueReason, dailyOverdueLabel, dayName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
@@ -84,23 +84,13 @@ export default function AdminTasks() {
     if (key === 'review') return q.eq('status', TASK_STATUS.COMPLETION_REQUESTED)
     if (key === 'issues') return q.in('issue_status', [TASK_STATUS.ISSUE, TASK_STATUS.ISSUE_WORKING])
     if (key === 'issuesDone') return q.eq('issue_status', TASK_STATUS.ISSUE_RESOLVED)
-    if (key === 'overdue') {
-      // A daily task carries no due date, so a due_date test cannot see one. The
-      // dashboard counts those separately once the cutoff hour has passed and
-      // adds them in — this tab counted only the due_date kind, so its "3" led
-      // to a list of one. Same rule on both sides now.
-      const byDue = `and(due_date.lt.${today},status.neq.${TASK_STATUS.COMPLETED})`
-      if (!dailyOverdueActive()) return q.or(byDue)
-      const dailyLate = [
-        'category.eq.daily',
-        `status.neq.${TASK_STATUS.COMPLETED}`,
-        `status.neq.${TASK_STATUS.COMPLETION_REQUESTED}`,
-        `or(due_date.is.null,due_date.gte.${today})`,
-      ].join(',')
-      return q.or(`${byDue},and(${dailyLate})`)
-    }
-    return q // 'all'
-  }, [today])
+    // 'overdue' is not here. Whether a job is late depends on its category,
+    // week_day, week_days, skip_sunday, month_week and the hour, together — it
+    // does not reduce to a filter, and every attempt to write one has drifted
+    // from isTaskOverdue and left the tab disagreeing with the tile above it.
+    // See overdueRows() below.
+    return q // 'all', and 'overdue'
+  }, [])
 
   // switch to the tab carried by a navigation (e.g. a notification click),
   // even when we're already on this page and the component doesn't remount.
@@ -136,26 +126,46 @@ export default function AdminTasks() {
       .then(({ data }) => setMembers(data || []))
   }, [user])
 
+  // Late work, decided by the same function the dashboard tile, My Tasks and
+  // the row's own badge use. Fetched rather than filtered in SQL: nothing that
+  // is already finished can be late, which is the only narrowing the database
+  // can safely do here.
+  const overdueRows = useCallback(async () => {
+    const { data } = await applyFilters(
+      supabase.from('tasks').select('*')
+        .neq('status', TASK_STATUS.COMPLETED)
+        .order('created_at', { ascending: false })
+    )
+    return (data || []).filter((r) => isTaskOverdue(r, today))
+  }, [applyFilters, today])
+
   // load per-tab counts + the active tab's page whenever filters/tab/page change.
   // `silent` skips the loading dim — used by the background auto-refresh below.
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!user) return
     if (!silent) setListLoading(true)
-    const countPairs = await Promise.all(TAB_KEYS.map((k) =>
-      withStatus(applyFilters(supabase.from('tasks').select('*', { count: 'exact', head: true })), k)
-        .then(({ count }) => [k, count || 0])
-    ))
+    const [countPairs, late] = await Promise.all([
+      Promise.all(TAB_KEYS.filter((k) => k !== 'overdue').map((k) =>
+        withStatus(applyFilters(supabase.from('tasks').select('*', { count: 'exact', head: true })), k)
+          .then(({ count }) => [k, count || 0])
+      )),
+      overdueRows(),
+    ])
     const from = page * PAGE_SIZE
-    const { data } = await withStatus(
-      applyFilters(supabase.from('tasks').select('*').order('created_at', { ascending: false })),
-      tab
-    ).range(from, from + PAGE_SIZE - 1)
+    // the overdue tab paginates the rows it already has; the rest page in the
+    // database as before
+    const data = tab === 'overdue'
+      ? late.slice(from, from + PAGE_SIZE)
+      : (await withStatus(
+          applyFilters(supabase.from('tasks').select('*').order('created_at', { ascending: false })),
+          tab
+        ).range(from, from + PAGE_SIZE - 1)).data
 
-    setCounts(Object.fromEntries(countPairs))
+    setCounts({ ...Object.fromEntries(countPairs), overdue: late.length })
     setList(data || [])
     setListLoading(false)
     setLoading(false)
-  }, [user, applyFilters, withStatus, tab, page])
+  }, [user, applyFilters, withStatus, overdueRows, tab, page])
 
   useEffect(() => { load() }, [load])
 
@@ -466,12 +476,35 @@ export default function AdminTasks() {
                         <Icon name="pin" size={12} /> {propName(task.property, lang)}
                       </div>
                     )}
-                    {task.due_date && (
-                      <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: od ? TR_ORANGE : C.faint, fontWeight: od ? 700 : 500 }}>
-                        <Icon name={od ? 'warning' : 'clock'} size={12} color={od ? TR_ORANGE : C.faint} />
-                        {od ? `${t.overdue} · ` : `${t.dueDate}: `}{fmtDate(task.due_date)}
-                      </div>
-                    )}
+                    {/* Why it is late, in words. This line used to render only
+                        when the row carried a due_date — and almost none do, so a
+                        weekly round three days past its Monday sat in the Overdue
+                        tab with nothing on it to say so. */}
+                    {(() => {
+                      const why = overdueReason(task, today)
+                      if (!why) {
+                        return task.due_date ? (
+                          <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: C.faint }}>
+                            <Icon name="clock" size={12} color={C.faint} />
+                            {t.dueDate}: {fmtDate(task.due_date)}
+                          </div>
+                        ) : null
+                      }
+                      const say = why.kind === 'date' ? fmtDate(why.date)
+                        : why.kind === 'weekday' ? t.lateWasDue.replace('{d}', dayName(why.day, lang))
+                        : why.kind === 'monthweek' ? t.lateWeek.replace('{n}', why.week)
+                        : t.lateToday.replace('{h}', dailyOverdueLabel())
+                      // how far past, when that is a number worth reading
+                      const by = why.kind === 'weekday' && why.late > 0 ? t.lateDays.replace('{n}', why.late)
+                        : why.kind === 'monthweek' && why.late > 0 ? t.lateWeeks.replace('{n}', why.late)
+                        : ''
+                      return (
+                        <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: TR_ORANGE, fontWeight: 700 }}>
+                          <Icon name="warning" size={12} color={TR_ORANGE} />
+                          {t.overdue} · {say}{by ? ` · ${by}` : ''}
+                        </div>
+                      )
+                    })()}
                   </div>
                   {/* right column: status + fixed-width category badge, vertically centered,
                       so Daily/Weekly/Monthly line up in one straight column across cards */}

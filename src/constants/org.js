@@ -419,6 +419,35 @@ export function isDueToday(task, now = new Date()) {
   return true                            // daily
 }
 
+// WHY a task is late — isTaskOverdue only says whether it is.
+//
+// Returned structured, not as a sentence: the wording belongs to the screen and
+// has to work in both languages. `kind` is what made it late:
+//
+//   date      it had a real deadline and the deadline passed
+//   weekday   weekly work whose day has gone by      (day, late = days over)
+//   monthweek monthly work whose week has gone by    (week, late = weeks over)
+//   today     same-day work still open past the cutoff hour
+//
+// null when the task is not late at all.
+export function overdueReason(task, today, now = new Date()) {
+  if (!isTaskOverdue(task, today, now)) return null
+  if (task.due_date && task.due_date < today) return { kind: 'date', date: task.due_date }
+
+  const fk = taskFrequency(task)
+  const iso = now.getDay() === 0 ? 7 : now.getDay()
+  if (fk === 'weekly') {
+    const day = Number(task.week_day ?? task.weekDay ?? 1)
+    return { kind: 'weekday', day, late: iso - day }
+  }
+  if (fk === 'monthly') {
+    const wk = Math.min(Math.floor((now.getDate() - 1) / 7) + 1, 4)
+    const week = Math.min(Math.max(Number(task.month_week ?? task.monthWeek) || 1, 1), 4)
+    return { kind: 'monthweek', week, late: wk - week }
+  }
+  return { kind: 'today' }
+}
+
 // How many times this job was SUPPOSED to happen between two dates.
 //
 // Deliberately not the same question as isDueToday(). A weekly job stays VISIBLE
@@ -463,6 +492,17 @@ export function isTaskOverdue(task, today, now = new Date()) {
   if (!task || task.status === TASK_STATUS.COMPLETED) return false
   // a job that isn't due today cannot be late today
   if (notDueToday(task, now)) return false
+  // Sent for approval: the person did their part on time and what is left is an
+  // admin's to do. This was checked for daily work only, so a weekly job waiting
+  // in an approval queue was counted late against whoever finished it.
+  if (task.status === TASK_STATUS.COMPLETION_REQUESTED) return false
+
+  // An explicit due date that has passed is late, whatever the frequency. This
+  // used to be the closing line of the function, below a daily branch that
+  // always returned — so a daily task given a real deadline was the one kind of
+  // task that could never miss it.
+  if (task.due_date && task.due_date < today) return true
+
   const fk = taskFrequency(task)
   const iso = now.getDay() === 0 ? 7 : now.getDay()
 
@@ -474,12 +514,13 @@ export function isTaskOverdue(task, today, now = new Date()) {
     return wk > Math.min(Math.max(Number(task.month_week ?? task.monthWeek) || 1, 1), 4)
   }
 
-  if (task.category === 'daily') {
-    // already sent for approval = the staff member did their part on time
-    return task.status !== TASK_STATUS.COMPLETION_REQUESTED
-      && !!dailyOverdueActive(now)
-      // a daily task given an explicit past due date is handled by the rule below
-      && !(task.due_date && task.due_date < today)
-  }
-  return !!task.due_date && task.due_date < today
+  // Everything left is same-day work — daily, daily (Mon-Sat), alternate days,
+  // Sunday-only — and it has today to be done. Late once the cutoff hour passes.
+  //
+  // Alternate and Sunday work never reached a branch of their own before: they
+  // are not `weekly` or `monthly` to taskFrequency, and their category is not
+  // 'daily', so both fell to the due-date line — which is null on all but one
+  // row in this database. A Tue/Fri round missed on Tuesday was never late; it
+  // simply disappeared from the list on Wednesday.
+  return !!dailyOverdueActive(now)
 }

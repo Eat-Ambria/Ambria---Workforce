@@ -5,7 +5,7 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, notDueToday, dailyOverdueActive, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, notDueToday, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, FilterChip, inputStyle } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -52,15 +52,18 @@ function AdminDashboard({ user }) {
     const deptScope = scopedDepartment(user) // null = every department
     const today = todayISO()
 
-    // base task query with the active property/department/member filters
-    const taskBase = () => {
-      let q = supabase.from('tasks').select('*', { count: 'exact', head: true })
+    // Today's rows, not a count of all of them. Everything about tasks is
+    // counted from these in memory — see the note where they are read back.
+    const taskRowsQ = (() => {
+      let q = supabase.from('tasks')
+        .select('id, status, priority, category, week_day, week_days, skip_sunday, month_week, due_date')
       if (deptScope) q = q.eq('department', deptScope)
       if (prop !== 'all') q = q.eq('property', prop)
       else if (propScope) q = q.eq('property', propScope)
       if (member !== 'all') q = q.eq('assigned_to', member)
       return q
-    }
+    })()
+
     const boardBase = () => {
       let q = supabase.from('work_board').select('*', { count: 'exact', head: true })
       if (deptScope) q = q.eq('department', deptScope)
@@ -87,41 +90,22 @@ function AdminDashboard({ user }) {
     const myFixesQ = supabase.from('work_board').select('*', { count: 'exact', head: true })
       .eq('assigned_to', user.id).neq('status', 'approved').neq('status', 'completed')
 
-    // Daily tasks carry no due date, so the due_date query below can't see
-    // them. Past the cutoff hour, an unfinished one is late as well. The or()
-    // keeps a daily task with a genuinely past due date from being counted twice.
+    // ORDER IS THE CONTRACT. These names are matched to the array below by
+    // position and nothing else — no key, no label, no error if they slip. Add a
+    // query in the middle of one list and the end of the other and every name
+    // after it silently reads somebody else's answer, which is exactly what
+    // happened to bUrgent and bHigh: Fire Safety read the vendor count, the
+    // chemical log read the video count, and Urgent read a rows response that
+    // has no .count at all, so it displayed 0 while nine requests were urgent.
     //
-    // On a Sunday, "(Mon-Sat)" daily work is not due at all — no lawn work on
-    // client-visit day. It has to be excluded HERE too, because this tile is a
-    // database count while the list it opens is filtered by isTaskOverdue: count
-    // one way and list another and the two disagree in public.
-    const isSunday = new Date().getDay() === 0
-    const dailyLateQ = dailyOverdueActive()
-      ? (() => {
-          let q = taskBase().eq('category', 'daily')
-            .neq('status', TASK_STATUS.COMPLETED)
-            .neq('status', TASK_STATUS.COMPLETION_REQUESTED)
-            .or(`due_date.is.null,due_date.gte.${today}`)
-          if (isSunday) q = q.or('skip_sunday.is.null,skip_sunday.eq.false')
-          return q
-        })()
-      : Promise.resolve({ count: 0 })
-
+    // Keep the two lists in the same order, and add to the end of both.
     const [
-      total, pending, inProgress, waiting, done, overdue, pHigh, pMed, pLow,
-      bOpen, bProg, bDone, vendors, videos, fireR, chemR, boardOverdue,
-      bUrgent, bHigh,
-      myTasks, myFixes, dailyLate,
+      taskRows,
+      bOpen, bProg, bDone, bUrgent, bHigh,
+      vendors, videos, fireR, chemR, boardOverdue,
+      myTasks, myFixes,
     ] = await Promise.all([
-      taskBase(),
-      taskBase().eq('status', TASK_STATUS.PENDING),
-      taskBase().eq('status', TASK_STATUS.IN_PROGRESS),
-      taskBase().eq('status', TASK_STATUS.COMPLETION_REQUESTED),
-      taskBase().eq('status', TASK_STATUS.COMPLETED),
-      taskBase().lt('due_date', today).neq('status', TASK_STATUS.COMPLETED),
-      taskBase().eq('priority', 'high'),
-      taskBase().eq('priority', 'medium'),
-      taskBase().eq('priority', 'low'),
+      taskRowsQ,
       boardBase().in('status', ['open', 'assigned']),
       boardBase().in('status', ['in_progress', 'approval_requested']),
       boardBase().in('status', ['approved', 'completed']),
@@ -137,10 +121,20 @@ function AdminDashboard({ user }) {
       boardBase().lt('due_date', today).neq('status', 'approved').neq('status', 'completed'),
       myTasksQ,
       myFixesQ,
-      dailyLateQ,
     ])
 
     const cnt = (r) => r.count || 0
+
+    // Only what is due today. A Monday-only round and a week-4 monthly job are
+    // both on the roster and neither is today's work — counting them made this
+    // tile read 312 above a list of 247.
+    //
+    // isDueToday / isTaskOverdue are imported rather than rebuilt as filters:
+    // the rule reads category, week_day, week_days, skip_sunday and month_week
+    // together, and a second copy of it is how a tile and the screen it opens
+    // start disagreeing.
+    const due = (taskRows.data || []).filter((r) => !notDueToday(r))
+    const tc = (fn) => due.filter(fn).length
     const fireStat = { ok: 0, expiring: 0, expired: 0 }
     ;(fireR.data || []).forEach((e) => {
       if (!e.expiry_date) { fireStat.ok++; return }
@@ -153,9 +147,18 @@ function AdminDashboard({ user }) {
 
     setD({
       task: {
-        total: cnt(total), pending: cnt(pending), inProgress: cnt(inProgress),
-        waiting: cnt(waiting), done: cnt(done), overdue: cnt(overdue) + cnt(dailyLate),
-        priority: { high: cnt(pHigh), medium: cnt(pMed), low: cnt(pLow) },
+        total: due.length,
+        pending: tc((r) => r.status === TASK_STATUS.PENDING),
+        inProgress: tc((r) => r.status === TASK_STATUS.IN_PROGRESS),
+        waiting: tc((r) => r.status === TASK_STATUS.COMPLETION_REQUESTED),
+        done: tc((r) => r.status === TASK_STATUS.COMPLETED),
+        // one rule for late work, the same one My Tasks and the board use
+        overdue: tc((r) => isTaskOverdue(r, today)),
+        priority: {
+          high: tc((r) => r.priority === 'high'),
+          medium: tc((r) => r.priority === 'medium'),
+          low: tc((r) => r.priority === 'low'),
+        },
       },
       board: {
         open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue),
