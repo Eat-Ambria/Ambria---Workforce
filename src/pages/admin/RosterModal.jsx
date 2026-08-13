@@ -349,7 +349,15 @@ const TimeCell = memo(function TimeCell({ C, gKey, from, to, pick, onPatch }) {
             color: from ? C.text : C.faint, fontVariantNumeric: 'tabular-nums',
           }}
         >
-          {fmtRange(from, to) || pick}
+          {/* Each time stays whole and the line may only break at the dash.
+              Handed over as one string, a 112px column breaks it wherever it
+              likes — "3:00 PM - 4:00" with a lonely "PM" underneath. */}
+          {from ? (
+            <>
+              <span style={{ whiteSpace: 'nowrap' }}>{fmt12(from)}</span>
+              {to && <>{' - '}<span style={{ whiteSpace: 'nowrap' }}>{fmt12(to)}</span></>}
+            </>
+          ) : pick}
         </button>
       </span>
     )
