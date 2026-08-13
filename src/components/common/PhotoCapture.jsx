@@ -4,6 +4,7 @@ import { useT } from '../../context/LangContext'
 import { uploadPhotos } from '../../lib/storage'
 import { Spinner } from './UI'
 import Icon from './Icon'
+import PhotoViewer from './PhotoViewer'
 
 // Camera-first photo capture with preview + upload.
 // Props:
@@ -18,6 +19,10 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
   const galRef = useRef(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // which thumbnail is open full-size, or null. Everywhere else in the app a
+  // photo opens when you tap it; here it was a 72px square and nothing else, so
+  // there was no way to check what you had just uploaded before submitting it.
+  const [viewAt, setViewAt] = useState(null)
 
   async function handleFiles(files) {
     if (!files || !files.length) return
@@ -44,12 +49,17 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
     <div>
       {value.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          {value.map((url) => (
+          {value.map((url, i) => (
             <div key={url} style={{ position: 'relative' }}>
               <img
                 src={url}
                 alt=""
-                style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }}
+                onClick={() => setViewAt(i)}
+                title={t.viewPhoto}
+                style={{
+                  width: 72, height: 72, objectFit: 'cover', borderRadius: 10,
+                  border: `1px solid ${C.border}`, cursor: 'zoom-in', display: 'block',
+                }}
               />
               <button
                 type="button"
@@ -111,6 +121,15 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
       )}
 
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
+
+      {viewAt !== null && value[viewAt] && (
+        <PhotoViewer
+          photos={value}
+          index={viewAt}
+          onIndex={setViewAt}
+          onClose={() => setViewAt(null)}
+        />
+      )}
     </div>
   )
 }

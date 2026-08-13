@@ -371,9 +371,13 @@ function WorkModal({ task, onClose, onSaved, user }) {
   // the tick do nothing on their own rostered work, and an admin on the roster
   // is doing the work like anyone else.
   const showCapture = task.photo_required !== false  // offer the camera
-  const needsPhoto = showCapture                     // ...and insist on it
-  const canStart = !needsPhoto || beforePhotos.length > 0   // "before" photo to start
-  const canComplete = !needsPhoto || photos.length > 0      // "after" photo to submit
+  // Only the "after" one is insisted on. The photo is there to show the work was
+  // done, and that is the one that shows it — demanding a "before" as well meant
+  // standing at the job unable to start it, which is the worst possible moment
+  // to be arguing with a phone. It is still offered, and it is still worth
+  // taking on anything where the state beforehand is the point.
+  const needsAfter = showCapture
+  const canComplete = !needsAfter || photos.length > 0   // "after" photo to submit
 
   // live timer while working
   useEffect(() => {
@@ -397,7 +401,8 @@ function WorkModal({ task, onClose, onSaved, user }) {
   }
 
   async function startWork() {
-    if (!canStart) { setErr(hi ? 'शुरू करने से पहले "पहले" वाली फ़ोटो डालें' : 'Add a "before" photo to start') ; return }
+    // Whatever has been photographed so far goes with it — usually nothing, and
+    // that is fine now. Nobody is held at the job waiting on a camera.
     if (await update({ status: TASK_STATUS.IN_PROGRESS, before_photo: beforePhotos, started_at: nowISO(), started_by: user.id })) onSaved()
   }
 
@@ -463,7 +468,7 @@ function WorkModal({ task, onClose, onSaved, user }) {
       footer={
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
-          {isPending && !issueMode && <Button variant="primary" onClick={startWork} disabled={busy || !canStart} style={{ flex: 2 }}>{t.startWork}</Button>}
+          {isPending && !issueMode && <Button variant="primary" onClick={startWork} disabled={busy} style={{ flex: 2 }}>{t.startWork}</Button>}
           {isInProgress && !issueMode && (
             <Button variant="success" onClick={markForCompletion} disabled={busy || !canComplete} style={{ flex: 2 }}>
               {t.markDone}
@@ -523,9 +528,9 @@ function WorkModal({ task, onClose, onSaved, user }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
-              {beforeLabel} {isPending && (needsPhoto
-                ? <span style={{ color: C.red }}>*</span>
-                : showCapture && <span style={{ color: C.faint, fontWeight: 500 }}>({t.optional})</span>)}
+              {beforeLabel} {isPending && showCapture && (
+                <span style={{ color: C.faint, fontWeight: 500 }}>({t.optional})</span>
+              )}
             </div>
             {isPending && showCapture ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
           </div>
@@ -533,9 +538,7 @@ function WorkModal({ task, onClose, onSaved, user }) {
           {(isInProgress || isWaiting || isDone) && (
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
-                {afterLabel} {isInProgress && (needsPhoto
-                  ? <span style={{ color: C.red }}>*</span>
-                  : showCapture && <span style={{ color: C.faint, fontWeight: 500 }}>({t.optional})</span>)}
+                {afterLabel} {isInProgress && needsAfter && <span style={{ color: C.red }}>*</span>}
               </div>
               {isInProgress && showCapture ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
             </div>

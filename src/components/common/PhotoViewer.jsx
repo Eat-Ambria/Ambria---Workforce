@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import Icon from './Icon'
@@ -31,11 +32,16 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
     display: 'grid', placeItems: 'center', flexShrink: 0,
   }
 
-  return (
+  // Straight onto the body. `position: fixed` is only fixed to the viewport
+  // while no ancestor has a transform — the modal's own open animation has one,
+  // and a z-index is only ever compared inside its own stacking context, which
+  // a modal is. Opened from inside one, this viewer was sized and stacked by the
+  // dialog it was trying to cover. At body level neither can reach it.
+  return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.88)',
+        position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.88)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16,
       }}
     >
@@ -67,6 +73,7 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
           {index + 1} / {photos.length}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -66,7 +66,10 @@ const COL_W = {
   // one the last columns do not have to be scrolled to reach.
   pick: 34, num: 34, task: 240,
   weekly: 88, monthly: 88, day: 37,
-  assigned: 185, venue: 205, time: 112, actions: 96,
+  // The 205px PROPERTIES column moved into the assign panel; 65 of it went to
+  // ASSIGNED, which holds five wrapped names on a busy job, and the rest to the
+  // sheet, which is now 1167px wide instead of 1307.
+  assigned: 250, time: 112, actions: 96,
 }
 const TASK_W = COL_W.task
 
@@ -82,7 +85,6 @@ const sheetTracks = ({ picking }) => [
   COL_W.monthly,
   ...Array(7).fill(COL_W.day),
   COL_W.assigned,
-  COL_W.venue,
   COL_W.time,
   COL_W.actions,
 ].filter(Boolean)
@@ -173,22 +175,26 @@ const fmt12 = (hhmm) => {
 // choosing a side is not enough, since a panel flipped upward from a row near
 // the top of the window would draw itself over the page header.
 const assignGeom = (r, side) => {
-  const GAP = 6, EDGE = 10, WANT = 560, MIN = 200
+  const EDGE = 10, WANT = 560, MIN = 200
   // Wide enough for a name, five venues and a shift on two lines — and never
   // wider than the window, which is what a narrow laptop would have got.
   const W = Math.max(320, Math.min(620, window.innerWidth - EDGE * 2))
-  const below = window.innerHeight - r.bottom - GAP - EDGE
-  const above = r.top - GAP - EDGE
-  // below by default; upward only when below is too tight AND above is roomier
-  const up = side === undefined ? (below < MIN + 60 && above > below) : side
+  // It covers the cell rather than sitting beside it. Beside, the panel had to
+  // fit in the space left over above or below the row — and on a row near the
+  // bottom of the sheet that is almost nothing, so it climbed up behind the
+  // page header. Starting AT the row, the whole rest of the window is available,
+  // and the one thing hidden is the cell you just clicked.
+  const below = window.innerHeight - r.top - EDGE
+  const above = r.bottom - EDGE
+  // downward by default; upward only when down is too tight AND up is roomier
+  const up = side === undefined ? (below < MIN && above > below) : side
   return {
     up,
-    // Upward, the panel is pinned by its BOTTOM edge to just above the row.
-    // Deriving a top from maxH positioned it by the space it was allowed rather
-    // than the height it needs, so a short panel floated hundreds of pixels
-    // clear of the row it belongs to.
-    bottom: up ? Math.max(EDGE, window.innerHeight - r.top + GAP) : undefined,
-    top: up ? undefined : r.bottom + GAP,
+    // Downward it hangs from the row's top edge, upward from its bottom one.
+    // Either way it is pinned to an edge of the cell, never to a height it was
+    // allowed — that is how a short panel once floated clear of its own row.
+    bottom: up ? Math.max(EDGE, window.innerHeight - r.bottom) : undefined,
+    top: up ? undefined : Math.max(EDGE, r.top),
     left: Math.min(Math.max(EDGE, r.left), Math.max(EDGE, window.innerWidth - W - EDGE)),
     width: Math.max(W, r.width),
     maxH: Math.max(MIN, Math.min(WANT, up ? above : below)),
@@ -492,18 +498,18 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const [deptTab, setDeptTab] = useState('all')       // which department's round is shown
   // The row whose people picker is open, and where on screen to draw it. Screen
   // coordinates rather than a nested panel: see the portal below.
-  const [assignAt, setAssignAt] = useState(null) // { key, mode, top, left, width, maxH }
+  const [assignAt, setAssignAt] = useState(null) // { key, up, top, left, width, maxH }
   // The cell the open panel hangs off. A ref, not state: it is read during a
   // scroll, where a re-render per frame is exactly what we are avoiding.
   const assignEl = useRef(null)
   // The panel's own node, for the same reason.
   const assignBox = useRef(null)
-  const openAssign = (e, key, mode = 'people') => {
+  const openAssign = (e, key) => {
     const el = e.currentTarget
     setAssignAt((cur) => {
-      if (cur?.key === key && cur?.mode === mode) { assignEl.current = null; return null }
+      if (cur?.key === key) { assignEl.current = null; return null }
       assignEl.current = el
-      return { key, mode, ...assignGeom(el.getBoundingClientRect()) }
+      return { key, ...assignGeom(el.getBoundingClientRect()) }
     })
   }
   // The panel is fixed to the viewport, so it has to be told where its row has
@@ -553,7 +559,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       window.removeEventListener('resize', follow)
       document.removeEventListener('mousedown', away, true)
     }
-  }, [assignAt?.key, assignAt?.mode])
+  }, [assignAt?.key])
   const [form, setForm] = useState(null)               // add/edit form, null = closed
   const [saved, setSaved] = useState(false)            // the 'changes saved' toast
 
@@ -1116,13 +1122,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // a new row counts towards Save the moment it has a title to save
   const newRows = groups.filter((g) => g.isNew && g.title.trim())
 
-  // ...and so does a venue ticked or unticked on an existing one
-  const venueEdits = groups.filter((g) => {
-    if (g.isNew || !g.venues) return false
-    const at = jobVenues(g)
-    return g.venues.length !== at.length || g.venues.some((v) => !at.includes(v))
-  })
-
   // Somebody already on this row whose venues have been changed, compared
   // against the venues their own rows name. A set matching where they already
   // are is not a change.
@@ -1130,13 +1129,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     const out = []
     groups.forEach((g) => {
       if (g.isNew) return
-      // Venues the job runs at today, and of those, the ones it keeps. A venue
-      // ticked ON is written by the fan-out pass, which already carries the
-      // people going there; one ticked OFF takes its rows with it. Neither is
-      // this pass's business — this is only a person's venues changing among
-      // the ones the job already had and is keeping.
-      const runsAt = jobVenues(g)
-      const keep = (g.venues || runsAt).filter((v) => runsAt.includes(v))
       ;(g.people || []).forEach((id) => {
         const want = personVenue[`${g.key}|${id}`]
         if (!want) return
@@ -1145,20 +1137,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         // edit, and the added-people pass below writes them.
         if (!held.length) return
         const has = held.map((r) => r.property)
-        const add = want.filter((v) => !has.includes(v) && keep.includes(v))
-        const drop = held.filter((r) => !want.includes(r.property) && keep.includes(r.property))
+        // Any of the five. A venue the job does not run at yet is not a reason
+        // to refuse — it is the job starting to run there.
+        const add = want.filter((v) => !has.includes(v))
+        const drop = held.filter((r) => !want.includes(r.property))
         if (add.length || drop.length) out.push({ g, id, add, drop })
       })
     })
     return out
-  }, [groups, personVenue, jobVenues])
+  }, [groups, personVenue])
 
   // A shift edit that matches what is already stored is not a change.
   const shiftCount = Object.entries(shiftEdits)
     .filter(([id, v]) => v !== (shiftApplied[id] ?? staffById.get(id)?.shift ?? '')).length
 
   const renameCount = plan.filter((x) => x.renamed || x.rehindied || x.reprioed || x.redued || x.redaysed || x.retimed || x.rephotoed || x.redayed || x.refreqed || x.resopped || x.reshifted || x.resorted).length
-  const nothingToSave = addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount + venueMoves.length === 0
+  const nothingToSave = addCount + dropCount + renameCount + newRows.length + shiftCount + venueMoves.length === 0
 
   // Shared by save() and createJob(): both write a Hindi title, and a title
   // that fails to translate is saved without one rather than lost.
@@ -1210,8 +1204,28 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     // from a people-tick and a venue-tick in one save.
     const placed = new Set()
     const place = (id, prop) => { if (id && prop) placed.add(`${id}|${prop}`) }
+    // An unassigned copy of a job is that venue's open slot. Somebody ticked
+    // there is filling it, not joining it — a fresh row would leave the empty
+    // one behind and the venue would read as staffed and unstaffed at once.
+    // Claimed, because two people ticked at one venue in a single save must not
+    // both be handed the same row.
+    const claimed = new Set()
+    // Rows handed back earlier in THIS save. g.rows is the snapshot the sheet
+    // loaded, so it still shows them assigned; without this, unticking somebody
+    // at a venue and ticking somebody else there writes a second row next to the
+    // one just emptied.
+    const freed = new Set()
+    const openSlot = (g, prop) => (g.rows || []).find(
+      (r) => (!r.assigned_to || freed.has(r.id)) && r.property === prop && !claimed.has(r.id)
+    )
+    const takeSlot = async (r, id, person) => {
+      claimed.add(r.id)
+      const { error } = await supabase.from('tasks')
+        .update({ assigned_to: id, assignee_name: person?.name || null }).eq('id', r.id)
+      if (error) throw error
+    }
     try {
-      for (const { g, added, dropped, spare, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, reshifted, resorted } of plan) {
+      for (const { g, added, dropped, renamed, rehindied, retimed, rephotoed, redayed, refreqed, resopped, reprioed, redued, redaysed, reshifted, resorted } of plan) {
         // anything about the JOB itself — its wording, window, photo rule, day,
         // frequency or SOP — applies to every copy of it
         if (renamed || rehindied || retimed || rephotoed || redayed || refreqed || resopped || reprioed || redued || redaysed || reshifted || resorted) {
@@ -1260,29 +1274,22 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             const { error } = await supabase.from('tasks')
               .update({ assigned_to: null, assignee_name: null }).eq('id', r.id)
             if (error) throw error
+            freed.add(r.id)
           }
         }
-        // people added: the spare unassigned row takes the first one, the rest
-        // become new rows — so a job never accumulates empty duplicates
-        let reuse = spare && !dropped.includes(spare) ? spare : null
+        // people added: each takes that venue's open slot where there is one,
+        // so a job never accumulates empty duplicates
         const gVenues = venuesOf(g)
-        // Only where the job already runs. If they were given a venue ticked on
-        // in this same save, the fan-out below writes that one — this pass
-        // writing it too is how the same row got created twice.
-        const gRunsAt = g.isNew ? gVenues : jobVenues(g)
         for (const id of added) {
           const person = staff.find((m) => m.id === id)
-          // Every venue they were given for this job — one for nearly everybody,
-          // five for a site head who covers all of them.
-          for (const prop of venuesForPerson(g, id, gVenues).filter((v) => gRunsAt.includes(v))) {
+          // Every venue they were ticked at — one for nearly everybody, five for
+          // a site head who covers all of them. A venue with no copy of the job
+          // yet gets one: that is what ticking it means.
+          for (const prop of venuesForPerson(g, id, gVenues)) {
             place(id, prop)
-            // a spare row sits at one particular venue, so it can only be handed
-            // to somebody going to that venue — otherwise it waits for one who is
-            if (reuse && reuse.property === prop) {
-              const { error } = await supabase.from('tasks')
-                .update({ assigned_to: id, assignee_name: person?.name || null }).eq('id', reuse.id)
-              if (error) throw error
-              reuse = null
+            const slot = openSlot(g, prop)
+            if (slot) {
+              await takeSlot(slot, id, person)
             } else {
               const { error } = await supabase.from('tasks')
                 .insert(await rowFor(g, id, person, prop))
@@ -1317,72 +1324,58 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // Rows typed straight into the sheet. createJob does the insert, so a
       // row born on the sheet and one born in the dialog land identically.
       for (const g of groups.filter((x) => x.isNew && x.title.trim())) {
-        await createJobRow(g)
-        ;(g.properties || []).forEach((v) => (g.people || []).forEach((id) => place(id, v)))
-      }
-
-      // Venues ticked or unticked on an existing job. Ticked = the job starts
-      // running there; unticked = that venue's copy goes. Both are computed
-      // against where it runs NOW, not against what the sheet last loaded.
-      for (const g of groups.filter((x) => !x.isNew && x.venues)) {
-        // where it runs, including venues outside the sheet's filter
-        const at = jobVenues(g)
-        // what the row will run at once this save lands — the choices a person's
-        // venue is picked from
-        const gv = g.venues
-        for (const v of g.venues.filter((v2) => !at.includes(v2))) {
-          // Only the people whose venue for this job IS this one. Carrying the
-          // whole picked list is how somebody ended up on the same round at two
-          // properties while their own row named one.
-          const going = (g.people || []).filter((id) => venuesForPerson(g, id, gv).includes(v))
-          await createJobRow({ ...g, properties: [v], people: going })
-          going.forEach((id) => place(id, v))
+        // Grouped by venue, so each venue's copy gets only the people ticked
+        // there. createJob's own venue list would give every venue every person.
+        const byVenue = new Map()
+        for (const id of (g.people || [])) {
+          for (const v of venuesForPerson(g, id, venuesOf(g))) {
+            byVenue.set(v, [...(byVenue.get(v) || []), id])
+          }
         }
-        for (const v of at.filter((v2) => !g.venues.includes(v2))) {
-          // this job's own rows at that venue — one group holds all of them now
-          const ids = (g.rows || []).filter((r) => r.property === v).map((r) => r.id)
-          if (ids.length) {
-            const { error } = await supabase.from('tasks').delete().in('id', ids)
-            if (error) throw error
-          } else {
-            // A venue the sheet never loaded: no ids in memory, so it goes by
-            // what identifies the job. The SAVED title — a rename in this same
-            // save only touched the copies the sheet is holding.
-            const { error } = await supabase.from('tasks').delete()
-              .eq('property', v)
-              .eq('department', g.department)
-              .eq('title', g.rows[0]?.title || g.title)
-            if (error) throw error
+        if (!byVenue.size) {
+          // nobody on it yet: it still has to exist somewhere, so it lands
+          // unassigned at whatever the sheet is filtered to
+          await createJobRow(g)
+        } else {
+          for (const [v, ids] of byVenue) {
+            await createJobRow({ ...g, properties: [v], people: ids })
+            ids.forEach((id) => place(id, v))
           }
         }
       }
 
-      // Somebody's venues for this job changed. One dropped and another picked
-      // up in the same edit is a move: the row travels rather than being deleted
-      // and remade, because the work already recorded against it, and its place
-      // in the order, belong to that row.
-      for (const { g, id, add, drop } of venueMoves) {
+      // Somebody's venues for this job changed.
+      //
+      // Unticked FIRST, all of them, before anything is picked up. A row handed
+      // back at Exotica is then there for whoever was ticked at Exotica in the
+      // same save, instead of a second row being written beside it.
+      //
+      // The row is handed back, never moved and never deleted. Moving it looked
+      // like the tidy answer — it keeps the work recorded against the row — but
+      // the row IS that venue's copy of the job: carrying it to Exotica takes
+      // the job off Pushpanjali entirely, and files Pushpanjali's history under
+      // Exotica while it is at it.
+      for (const { drop } of venueMoves) {
+        for (const r of drop) {
+          const { error } = await supabase.from('tasks')
+            .update({ assigned_to: null, assignee_name: null }).eq('id', r.id)
+          if (error) throw error
+          freed.add(r.id)
+        }
+      }
+      for (const { g, id, add } of venueMoves) {
         const person = staff.find((m) => m.id === id)
-        const spares = [...drop]
         for (const v of add) {
-          const r = spares.shift()
-          if (r) {
-            const { error } = await supabase.from('tasks').update({ property: v }).eq('id', r.id)
-            if (error) throw error
+          const slot = openSlot(g, v)
+          if (slot) {
+            await takeSlot(slot, id, person)
           } else {
+            // no copy of the job at that venue yet — ticking it starts one
             const { error } = await supabase.from('tasks')
               .insert(await rowFor(g, id, person, v))
             if (error) throw error
           }
           place(id, v)
-        }
-        // Taken away and not replaced. The row is handed back, not deleted: it
-        // is that venue's copy of the job, and the job still runs there — an
-        // unassigned row is simply one waiting for its next person.
-        for (const r of spares) {
-          const { error } = await supabase.from('tasks')
-            .update({ assigned_to: null, assignee_name: null }).eq('id', r.id)
-          if (error) throw error
         }
       }
 
@@ -1634,7 +1627,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
         {inline ? t.discardChanges : t.cancel}
       </Button>
       <Button variant="primary" onClick={save} disabled={busy || nothingToSave} style={{ flex: 2 }}>
-        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + venueEdits.length + shiftCount + venueMoves.length})`}
+        {nothingToSave ? t.save : `${t.save} (${addCount + dropCount + renameCount + newRows.length + shiftCount + venueMoves.length})`}
       </Button>
     </>
   )
@@ -1773,115 +1766,52 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               borderRadius: 12, boxShadow: C.shadowLg, padding: 10,
             }}
           >
-            {assignAt.mode === 'people' && (
-            <PeoplePicker
-              C={C}
-              t={t}
-              lang={lang}
-              staff={staff}
-              listMax={assignAt.maxH}
-              autoFocus
-              chosen={(groups.find((x) => x.key === assignAt.key) || {}).people || []}
-              onToggle={(id) => togglePerson(assignAt.key, id)}
-              isVisiting={isVisiting}
-              shift={(groups.find((x) => x.key === assignAt.key) || {}).shift || ''}
-              shiftOf={personShift}
-              onSetShift={setPersonShift}
-              venues={(() => {
-                const ag = groups.find((x) => x.key === assignAt.key)
-                return ag ? venuesOf(ag) : []
-              })()}
-              venuesFor={(id) => {
-                const ag = groups.find((x) => x.key === assignAt.key)
-                return ag ? venuesForPerson(ag, id, venuesOf(ag)) : []
-              }}
-              onToggleVenue={(id, code) => {
-                const ag = groups.find((x) => x.key === assignAt.key)
-                if (!ag) return
-                toggleVenueForPerson(ag.key, id, code, venuesForPerson(ag, id, venuesOf(ag)))
-              }}
-            />
-            )}
-            {assignAt.mode === 'venues' && (() => {
+            {(() => {
               const ag = groups.find((x) => x.key === assignAt.key)
               if (!ag) return null
+              // Every property is offered beside every name. There is no
+              // job-level venue list any more: a job runs where its people are
+              // ticked, and ticking one that has no copy of the job yet creates
+              // it. Nothing here takes a job OFF a venue — see save().
               const at = venuesOf(ag)
               const codes = PROPERTIES.map((pp) => pp.code)
-              // A row cannot untick the venue it IS — see the delete button.
-              // The last venue cannot be unticked: a job has to run somewhere, and
-              // removing it entirely is the delete button's job — that one asks.
-              const commit = (next) => {
-                if (!next.length) return
-                setGroupTime(ag.key, ag.isNew ? { properties: next } : { venues: next })
-              }
-              const allOn = codes.every((c) => at.includes(c))
               return (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 7 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', color: C.tl }}>
-                      {t.properties}
-                    </span>
-                    {/* All, and the same button takes it back off */}
-                    <button
-                      type="button"
-                      onClick={() => commit(allOn ? at.slice(0, 1) : codes)}
-                      style={{
-                        border: `1.5px solid ${allOn ? C.maroon : C.border}`, borderRadius: 999,
-                        background: allOn ? C.maroon : 'transparent', color: allOn ? '#fff' : C.maroon,
-                        fontSize: 11, fontWeight: 800, padding: '3px 10px', cursor: 'pointer',
-                      }}
-                    >
-                      {t.all}
-                    </button>
-                  </div>
+                <>
                   {/* Who this leaves working outside their own venue. The cover
-                      record gets written either way; saying it here is the
-                      difference between an arrangement and a surprise. */}
+                      record gets written either way; saying it is the difference
+                      between an arrangement and a surprise. */}
                   {(() => {
-                    const picked = (ag.people || []).map((id) => staffById.get(id)).filter(Boolean)
-                    const vs = at.filter((v) => picked.some((m) => !memberInProperty(m, v)))
+                    const vs = [...new Set((ag.people || []).flatMap((id) => {
+                      const m = staffById.get(id)
+                      if (!m) return []
+                      return venuesForPerson(ag, id, at).filter((v) => !memberInProperty(m, v))
+                    }))]
                     if (!vs.length) return null
                     return (
-                      <div style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.5, marginBottom: 7 }}>
+                      <div style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.5, marginBottom: 8 }}>
                         {t.willCoverAt} {vs.map((v) => propName(v, lang)).join(', ')}
                       </div>
                     )
                   })()}
-                  {/* Pills, wrapping, filled when on — the same reading as the
-                      people above. A column of five full-width rows pushed the
-                      venues below the fold of their own panel. */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {PROPERTIES.map((pp) => {
-                      const on = at.includes(pp.code)
-                      // the only untickable one is the last one left
-                      const locked = on && at.length === 1
-                      return (
-                        <button
-                          key={pp.code}
-                          type="button"
-                          onClick={() => (locked ? null : commit(on ? at.filter((v) => v !== pp.code) : [...at, pp.code]))}
-                          title={locked ? `${propName(pp.code, lang)} — ${t.properties}` : propName(pp.code, lang)}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '5px 10px', borderRadius: 999,
-                            fontSize: 12.5, fontWeight: 600,
-                            border: `1.5px solid ${on ? C.maroon : C.border}`,
-                            background: on ? C.maroon : C.card,
-                            color: on ? '#fff' : C.tl,
-                            cursor: locked ? 'default' : 'pointer',
-                          }}
-                        >
-                          {/* Always occupied, so a tick cannot change the width
-                              and re-wrap the row under the cursor. */}
-                          <span style={{ width: 12, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                            {on ? <Icon name="check" size={12} color="#fff" /> : null}
-                          </span>
-                          {propName(pp.code, lang)}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                  <PeoplePicker
+                    C={C}
+                    t={t}
+                    lang={lang}
+                    staff={staff}
+                    listMax={assignAt.maxH}
+                    autoFocus
+                    chosen={ag.people || []}
+                    onToggle={(id) => togglePerson(ag.key, id)}
+                    isVisiting={isVisiting}
+                    shift={ag.shift || ''}
+                    shiftOf={personShift}
+                    onSetShift={setPersonShift}
+                    venues={codes}
+                    venuesFor={(id) => venuesForPerson(ag, id, at)}
+                    onToggleVenue={(id, code) =>
+                      toggleVenueForPerson(ag.key, id, code, venuesForPerson(ag, id, at))}
+                  />
+                </>
               )
             })()}
           </div>
@@ -1947,7 +1877,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                       </span>
                     ))}
                     <span style={{ ...thCell, textAlign: 'center' }}>{t.assigned}</span>
-                    <span style={thCell}>{t.properties}</span>
                     <span style={thCell}>{t.time}</span>
                     <span style={thCell} />
                   </div>
@@ -2151,33 +2080,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             )}
                           </span>
 
-                          {/* A new job can be created at several venues in one go —
-                              the same round usually runs at all of them. An
-                              existing row is one job at one venue, and changing
-                              it MOVES that job, so it stays a single choice. */}
-                          {/* Text, not a control. Editing happens in the assign
-                              panel with the names, because who does a job and
-                              where it runs are one decision — and a dropdown in
-                              a cell this wide could not show its own answer. */}
-                          <span style={tdCell}>
-                            <button
-                              type="button"
-                              onClick={(e) => openAssign(e, g.key, 'venues')}
-                              style={{
-                                ...miniInput(C), textAlign: 'left', cursor: 'pointer',
-                                // wraps rather than truncates: which venues is the
-                                // whole question this column answers
-                                whiteSpace: 'normal', height: 'auto',
-                                fontSize: 11.5, lineHeight: 1.35, padding: '5px 8px',
-                              }}
-                            >
-                              {venuesOf(g).length
-                                ? venuesOf(g).map((v) => propName(v, lang)).join(', ')
-                                : '—'}
-                            </button>
-                          </span>
-
-
                           <TimeCell
                             C={C}
                             gKey={g.key}
@@ -2276,6 +2178,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 // every render, React remounted it, and the search text died on each keystroke.
 function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFocus = false, shift, shiftOf, onSetShift, venues, venuesFor, onToggleVenue, listMax }) {
   const [q, setQ] = useState('')
+  // Focused by hand, with preventScroll. The `autoFocus` attribute also scrolls
+  // the field into view, walking every scrollable ancestor up to the document —
+  // and the panel is fixed to the viewport and follows the row it belongs to, so
+  // the page moving under it took the panel up behind the header.
+  const search = useRef(null)
+  useEffect(() => {
+    if (autoFocus) search.current?.focus({ preventScroll: true })
+  }, [autoFocus])
   const needle = q.trim().toLowerCase()
   // Nothing is listed until something is typed. Forty names on screen is a wall
   // to read past; the people already picked stay, because that is the one thing
@@ -2296,12 +2206,19 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   // Former staff appear only if they are already on the job: there is a record to
   // show, but nobody would be assigning them.
   const byName = (a, b) => (a.name || '').localeCompare(b.name || '')
-  const suggested = needle ? [] : [...staff]
+  const everyone = [...staff]
     .filter((m) => !m.inactive || chosen.includes(m.id))
     .sort(byName)
-  // Ticked names keep their place in the alphabet — the list is fully on screen,
-  // so a selection cannot scroll out of sight. Under a search it can, which is
-  // what that rule was written for, so there they lead.
+  // The people on the job lead, then everybody else. Opening on the plain
+  // alphabet buried them: five names among thirty-five, each two lines tall now
+  // that every name carries its own venues, and the ones you came to check were
+  // wherever the alphabet happened to put them.
+  const onTheJob = [...picked].sort(byName)
+  const suggested = needle
+    ? []
+    : [...onTheJob, ...everyone.filter((m) => !chosen.includes(m.id))]
+  // Under a search the ticked names lead, because there they can scroll out of
+  // sight — which is the one thing that must not happen to a selection.
   const shown = needle ? [...picked, ...[...matches].sort(byName)] : suggested
 
   return (
@@ -2309,7 +2226,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
         <Icon name="search" size={15} color={C.faint} />
         <input
-          autoFocus={autoFocus}
+          ref={search}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={t.searchPerson}
@@ -2335,7 +2252,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
         maxHeight: Math.max(180, (listMax || 360) - 70), overflowY: 'auto', paddingRight: 2,
       }}>
         {staff.length === 0 && <span style={{ fontSize: 12.5, color: C.tl }}>{t.noStaffInScope}</span>}
-        {staff.length > 0 && !needle && picked.length === 0 && suggested.length === 0 && (
+        {staff.length > 0 && !needle && suggested.length === 0 && (
           <span style={{ fontSize: 12.5, color: C.faint }}>{t.typeToFindPerson}</span>
         )}
         {suggested.length > 0 && shift && (
@@ -2484,6 +2401,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
           )
         })}
       </div>
+
     </div>
   )
 }

@@ -42,6 +42,8 @@ const COMMON = {
 }
 
 const hasLatin = (s) => /[A-Za-z]/.test(s || '')
+// The only question that matters about a result: is any of it actually in Hindi?
+const hasHindi = (s) => /[ऀ-ॿ]/.test(s || '')
 
 async function googleTranslate(q, signal) {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(q)}`
@@ -82,9 +84,24 @@ export async function translateToHindi(text, signal) {
   try { mm = await myMemoryTranslate(q, signal) } catch (e) { if (e.name === 'AbortError') throw e }
   if (mm && !hasLatin(mm)) return mm
 
-  // return the best non-empty result we have, else give up
+  // Some Devanagari in it is a real translation that kept a term it had no word
+  // for — "अग्नि सुरक्षा SOP" — and is the best thing on offer.
   const best = gt || mm
-  if (best) return best
+  if (best && hasHindi(best)) return best
+
+  // Nothing came back in Hindi script at all. Two things do that, and the same
+  // answer serves both: the service handed the input straight back (it does
+  // that under load), or the source was never English. "mitti Gili Hai Jaise hi
+  // Sukh jayegi" is Hindi typed in Latin letters — the script is wrong, not the
+  // language, and a translator has nothing to say about it.
+  let tl = ''
+  try { tl = await transliterateToHindi(q, signal) } catch (e) { if (e.name === 'AbortError') throw e }
+  if (tl && hasHindi(tl)) return tl
+
+  // Returning the Latin text here is how a repair description came to sit in
+  // the Hindi column word for word — shown to staff under a Hindi heading, as
+  // though it had been translated for them. Failing is the honest answer: the
+  // caller stores null and the reader falls back to the source.
   throw new Error('translation failed')
 }
 
