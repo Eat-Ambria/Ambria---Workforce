@@ -1505,6 +1505,10 @@ function EditTextModal({ row, onClose, onSaved }) {
     title_hi: row.title_hi || '',
     description: row.description || '',
     description_hi: row.description_hi || '',
+    // Rows raised before priority existed have none. They read as 'normal'
+    // everywhere else, so the dialog opens on the same answer rather than on a
+    // blank that would save as one.
+    priority: row.priority || 'normal',
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -1517,6 +1521,7 @@ function EditTextModal({ row, onClose, onSaved }) {
       title_hi: form.title_hi.trim() || null,
       description: form.description.trim() || null,
       description_hi: form.description_hi.trim() || null,
+      priority: form.priority,
     }).eq('id', row.id)
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -1560,6 +1565,22 @@ function EditTextModal({ row, onClose, onSaved }) {
           onChange={(v) => setForm((f) => ({ ...f, description_hi: v }))}
         />
       )}
+      <Field label={t.priority}>
+        <select
+          style={inputStyle(C)}
+          value={form.priority}
+          onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+        >
+          {/* 'low' is retired — renderable, not offered. No request carries it
+              today, but a select whose current value is missing from its own
+              options does not show a blank: it shows the first one, and saves
+              it. Keeping the row's own value in the list means opening this
+              dialog can never change something you did not touch. */}
+          {[...new Set([form.priority, ...PRIO_CHOICES])].map((pk) => (
+            <option key={pk} value={pk}>{prioLabel(pk, t)}</option>
+          ))}
+        </select>
+      </Field>
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
     </Modal>
   )
