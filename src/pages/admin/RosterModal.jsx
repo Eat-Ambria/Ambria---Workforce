@@ -2058,7 +2058,14 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               {/* only a gapped set needs its days spelled out —
                                   a run has already named its ends */}
                               {chip.days && (
-                                <span style={{ fontSize: 10, color: C.tl, whiteSpace: 'nowrap' }}>
+                                <span style={{
+                                  // Larger and darker than the badge beside it.
+                                  // The badge names a rule; these are the actual
+                                  // days the work happens, and they were the
+                                  // smallest thing in the cell.
+                                  fontSize: 11.5, fontWeight: 700, color: C.text,
+                                  whiteSpace: 'nowrap',
+                                }}>
                                   {chip.days}
                                 </span>
                               )}
