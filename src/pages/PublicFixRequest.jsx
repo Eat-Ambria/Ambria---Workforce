@@ -380,6 +380,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  const [ticket, setTicket] = useState(null)   // the number to quote later
 
   // Loaded once and filtered in the browser: switching department should not
   // cost a round trip on a phone at the gate.
@@ -503,6 +504,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
     setBusy(false)
     if (err) { setError(hi ? 'भेजने में समस्या हुई। दोबारा कोशिश करें।' : 'Could not submit. Please try again.'); return }
     onSubmitted?.(data?.id)
+    setTicket(data?.id ?? null)
     setDone(true)
   }
 
@@ -516,8 +518,30 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
           <Icon name="check" size={30} color={C.green} />
         </div>
         <h2 style={{ fontSize: 19, fontWeight: 800 }}>{hi ? 'अनुरोध भेज दिया गया!' : 'Request submitted!'}</h2>
-        <p style={{ fontSize: 14, color: C.tl, marginTop: 6, lineHeight: 1.55 }}>
-          {hi ? 'धन्यवाद। आप नीचे सूची में इसका स्टेटस देख सकते हैं।' : 'Thank you. You can track its status in the list.'}
+
+        {/* The number, given the room it deserves — it is what somebody reads
+            out on the phone, and the only way to find this one request among
+            everybody else's. */}
+        {ticket != null && (
+          <div style={{
+            margin: '14px auto 0', maxWidth: 260, padding: '12px 16px',
+            background: C.maroonSoft, border: `1px solid ${C.maroon}33`, borderRadius: 14,
+          }}>
+            <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.maroon }}>
+              {hi ? 'आपका टिकट नंबर' : 'Your ticket number'}
+            </div>
+            <div style={{ fontSize: 34, fontWeight: 800, color: C.maroon, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
+              #{ticket}
+            </div>
+          </div>
+        )}
+
+        <p style={{ fontSize: 14, color: C.tl, marginTop: 12, lineHeight: 1.55 }}>
+          {ticket != null
+            ? (hi
+                ? 'इसे नोट कर लें। इसी नंबर से आप नीचे सूची में अपना अनुरोध ढूँढ सकते हैं।'
+                : 'Note it down. You can find this request by searching that number in the list.')
+            : (hi ? 'धन्यवाद। आप नीचे सूची में इसका स्टेटस देख सकते हैं।' : 'Thank you. You can track its status in the list.')}
         </p>
         <button type="button" onClick={onBack} style={addBtn(C)}>
           <Icon name="chevronLeft" size={18} color="#fff" /> {hi ? 'सूची पर वापस जाएँ' : 'Back to list'}
