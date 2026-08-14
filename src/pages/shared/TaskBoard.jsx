@@ -966,6 +966,12 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // reporter saying what was wrong — a request can carry both.
   const [resVoice, setResVoice] = useState(row.resolution_voice_url || '')
   const [reassigning, setReassigning] = useState(false) // admin editing the assignment
+  // The update thread. Loaded on open rather than with the board: most requests
+  // are never opened, and this is the only place it is read.
+  const [updates, setUpdates] = useState([])
+  const [upNote, setUpNote] = useState('')
+  const [upVoice, setUpVoice] = useState('')
+  const [posting, setPosting] = useState(false)
   const [editingText, setEditingText] = useState(false) // fixing the wording / the Hindi
   const [closing, setClosing] = useState(false)         // admin closing it out themselves
   // The panel opens below the fold of a scrolling modal, so the button looked
@@ -1079,6 +1085,34 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const canRemind = admin && overdue && !!row.assigned_to
 
   const [reminded, setReminded] = useState(false)
+
+  const loadUpdates = useCallback(async () => {
+    const { data } = await supabase
+      .from('work_board_updates')
+      .select('*')
+      .eq('board_id', row.id)
+      .order('created_at', { ascending: true })
+    setUpdates(data || [])
+  }, [row.id])
+  useEffect(() => { loadUpdates() }, [loadUpdates])
+
+  // One row in, and the trigger tells whoever is waiting. Nothing else about the
+  // request changes — an update is a message, not a status.
+  async function postUpdate() {
+    if (!upNote.trim() && !upVoice) return
+    setPosting(true); setErr('')
+    const { error } = await supabase.from('work_board_updates').insert({
+      board_id: row.id,
+      by_user: user.id,
+      by_name: personName(user, lang) || user.name || null,
+      note: upNote.trim() || null,
+      voice_url: upVoice || null,
+    })
+    setPosting(false)
+    if (error) { setErr(error.message); return }
+    setUpNote(''); setUpVoice('')
+    loadUpdates()
+  }
   async function remind() {
     setBusy(true); setErr('')
     // One a day. Checked against the table rather than local state, so a second
@@ -1454,6 +1488,81 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
             <VoiceRecorder folder="work-voice" value={resVoice} onChange={setResVoice} />
           </Field>
         </div>
+      )}
+
+      {/* Where the work stands, told to whoever asked for it. Written by an
+          admin only; read by anyone who can open the request, because the person
+          notified has to be able to see what they were notified about.
+          
+          Hidden outright when there is neither: no updates yet and no right to
+          write one is an empty heading. */}
+      {(admin || updates.length > 0) && (
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Icon name="mic" size={16} color={C.tl} />
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{t.updates}</span>
+          {updates.length > 0 && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.tl }}>{updates.length}</span>
+          )}
+        </div>
+
+        {updates.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: C.faint, marginBottom: 12 }}>{t.noUpdatesYet}</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+            {updates.map((u) => (
+              <div key={u.id} style={{
+                borderLeft: `3px solid ${C.border}`, paddingLeft: 11,
+              }}>
+                <div style={{ fontSize: 12, color: C.faint, marginBottom: 3 }}>
+                  <b style={{ color: C.tl, fontWeight: 700 }}>{u.by_name || '—'}</b>
+                  {' · '}{fmtDateTime(u.created_at)}
+                </div>
+                {u.note && (
+                  <div style={{ fontSize: 13.5, color: C.text, whiteSpace: 'pre-line', lineHeight: 1.5 }}>
+                    {u.note}
+                  </div>
+                )}
+                {u.voice_url && (
+                  <div style={{ marginTop: u.note ? 6 : 0 }}>
+                    <AudioPlayer src={u.voice_url} label={t.voiceNote} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {admin && (
+          <>
+            {/* Who it reaches, said before it is written rather than discovered
+                afterwards. A public request has no account behind it. */}
+            <div style={{ fontSize: 12.5, color: C.tl, marginBottom: 8 }}>
+              {row.posted_by && row.posted_by !== 'public'
+                ? <>{t.updateGoesTo} <b>{row.posted_by_name || row.posted_by}</b></>
+                : <span style={{ color: C.faint }}>{t.updatePublicNote}</span>}
+            </div>
+            <Field label={`${t.addUpdate} (${t.optional})`}>
+              <textarea
+                rows={2}
+                style={{ ...inputStyle(C), resize: 'vertical' }}
+                value={upNote}
+                placeholder={t.addUpdateHint}
+                onChange={(e) => setUpNote(e.target.value)}
+              />
+            </Field>
+            <VoiceRecorder value={upVoice} onChange={setUpVoice} folder="work_board" />
+            <Button
+              variant="primary"
+              disabled={posting || (!upNote.trim() && !upVoice)}
+              onClick={postUpdate}
+              style={{ marginTop: 10 }}
+            >
+              {posting ? t.saving : t.sendUpdate}
+            </Button>
+          </>
+        )}
+      </div>
       )}
 
       {/* assignee submits the completed work */}

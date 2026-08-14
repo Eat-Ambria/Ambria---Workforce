@@ -42,6 +42,10 @@ function meta(n, hi) {
     // it is late, not broken.
     case 'fix_reminder': return { icon: 'bell', link: '/task-board', title: hi ? 'याद दिलाया गया — यह अब भी बाकी है' : 'Reminder — this is still pending', body: item + who }
     case 'fix_approved': return { icon: 'check', link: '/task-board', title: hi ? 'आपका मरम्मत अनुरोध मंज़ूर हुआ' : 'Your repair was approved', body: item }
+    // An update on a request you are on — from the person who raised it, or the
+    // person doing it. Named, because "someone said something" is not a reason
+    // to open an app.
+    case 'fix_update': return { icon: 'mic', link: '/task-board', title: hi ? 'मरम्मत पर नया अपडेट' : 'New update on a repair', body: item + who }
     case 'fix_closed_by_admin': return { icon: 'check', link: '/task-board', title: hi ? 'एडमिन ने आपकी रिक्वेस्ट पूरी मार्क की' : 'Admin marked your repair complete', body: item }
     case 'valet_booking': return { icon: 'valet', link: '/valet', title: hi ? 'नई वैले बुकिंग' : 'New valet booking', body: item }
     case 'quiz_completed': return { icon: 'training', link: '/training', title: hi ? 'क्विज़ पूरा हुआ' : 'Quiz completed', body: item + who }

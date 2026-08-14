@@ -44,6 +44,7 @@ function render(n: Record<string, unknown>, lang: string) {
     fix_logged: ['Work done and logged', 'काम हो गया — दर्ज किया', 'task-board'],
     fix_reminder: ['Reminder — still pending', 'याद दिलाया — अब भी बाकी', 'task-board'],
     fix_approved: ['Your fix was approved', 'आपकी फिक्स मंज़ूर हुई', 'task-board'],
+    fix_update: ['New update on a repair', 'मरम्मत पर नया अपडेट', 'task-board'],
     valet_booking: ['New valet booking', 'नई वैले बुकिंग', 'valet'],
     quiz_completed: ['Quiz completed', 'क्विज़ पूरा हुआ', 'training'],
     training_assigned: ['New training assigned', 'नई ट्रेनिंग सौंपी गई', 'training'],
@@ -62,7 +63,7 @@ function render(n: Record<string, unknown>, lang: string) {
   const entry = M[n.type as string]
   const title = entry ? (hi ? entry[1] : entry[0]) : 'Ambria WorkForce'
   const path = entry ? entry[2] : 'dashboard'
-  const needsWho = ['task_done', 'task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'fix_logged', 'fix_reminder', 'quiz_completed'].includes(n.type as string)
+  const needsWho = ['task_done', 'task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'fix_logged', 'fix_reminder', 'quiz_completed', 'fix_update'].includes(n.type as string)
   return { title, body: item + (needsWho ? who : ''), url: BASE + path, tag: `${n.type}-${n.entity_id ?? ''}` }
 }
 

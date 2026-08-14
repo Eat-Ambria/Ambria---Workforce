@@ -8,14 +8,29 @@ import { useT, useLang } from '../../context/LangContext'
 import {
   MEASURED_ROLES, roleTag, expectedOccurrences, isAdminRole, canSeeAllProperties, scopedDepartment, DEPARTMENTS,
   PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName, TASK_STATUS,
-  FREQUENCY_MAP, frequencyLabel, dayName,
+  FREQUENCY_MAP, frequencyLabel, taskFrequency,
 } from '../../constants/org'
-import { Card, Loader, EmptyState, Button, SectionTitle, Tabs, ProgressBar, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, SectionTitle, inputStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
-import { pct, fmtDur, avgOf, sumBy, rateTone } from './analyticsUtils'
-import { Headline, StatusChip, MetricGuide } from './AnalyticsParts'
+import { pct, avgOf, sumBy, rateTone } from './analyticsUtils'
+import { Headline, MetricGuide } from './AnalyticsParts'
 import MissedWork from './MissedWork'
+
+// Missed work's own colour, matching the overdue accent the dashboard and the
+// task board already use for the same idea.
+const TR_ORANGE = '#EA580C'
+
+// Below this many scores, an average rating says more about who happened to be
+// rated than about the work. Three ratings move a whole point when a fourth
+// arrives, and a number that unstable should not be printed as a fact.
+const MIN_RATINGS = 5
+
+// What makes a job that job, to a completion record. The roster also keys on
+// area and time_block; task_completions carries neither, so two jobs differing
+// only in those merge here. Losing that distinction costs far less than losing
+// the history of every row that has ever been rewritten.
+const jobKey = (r) => [r.property, r.department, r.category, (r.title || '').trim()].join('|')
 
 // --- period windows ----------------------------------------------------------
 // All windows are half-open [from, to) in local time, converted to ISO for the
@@ -55,6 +70,8 @@ function periodRange(key, custom) {
   } else if (key === 'last_month') {
     from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     to = new Date(now.getFullYear(), now.getMonth(), 1)
+  } else if (key === 'today') {
+    from = startOfDay(now)
   } else { // 'quarter' — the last 90 days
     from = startOfDay(now)
     from.setDate(from.getDate() - 89)
@@ -90,7 +107,8 @@ export default function Analytics() {
   // three levels of narrowing, each one feeding the next
   const [propFilter, setPropFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')
-  const [tab, setTab] = useState('staff')
+  const [personFilter, setPersonFilter] = useState('all')   // 'all' | user id
+  const [missedFor, setMissedFor] = useState(null)          // staff row, for the Not-done list
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [data, setData] = useState(null)
@@ -120,10 +138,12 @@ export default function Analytics() {
         // recurring work and the completions it earned — everything else on this
         // page comes from completions alone, which cannot show an absence
         supabase.from('tasks')
-          .select('id, title, title_hi, category, week_day, week_days, skip_sunday, month_week, property, department, assignee_name')
+          .select('id, title, title_hi, category, week_day, week_days, skip_sunday, month_week, property, department, assigned_to, assignee_name')
           .limit(2000),
         supabase.from('task_completions')
-          .select('task_id, task_date')
+          // the job's own identity, so a completion is still findable after the
+          // row that produced it has been deleted and rewritten
+          .select('task_id, task_date, title, property, department, category')
           .gte('task_date', from.slice(0, 10))
           .lte('task_date', to.slice(0, 10))
           .limit(20000),
@@ -183,9 +203,6 @@ export default function Analytics() {
     return [...by.values()].sort((a, b) => b.day.localeCompare(a.day))
   }, [data, viewScope])
 
-  // The same completions, crossed the other way: one row per person, one column
-  // per day. Days ascend left to right because a week is read that way; people
-  // are ordered by how much they closed, so the grid opens on who is carrying it.
   // Owed vs credited, per recurring job. Anything with a shortfall is a miss —
   // and a job with zero completions and a real expectation is the loudest kind.
   const missedRows = useMemo(() => {
@@ -196,25 +213,31 @@ export default function Analytics() {
     // counted as owed when it has not happened yet
     to.setDate(to.getDate() - 1)
 
+    // Keyed on the job, not the row. A task row that was deleted and rewritten
+    // — three hundred of them were, cleaning up duplicates — takes its id with
+    // it, and every completion pointing at that id would read as work that
+    // never happened.
     const doneBy = new Map()
     ;(data.comps || []).forEach((c) => {
-      if (!doneBy.has(c.task_id)) doneBy.set(c.task_id, new Set())
-      doneBy.get(c.task_id).add(c.task_date)
+      const k = jobKey(c)
+      if (!doneBy.has(k)) doneBy.set(k, new Set())
+      doneBy.get(k).add(c.task_date)
     })
 
     return (data.allTasks || [])
-      .filter((task) => inViewScope(task, viewScope))
+      .filter((task) => inViewScope(task, viewScope)
+        && (personFilter === 'all' || task.assigned_to === personFilter))
       .map((task) => {
         const expected = expectedOccurrences(task, from, to)
         // distinct DATES, not rows: a task completed twice on one day was still
         // only owed once that day
-        const done = Math.min(doneBy.get(task.id)?.size || 0, expected)
+        const done = Math.min(doneBy.get(jobKey(task))?.size || 0, expected)
         return { task, expected, done, missed: expected - done }
       })
       .filter((r) => r.expected > 0)
       .sort((a, b) => b.missed - a.missed
         || (a.task.title || '').localeCompare(b.task.title || ''))
-  }, [data, viewScope])
+  }, [data, viewScope, personFilter])
 
   // the tab counts JOBS that fell short, not every recurring row
   const missedCount = useMemo(
@@ -222,37 +245,33 @@ export default function Analytics() {
     [missedRows]
   )
 
-  const personGrid = useMemo(() => {
-    // The rows come straight from completions, which know an id but not a role —
-    // so the same MEASURED_ROLES rule has to be applied here by looking the
-    // person up. Without it the super admin would be absent from the Staff tab
-    // and present in this grid, and the two would disagree in public.
-    const measured = new Set(
-      (data?.users || []).filter((u) => MEASURED_ROLES.includes(u.role)).map((u) => u.id)
-    )
-    const src = (data?.personDay || [])
-      .filter((r) => measured.has(r.assigned_to) && inViewScope(r, viewScope))
-    const days = [...new Set(src.map((r) => r.day))].sort()
-    const by = new Map()
-    src.forEach((r) => {
-      if (!by.has(r.assigned_to)) {
-        by.set(r.assigned_to, { id: r.assigned_to, name: r.assignee_name || r.assigned_to, total: 0, cells: {} })
-      }
-      const p = by.get(r.assigned_to)
-      p.cells[r.day] = (p.cells[r.day] || 0) + r.done
-      p.total += r.done
-    })
-    const people = [...by.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-    const perDay = Object.fromEntries(days.map((d) => [d, people.reduce((n, pp) => n + (pp.cells[d] || 0), 0)]))
-    return { days, people, perDay, total: people.reduce((n, pp) => n + pp.total, 0) }
-  }, [data, viewScope])
-
   // Staff and admins inside the current property/department selection. Admins
   // are measured because they are given tasks and close repairs; the super admin
   // is not, since this is their own report to read (see MEASURED_ROLES).
-  const scopedStaff = useMemo(() => (
+  // Everyone the property and department pickers leave. This is what the person
+  // picker offers — narrowing it by itself would leave the picker unable to
+  // offer anybody but the person already chosen.
+  const staffInScope = useMemo(() => (
     data ? data.users.filter((u) => MEASURED_ROLES.includes(u.role) && inViewScope(u, viewScope)) : []
   ), [data, viewScope])
+
+  // ...and what the rest of the page counts, once a person is chosen.
+  const scopedStaff = useMemo(() => (
+    personFilter === 'all' ? staffInScope : staffInScope.filter((u) => u.id === personFilter)
+  ), [staffInScope, personFilter])
+
+  const personOptions = useMemo(
+    () => [...staffInScope].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [staffInScope]
+  )
+
+  // A person the property/department pickers have just filtered out cannot stay
+  // selected, or the page would show one person's name above nobody's numbers.
+  useEffect(() => {
+    if (personFilter !== 'all' && staffInScope.length && !staffInScope.some((u) => u.id === personFilter)) {
+      setPersonFilter('all')
+    }
+  }, [staffInScope, personFilter])
 
   // The department picker.
   //
@@ -278,6 +297,25 @@ export default function Analytics() {
     return [...live, ...stragglers]
   }, [data, viewScope.property, lang])
 
+  // What each person was owed and did not deliver. Straight off missedRows,
+  // which already worked it out job by job — grouped here by whoever holds the
+  // row, so the staff table can carry it.
+  const missedByPerson = useMemo(() => {
+    const by = new Map()
+    missedRows.forEach((r) => {
+      if (r.missed <= 0) return
+      const id = r.task.assigned_to
+      if (!id) return                       // nobody's to miss
+      if (!by.has(id)) by.set(id, { total: 0, rows: [] })
+      const p = by.get(id)
+      p.total += r.missed
+      p.rows.push(r)
+    })
+    // worst first inside a person, so the modal opens on what matters
+    by.forEach((p) => p.rows.sort((a, b) => b.missed - a.missed))
+    return by
+  }, [missedRows])
+
   // ---- per-staff roll-up -----------------------------------------------------
   const staffRows = useMemo(() => {
     if (!data) return []
@@ -286,17 +324,19 @@ export default function Analytics() {
         const c = data.byAssignee.find((r) => r.assigned_to === s.id)
         const open = data.open.filter((o) => o.assigned_to === s.id)
         const completed = Number(c?.completed || 0)
+        const miss = missedByPerson.get(s.id)
         return {
           ...s,
           completed,
           onTimeRate: pct(Number(c?.on_time || 0), completed),
-          avgWork: avgOf(Number(c?.work_sum || 0), Number(c?.work_n || 0)),
           openNow: sumBy(open, 'open_n'),
           overdueNow: sumBy(open, 'overdue_n'),
+          missed: miss?.total || 0,
+          missedRows: miss?.rows || [],
         }
       })
       .sort((a, b) => b.completed - a.completed)
-  }, [data, scopedStaff])
+  }, [data, scopedStaff, missedByPerson])
 
   // ---- the head filter narrows the whole page, KPIs included -----------------
   // Heads offered in the picker. With no department chosen: everyone who covers
@@ -320,7 +360,6 @@ export default function Analytics() {
       return {
         completed: done,
         onTimeRate: pct(sumBy(rows, 'on_time'), done),
-        avgWork: avgOf(sumBy(rows, 'work_sum'), sumBy(rows, 'work_n')),
       }
     }
 
@@ -332,19 +371,40 @@ export default function Analytics() {
 
     const completed = sumBy(comps, 'completed')
     const prevRepairRows = data.prevRepairs.filter((r) => inViewScope(r, viewScope))
+
+    // How much of the work that was DUE actually happened. missedRows already
+    // works this out job by job for the "Not done" tab — expected occurrences
+    // against distinct days completed — so it only needs adding up. This is the
+    // question the page is opened with; on-time rate answers a later one.
+    const due = missedRows.reduce((n, r) => n + r.expected, 0)
+    const kept = missedRows.reduce((n, r) => n + r.done, 0)
+
+    // Ratings are averaged only once there are enough to average. Three scores
+    // across forty repairs is a number that moves a whole point when one more
+    // arrives, and reads as fact.
+    const ratingN = sumBy(repairRows, 'rating_n')
+
     return {
       prev: { ...prevOf(staffIds), repairs: sumBy(prevRepairRows, 'done') },
       completed,
+      due,
+      kept,
+      doneRate: pct(kept, due),
       onTimeRate: pct(sumBy(comps, 'on_time'), completed),
-      avgWork: avgOf(sumBy(comps, 'work_sum'), sumBy(comps, 'work_n')),
       repairs: sumBy(repairRows, 'done'),
-      avgRating: avgOf(sumBy(repairRows, 'rating_sum'), sumBy(repairRows, 'rating_n')),
+      ratingN,
+      avgRating: ratingN >= MIN_RATINGS ? avgOf(sumBy(repairRows, 'rating_sum'), ratingN) : null,
       overdueNow: sumBy(openRows, 'overdue_n'),
       openNow: sumBy(openRows, 'open_n'),
     }
-  }, [data, scopedStaff, viewScope])
+  }, [data, scopedStaff, viewScope, missedRows])
 
+  // Every period needs an entry here. The Headline reads this straight into a
+  // sentence, so a missing key is not a missing label — it is undefined, and
+  // .toLowerCase() on it takes the page down. The fallback makes the next one
+  // somebody forgets a wrong word instead of a white screen.
   const periodLabel = {
+    today: lang === 'hi' ? 'आज' : 'Today',
     week: lang === 'hi' ? 'इस हफ़्ते' : 'This week',
     month: lang === 'hi' ? 'इस महीने' : 'This month',
     last_month: lang === 'hi' ? 'पिछले महीने' : 'Last month',
@@ -352,13 +412,14 @@ export default function Analytics() {
     custom: customTo && customTo !== customFrom
       ? `${fmtDate(customFrom)} – ${fmtDate(customTo)}`
       : fmtDate(customFrom),
-  }[period]
+  }[period] || (lang === 'hi' ? 'इस अवधि में' : 'this period')
 
   const scopeLabel = viewScope.property
     ? propName(viewScope.property, lang)
     : (lang === 'hi' ? 'सभी प्रॉपर्टी' : 'all properties')
 
   const periods = [
+    { key: 'today', label: lang === 'hi' ? 'आज' : 'Today' },
     { key: 'week', label: lang === 'hi' ? 'यह हफ़्ता' : 'This Week' },
     { key: 'month', label: lang === 'hi' ? 'यह महीना' : 'This Month' },
     { key: 'last_month', label: lang === 'hi' ? 'पिछला महीना' : 'Last Month' },
@@ -375,23 +436,35 @@ export default function Analytics() {
         {lang === 'hi' ? 'विश्लेषण' : 'Analytics'}
       </SectionTitle>
 
-      {/* period selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {periods.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
-            style={{
-              flex: '1 1 120px', whiteSpace: 'nowrap', padding: '9px 14px', borderRadius: 999,
-              fontSize: 13.5, fontWeight: 600,
-              background: period === p.key ? C.maroon : C.card,
-              color: period === p.key ? '#fff' : C.tl,
-              border: `1px solid ${period === p.key ? C.maroon : C.border}`,
-            }}
-          >
-            {p.label}
-          </button>
-        ))}
+      {/* One setting with five values, drawn as one object rather than five
+          pills stretched edge to edge. Scrolls sideways on a phone instead of
+          wrapping to two rows of uneven widths. */}
+      <div style={{
+        display: 'flex', gap: 2, marginBottom: 16, padding: 3,
+        background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12,
+        overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+      }}>
+        {periods.map((p) => {
+          const on = period === p.key
+          return (
+            <button
+              key={p.key}
+              onClick={() => setPeriod(p.key)}
+              aria-pressed={on}
+              style={{
+                flex: '1 0 auto', whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 9,
+                fontSize: 13.5, fontWeight: on ? 700 : 600,
+                background: on ? C.card : 'transparent',
+                color: on ? C.maroon : C.tl,
+                border: 'none',
+                boxShadow: on ? C.shadow : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {p.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Chosen dates. Leaving "to" empty means that single day — which is the
@@ -431,8 +504,9 @@ export default function Analytics() {
         </div>
       )}
 
-      {/* property -> department -> head. Each picker narrows the one below it,
-          and all three narrow the summary, the head list and the staff list. */}
+      {/* property -> department -> person. Each picker narrows the one to its
+          right, and all three narrow everything below: the summary, the staff
+          table, the day breakdown, the person grid and the missed work. */}
       {!loading && !err && (
         <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -462,6 +536,25 @@ export default function Analytics() {
                 ))}
               </select>
             </div>
+            {/* One person, and the whole page reads as theirs. Only the people
+                the two pickers above have left, so it can never offer somebody
+                whose numbers would come back empty. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 200px' }}>
+              <Icon name="user" size={16} color={C.tl} />
+              <select
+                style={inputStyle(C)}
+                value={personFilter}
+                onChange={(e) => { setPersonFilter(e.target.value); setExpanded(null) }}
+                aria-label={lang === 'hi' ? 'स्टाफ़' : 'Staff'}
+              >
+                <option value="all">
+                  {(lang === 'hi' ? 'स्टाफ़' : 'Staff')} — {t.all} ({personOptions.length})
+                </option>
+                {personOptions.map((u) => (
+                  <option key={u.id} value={u.id}>{personName(u, lang)}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
         </div>
@@ -487,77 +580,46 @@ export default function Analytics() {
         <Loader label={t.loading} />
       ) : (
         <>
-          <Headline C={C} lang={lang} totals={totals}
-                    periodLabel={periodLabel} scopeLabel={scopeLabel}
-                    onOverdueClick={totals.overdueNow ? () => setTaskList('overdue') : undefined} />
-
-          {/* organisation summary */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <Kpi C={C} icon="check" tone={C.green} value={totals.completed}
-                 label={lang === 'hi' ? 'टास्क पूरे' : 'Tasks completed'}
-                 delta={deltaPct(totals.completed, totals.prev.completed)} upIsGood />
-            <Kpi C={C} icon="clock" tone={rateTone(totals.onTimeRate, C)} value={`${totals.onTimeRate}%`}
-                 label={lang === 'hi' ? 'समय पर' : 'On time'}
-                 delta={deltaPoints(totals.onTimeRate, totals.prev.onTimeRate)} upIsGood suffix="pp" />
-            <Kpi C={C} icon="refresh" tone={C.blue} value={fmtDur(totals.avgWork)}
-                 label={lang === 'hi' ? 'औसत समय' : 'Avg time per task'}
-                 delta={deltaPct(totals.avgWork, totals.prev.avgWork)} />
-            <Kpi C={C} icon="taskBoard" tone={C.cyan} value={totals.repairs}
-                 label={lang === 'hi' ? 'मरम्मत पूरी' : 'Repairs done'}
-                 delta={deltaPct(totals.repairs, totals.prev.repairs)} upIsGood />
-            <Kpi C={C} icon="star" tone={C.yellow}
-                 value={totals.avgRating ? totals.avgRating.toFixed(1) : '—'}
-                 label={lang === 'hi' ? 'औसत रेटिंग' : 'Avg work rating'} />
-            <Kpi C={C} icon="warning" tone={C.red} value={totals.overdueNow}
-                 label={lang === 'hi' ? 'अभी ओवरड्यू' : 'Overdue now'}
-                 onClick={totals.overdueNow ? () => setTaskList('overdue') : undefined} />
-            <Kpi C={C} icon="tasks" tone={C.maroon} value={totals.openNow}
-                 label={lang === 'hi' ? 'अभी बाकी' : 'Open now'}
-                 onClick={totals.openNow ? () => setTaskList('open') : undefined} />
-          </div>
-
-          <Tabs
-            tabs={[
-              { key: 'staff', label: `${lang === 'hi' ? 'स्टाफ़' : 'Staff'} (${staffRows.length})` },
-              { key: 'byDay', label: `${lang === 'hi' ? 'दिन-वार' : 'By day'} (${dayRows.length})` },
-              { key: 'byPerson', label: `${lang === 'hi' ? 'कौन, किस दिन' : 'Who, which day'} (${personGrid.people.length})` },
-              { key: 'missed', label: `${lang === 'hi' ? 'नहीं हुआ' : 'Not done'} (${missedCount})` },
-            ]}
-            active={tab}
-            onChange={setTab}
+          <Headline
+            C={C} lang={lang} totals={totals}
+            periodLabel={periodLabel} scopeLabel={scopeLabel}
+            onOverdue={totals.overdueNow ? () => setTaskList('overdue') : undefined}
+            onOpen={totals.openNow ? () => setTaskList('open') : undefined}
           />
 
-          {tab === 'missed' && (
-            missedCount === 0
+          {/* The shape of the period, drawn. A table of counts per day makes you
+              read fourteen numbers to see it. */}
+          <Trend C={C} lang={lang} rows={dayRows} />
+
+          {/* Two questions, each with its name on it. This was four tabs the
+              reader had to open to find out which one held the answer. */}
+          <Section C={C} title={lang === 'hi' ? 'कौन पीछे है' : 'Who is behind'}
+                   count={staffRows.length}>
+            {staffRows.length === 0 ? <EmptyState icon={null} title={t.noData} /> : (
+              <div>
+                <StaffHeader C={C} lang={lang} />
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {staffRows.map((sr) => (
+                    <StaffRow key={sr.id} C={C} lang={lang} s={sr} onOpenMissed={setMissedFor} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </Section>
+
+          <Section C={C} title={lang === 'hi' ? 'कौन-सा काम छूट रहा है' : 'What keeps slipping'}
+                   count={missedCount}>
+            {missedCount === 0
               ? <EmptyState icon={null} title={lang === 'hi' ? 'सब कुछ समय पर हुआ' : 'Nothing was missed'}
                   hint={lang === 'hi'
                     ? 'इस अवधि में हर दोहराने वाला काम अपनी बार पूरा हुआ।'
                     : 'Every recurring job was completed as often as it was due in this period.'} />
-              : <MissedWork lang={lang} t={t} rows={missedRows} periodLabel={periodLabel} />
-          )}
+              : <MissedWork lang={lang} t={t} rows={missedRows} periodLabel={periodLabel} />}
+          </Section>
 
-          {tab === 'byPerson' && (
-            personGrid.people.length === 0
-              ? <EmptyState icon={null} title={t.noData} hint={lang === 'hi'
-                  ? 'जिस दिन कोई काम पूरा करेगा, वह यहाँ अपने आप आ जाएगा।'
-                  : 'A person appears here as soon as they complete work.'} />
-              : <PersonDayGrid C={C} lang={lang} grid={personGrid} />
-          )}
-
-          {tab === 'byDay' && (
-            dayRows.length === 0
-              ? <EmptyState icon={null} title={t.noData} hint={lang === 'hi'
-                  ? 'जिस दिन कोई काम पूरा होगा, वह यहाँ अपने आप आ जाएगा।'
-                  : 'A day appears here as soon as work is completed on it.'} />
-              : <DayTable C={C} lang={lang} t={t} rows={dayRows} />
-          )}
-
-          {tab === 'staff' && (
-            staffRows.length === 0 ? <EmptyState icon={null} title={t.noData} /> : (
-              <div style={{ display: 'grid', gap: 10 }}>
-                {staffRows.map((s) => <StaffRow key={s.id} C={C} lang={lang} s={s} />)}
-              </div>
-            )
+          {missedFor && (
+            <PersonMissedModal C={C} lang={lang} t={t} person={missedFor}
+                               onClose={() => setMissedFor(null)} />
           )}
 
           {taskList && (
@@ -577,244 +639,169 @@ export default function Analytics() {
   )
 }
 
-// percentage change; null when there is nothing to compare against
 // The roster is written by frequency, so the record of it reads the same way.
 const DAY_COLS = ['daily', 'alternate', 'weekly', 'monthly']
 
-// Sequential, one hue (the brand maroon), light -> dark. Magnitude, not identity,
-// so it is a ramp and not a set of categorical hues. Each step names the text
-// colour that clears 4.5:1 on it — verified, not guessed.
-const HEAT = [
-  { min: 0,  fill: 'transparent', ink: '#94A3B8', label: '0' },
-  { min: 1,  fill: '#FBEDF0',     ink: '#0F172A', label: '1-2' },
-  { min: 3,  fill: '#F0C3CE',     ink: '#0F172A', label: '3-5' },
-  { min: 6,  fill: '#DB8598',     ink: '#0F172A', label: '6-9' },
-  { min: 10, fill: '#B84A63',     ink: '#FFFFFF', label: '10-14' },
-  { min: 15, fill: '#8A2438',     ink: '#FFFFFF', label: '15+' },
-]
-const heatFor = (n) => [...HEAT].reverse().find((h) => n >= h.min) || HEAT[0]
-
-// Who closed how much, on which day.
-//
-// The count is printed in every cell, so the colour is a second reading of the
-// same number rather than the only one — which is what keeps it usable in
-// greyscale, in print, and for a colour-blind reader.
-function PersonDayGrid({ C, lang, grid }) {
-  const hi = lang === 'hi'
-  const { days, people, perDay, total } = grid
-  const NAME_W = 150
-  const CELL_W = 46
-  const gridCols = `${NAME_W}px repeat(${days.length}, ${CELL_W}px) 64px`
-  const head = {
-    padding: '8px 4px', fontSize: 9.5, fontWeight: 700, color: C.faint,
-    textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center',
-  }
-  const cell = { padding: '9px 4px', fontSize: 13, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }
-  const pin = (bg) => ({ position: 'sticky', left: 0, zIndex: 1, background: bg })
-  const dayNum = (iso) => String(iso).slice(8, 10)
-  const dayMon = (iso) => new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, 1)
-    .toLocaleString(hi ? 'hi-IN' : 'en-GB', { month: 'short' })
-
+// A named part of the page. The heading is the question the block answers —
+// four tabs called "Staff", "By day", "Who, which day" and "Not done" made the
+// reader open each one to find out which held the answer.
+function Section({ C, title, count, children }) {
   return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      {/* Legend — the grid carries two series of meaning (a number and a shade),
-          so what the shades mean has to be stated. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 14px', borderBottom: `1px solid ${C.border}` }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: C.tl, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {hi ? 'उस दिन पूरे हुए काम' : 'Tasks closed that day'}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {HEAT.slice(1).map((h) => (
-            <span key={h.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 16, height: 16, borderRadius: 4, background: h.fill, border: `1px solid ${C.border}` }} />
-              <span style={{ fontSize: 11, color: C.tl, marginRight: 6 }}>{h.label}</span>
-            </span>
-          ))}
-        </div>
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 10 }}>
+        <h3 style={{ fontSize: 15.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>
+          {title}
+        </h3>
+        {count != null && (
+          <span style={{
+            fontSize: 12, fontWeight: 700, color: C.tl,
+            background: C.cardAlt, border: `1px solid ${C.border}`,
+            borderRadius: 999, padding: '1px 9px',
+          }}>
+            {count}
+          </span>
+        )}
       </div>
-
-      <div style={{ overflowX: 'auto' }}>
-        <div style={{ minWidth: NAME_W + days.length * CELL_W + 64 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: gridCols, background: C.card, borderBottom: `1px solid ${C.borderStrong}` }}>
-            <span style={{ ...head, ...pin(C.card), textAlign: 'left', paddingLeft: 14 }}>{hi ? 'नाम' : 'Person'}</span>
-            {days.map((d, i) => (
-              <span key={d} style={head} title={d}>
-                {dayNum(d)}
-                {/* the month is named once, and again whenever it turns over */}
-                {(i === 0 || d.slice(5, 7) !== days[i - 1].slice(5, 7)) && (
-                  <span style={{ display: 'block', fontSize: 8, color: C.faint, letterSpacing: 0 }}>{dayMon(d)}</span>
-                )}
-              </span>
-            ))}
-            <span style={{ ...head, color: C.maroon }}>{hi ? 'कुल' : 'Total'}</span>
-          </div>
-
-          {people.map((p, i) => {
-            const rowBg = i % 2 ? C.cardAlt : C.card
-            return (
-              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: gridCols, borderTop: `1px solid ${C.border}`, background: rowBg }}>
-                <span style={{ ...cell, ...pin(rowBg), textAlign: 'left', paddingLeft: 14, fontWeight: 600, color: C.text, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.name}
-                </span>
-                {days.map((d) => {
-                  const n = p.cells[d] || 0
-                  const h = heatFor(n)
-                  return (
-                    <span
-                      key={d}
-                      title={`${p.name} · ${d} · ${n} ${hi ? 'काम' : 'tasks'}`}
-                      style={{ ...cell, background: h.fill, color: h.ink, fontWeight: n ? 700 : 400 }}
-                    >
-                      {n || '·'}
-                    </span>
-                  )
-                })}
-                <span style={{ ...cell, fontWeight: 800, color: C.maroon, borderLeft: `1px solid ${C.border}` }}>{p.total}</span>
-              </div>
-            )
-          })}
-
-          <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderTop: `1px solid ${C.borderStrong}`, background: C.cardAlt }}>
-            <span style={{ ...cell, ...pin(C.cardAlt), textAlign: 'left', paddingLeft: 14, fontSize: 10, fontWeight: 700, color: C.tl, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              {hi ? 'सब मिलाकर' : 'All'}
-            </span>
-            {days.map((d) => (
-              <span key={d} style={{ ...cell, fontWeight: 700, color: perDay[d] ? C.text : C.faint }}>{perDay[d] || '·'}</span>
-            ))}
-            <span style={{ ...cell, fontWeight: 800, fontSize: 15, color: C.maroon, borderLeft: `1px solid ${C.border}` }}>{total}</span>
-          </div>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function DayTable({ C, lang, t, rows }) {
-  const hi = lang === 'hi'
-  const GRID = '128px repeat(4, minmax(0,1fr)) 74px 84px'
-  const head = {
-    padding: '10px 9px', fontSize: 9.5, fontWeight: 700, color: C.faint,
-    textTransform: 'uppercase', letterSpacing: '0.11em', textAlign: 'center',
-  }
-  const cell = { padding: '12px 9px', fontSize: 14, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }
-  const total = rows.reduce((a, r) => ({
-    total: a.total + r.total, onTime: a.onTime + r.onTime,
-    daily: a.daily + r.daily, alternate: a.alternate + r.alternate,
-    weekly: a.weekly + r.weekly, monthly: a.monthly + r.monthly,
-  }), { total: 0, onTime: 0, daily: 0, alternate: 0, weekly: 0, monthly: 0 })
-  const pct = (r) => (r.total ? Math.round((r.onTime / r.total) * 100) : null)
-
-  return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ overflowX: 'auto' }}>
-        <div style={{ minWidth: 620 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: GRID, background: C.card }}>
-            <span style={{ ...head, textAlign: 'left', position: 'sticky', left: 0, background: C.card, zIndex: 1 }}>
-              {hi ? 'दिन' : 'Day'}
-            </span>
-            {DAY_COLS.map((k) => (
-              <span key={k} style={{ ...head, color: C.tl, boxShadow: `inset 0 -2px 0 ${FREQUENCY_MAP[k].ink}` }}>
-                {frequencyLabel(k, lang)}
-              </span>
-            ))}
-            <span style={{ ...head, boxShadow: `inset 0 -2px 0 ${C.maroon}` }}>{hi ? 'कुल' : 'Total'}</span>
-            <span style={head}>{hi ? 'समय पर' : 'On time'}</span>
-          </div>
-
-          {rows.map((r, i) => {
-            const p = pct(r)
-            return (
-              <div key={r.day} style={{ display: 'grid', gridTemplateColumns: GRID, borderTop: `1px solid ${C.border}`, background: i % 2 ? C.cardAlt : C.card }}>
-                <span style={{ ...cell, textAlign: 'left', position: 'sticky', left: 0, background: i % 2 ? C.cardAlt : C.card, zIndex: 1 }}>
-                  <span style={{ display: 'block', fontWeight: 600, color: C.text, fontSize: 13.5 }}>{fmtDate(r.day)}</span>
-                  <span style={{ display: 'block', fontSize: 11, color: C.faint }}>{dayName(isoDow(r.day), lang)}</span>
-                </span>
-                {DAY_COLS.map((k) => (
-                  <span key={k} style={{ ...cell, color: r[k] ? C.text : C.faint, fontWeight: r[k] ? 600 : 400 }}>
-                    {r[k] || 0}
-                  </span>
-                ))}
-                <span style={{ ...cell, fontWeight: 700, color: C.maroon, borderLeft: `1px solid ${C.border}` }}>{r.total}</span>
-                <span style={{ ...cell, fontWeight: 600, color: p === null ? C.faint : (p >= 90 ? C.green : p >= 70 ? C.yellow : C.red) }}>
-                  {p === null ? '—' : `${p}%`}
-                </span>
-              </div>
-            )
-          })}
-
-          <div style={{ display: 'grid', gridTemplateColumns: GRID, borderTop: `1px solid ${C.borderStrong}`, background: C.cardAlt }}>
-            <span style={{ ...cell, textAlign: 'left', position: 'sticky', left: 0, background: C.cardAlt, zIndex: 1, fontSize: 10, fontWeight: 700, color: C.tl, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              {hi ? `${rows.length} दिन` : `${rows.length} days`}
-            </span>
-            {DAY_COLS.map((k) => <span key={k} style={{ ...cell, fontWeight: 700, color: C.text }}>{total[k]}</span>)}
-            <span style={{ ...cell, fontWeight: 800, fontSize: 16, color: C.maroon, borderLeft: `1px solid ${C.border}` }}>{total.total}</span>
-            <span style={{ ...cell, fontWeight: 700, color: C.tl }}>
-              {total.total ? `${Math.round((total.onTime / total.total) * 100)}%` : '—'}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-// ISO weekday from a plain 'YYYY-MM-DD' — parsed by parts, because passing the
-// bare string to Date() is read as UTC and can land on the day before.
-function isoDow(iso) {
-  const [y, m, d] = String(iso).split('-').map(Number)
-  const js = new Date(y, (m || 1) - 1, d || 1).getDay()
-  return js === 0 ? 7 : js
-}
-
-function deltaPct(cur, prev) {
-  if (cur == null || prev == null || prev === 0) return null
-  return Math.round(((cur - prev) / prev) * 100)
-}
-// straight difference, for figures that are already percentages
-function deltaPoints(cur, prev) {
-  if (cur == null || prev == null) return null
-  return Math.round(cur - prev)
-}
-
-// Stat tile: label, value, and an optional delta against the previous period.
-// `upIsGood` decides the colour — a rise in "avg time" is bad, a rise in
-// "completed" is good — and the arrow always shows the actual direction.
-function Kpi({ C, icon, value, label, tone, delta, upIsGood = false, suffix = '%', onClick }) {
-  const show = delta != null && delta !== 0
-  const good = delta > 0 ? upIsGood : !upIsGood
-  return (
-    <Card onClick={onClick} style={{ padding: 14, cursor: onClick ? 'pointer' : 'default' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Icon name={icon} size={16} color={tone} />
-        <span style={{ fontSize: 19, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{value}</span>
-        {onClick && <Icon name="chevronRight" size={14} color={C.faint} style={{ marginLeft: 'auto' }} />}
-      </div>
-      <div style={{ fontSize: 12, color: C.tl, fontWeight: 600, marginTop: 4 }}>{label}</div>
-      {show && (
-        <div style={{ fontSize: 11, fontWeight: 700, marginTop: 3, color: good ? C.green : C.red }}>
-          {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}{suffix}
-          <span style={{ color: C.faint, fontWeight: 600 }}> vs prev</span>
-        </div>
-      )}
-    </Card>
-  )
-}
-
-function Stat({ C, label, value, tone }) {
-  return (
-    <div style={{ minWidth: 78 }}>
-      <div style={{ fontSize: 15.5, fontWeight: 800, color: tone || C.text, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      <div style={{ fontSize: 11, color: C.tl, fontWeight: 600, marginTop: 1 }}>{label}</div>
+      {children}
     </div>
   )
 }
 
-function StaffRow({ C, lang, s, compact }) {
+// Completions per day, drawn. Bars because the question is "which days were
+// quiet", and a column of fourteen numbers answers that only after you have read
+// all fourteen and held them in your head.
+//
+// THE AXIS STOPS AT THE 90th PERCENTILE. Scaled to the peak instead, this
+// period put nine of fourteen bars under 12px and one at full height: 10 Aug has
+// 70 completions against a median of 8. Everything quiet looked identical, which
+// is exactly what the chart is for telling apart. A bar past the ceiling is drawn
+// full height with a caret and its count, so the outlier is marked rather than
+// allowed to set the scale.
+const BAR_H = 84
+
+function Trend({ C, lang, rows }) {
   const hi = lang === 'hi'
-  const tone = rateTone(s.onTimeRate, C)
+  if (!rows.length) return null
+  const days = [...rows].sort((a, b) => a.day.localeCompare(b.day))
+  const totals = days.map((d) => d.total).sort((a, b) => a - b)
+  const at = (q) => totals[Math.min(totals.length - 1, Math.floor(totals.length * q))]
+  // the ceiling: high enough that a normal busy day still reaches the top, low
+  // enough that a freak day does not own the axis
+  const cap = Math.max(1, at(0.9))
+  const total = days.reduce((n, d) => n + d.total, 0)
+  const busiest = Math.max(...days.map((d) => d.total))
+  // Past a dozen bars the dates stop being readable, so every other one is
+  // labelled — the shape is what is left, which is the point anyway.
+  const step = days.length > 12 ? 2 : 1
+
+  return (
+    <Card style={{ padding: 16, marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
+          {hi ? 'हर दिन कितना दर्ज हुआ' : 'Recorded per day'}
+        </span>
+        <span style={{ fontSize: 12, color: C.faint }}>
+          {hi
+            ? `${days.length} दिन · कुल ${total} · सबसे ज़्यादा ${busiest}`
+            : `${days.length} days · ${total} in all · busiest ${busiest}`}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: BAR_H + 22 }}>
+        {days.map((d) => {
+          const over = d.total > cap
+          const h = d.total === 0 ? 3
+            : over ? BAR_H
+            : Math.max(6, Math.round((d.total / cap) * BAR_H))
+          const onTime = d.total ? Math.round((d.onTime / d.total) * 100) : 0
+          return (
+            <div key={d.day} style={{ flex: 1, minWidth: 0, display: 'flex',
+                                      flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              {/* the count, printed only where it adds something: the days that
+                  clip the axis, and the quiet days worth noticing */}
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, lineHeight: 1,
+                color: over ? C.text : 'transparent',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {d.total}
+              </span>
+              <div
+                title={`${d.day} · ${d.total} ${hi ? 'दर्ज' : 'recorded'} · ${onTime}% ${hi ? 'समय पर' : 'on time'}`}
+                style={{
+                  width: '100%', height: h, borderRadius: 4,
+                  background: d.total ? rateTone(onTime, C, d.total) : C.border,
+                  // a clipped bar is squared off at the top and carries a caret,
+                  // so it never reads as simply "the tallest"
+                  borderTopLeftRadius: over ? 1 : 4,
+                  borderTopRightRadius: over ? 1 : 4,
+                  boxShadow: over ? `inset 0 3px 0 0 ${C.text}` : 'none',
+                }}
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ display: 'flex', gap: 5, marginTop: 7 }}>
+        {days.map((d, i) => (
+          <span key={d.day} style={{
+            flex: 1, minWidth: 0, textAlign: 'center', fontSize: 10,
+            color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden',
+          }}>
+            {i % step === 0 ? `${d.day.slice(8)}/${d.day.slice(5, 7)}` : ''}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.55 }}>
+        {hi
+          ? `पट्टी की लंबाई = उस दिन दर्ज हुआ काम, रंग = कितना समय पर। पैमाना ${cap} पर रुकता है; उससे ऊपर वाले दिन पर ऊपर एक लकीर और उसका आंकड़ा है।`
+          : `Bar length is the work recorded that day, colour is how much of it was on time. The scale stops at ${cap}; a day above it is capped, ruled at the top and labelled.`}
+      </div>
+    </Card>
+  )
+}
+
+// The columns, named once. Kept beside the row that fills them so the two
+// cannot drift — a header that says "Open" above a column of Overdue is worse
+// than no header.
+export const STAFF_COLS = (hi) => [
+  { key: 'completed', label: hi ? 'पूरे' : 'Done' },
+  { key: 'onTimeRate', label: hi ? 'समय पर' : 'On time' },
+  { key: 'openNow', label: hi ? 'बाकी' : 'Open' },
+  { key: 'overdueNow', label: hi ? 'ओवरड्यू' : 'Overdue' },
+  { key: 'missed', label: hi ? 'नहीं हुआ' : 'Not done' },
+]
+const STAFF_GRID = 'minmax(0, 1fr) repeat(5, 68px)'
+
+export function StaffHeader({ C, lang }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: STAFF_GRID, gap: 10,
+      padding: '0 14px 8px', alignItems: 'end',
+    }}>
+      <span />
+      {STAFF_COLS(lang === 'hi').map((c) => (
+        <span key={c.key} style={{
+          fontSize: 10.5, fontWeight: 800, letterSpacing: '0.05em',
+          textTransform: 'uppercase', color: C.faint, textAlign: 'right',
+        }}>
+          {c.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function StaffRow({ C, lang, s, compact, onOpenMissed }) {
+  const hi = lang === 'hi'
+  // Grey unless there is something to judge — a person with nothing recorded is
+  // not a person scoring zero.
+  const tone = rateTone(s.onTimeRate, C, s.completed)
   const body = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-      <div style={{ minWidth: 0, flex: '1 1 160px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: STAFF_GRID, gap: 10, alignItems: 'center' }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>{personName(s, lang)}</span>
           {/* an admin doing fieldwork is now in this list; say so */}
@@ -829,19 +816,117 @@ function StaffRow({ C, lang, s, compact }) {
           {s.department ? ` · ${deptName(s.department, lang)}` : ''}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <Stat C={C} label={hi ? 'पूरे' : 'Done'} value={s.completed} />
-        <Stat C={C} label={hi ? 'समय पर' : 'On time'} value={`${s.onTimeRate}%`} tone={tone} />
-        <Stat C={C} label={hi ? 'औसत' : 'Avg'} value={fmtDur(s.avgWork)} />
-        <Stat C={C} label={hi ? 'बाकी' : 'Open'} value={s.openNow} />
-        <Stat C={C} label={hi ? 'ओवरड्यू' : 'Overdue'} value={s.overdueNow}
-              tone={s.overdueNow > 0 ? C.red : undefined} />
-      </div>
+      {/* "Avg" is gone with the tile it matched — it averaged the gap between
+          tapping Start and Complete, half of which are under a minute. */}
+      <Num C={C} value={s.completed} />
+      <Num C={C} value={s.completed ? `${s.onTimeRate}%` : '—'} tone={tone} muted={!s.completed} />
+      <Num C={C} value={s.openNow} />
+      <Num C={C} value={s.overdueNow} tone={s.overdueNow > 0 ? C.red : undefined} />
+      <Num C={C} value={s.missed} tone={s.missed > 0 ? TR_ORANGE : undefined}
+           onClick={s.missed > 0 && onOpenMissed ? () => onOpenMissed(s) : undefined} />
     </div>
   )
   return compact
     ? <div style={{ padding: '6px 2px' }}>{body}</div>
     : <Card style={{ padding: 14 }}>{body}</Card>
+}
+
+// One figure in the staff table. Right-aligned and tabular so the column reads
+// as a column; grey at zero so the eye lands on the rows that have something.
+// Underlined when it opens something, because a number that does nothing and a
+// number that does look identical otherwise.
+function Num({ C, value, tone, muted, onClick }) {
+  const dim = muted || value === 0 || value === '0'
+  const style = {
+    textAlign: 'right', fontSize: 15, fontWeight: 800,
+    fontVariantNumeric: 'tabular-nums',
+    color: dim ? C.faint : (tone || C.text),
+  }
+  if (!onClick) return <span style={style}>{value}</span>
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      style={{
+        ...style, background: 'transparent', border: 'none', padding: 0,
+        cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3,
+        textDecorationThickness: 1.5,
+      }}
+    >
+      {value}
+    </button>
+  )
+}
+
+// What one person was owed and did not deliver. The rows are already computed —
+// this only has to say them plainly: the job, how often it came round, and how
+// much of it is outstanding.
+function PersonMissedModal({ C, lang, t, person, onClose }) {
+  const hi = lang === 'hi'
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      maxWidth={560}
+      title={`${personName(person, lang)} — ${hi ? 'नहीं हुआ' : 'Not done'} (${person.missed})`}
+      footer={<Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>}
+    >
+      <div style={{ fontSize: 13, color: C.tl, lineHeight: 1.55, marginBottom: 12 }}>
+        {hi
+          ? 'हर काम कितनी बार आना था और कितनी बार दर्ज हुआ — फ़र्क़ ही "नहीं हुआ" है।'
+          : 'How many times each job came due against how many were recorded. The difference is what is outstanding.'}
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {person.missedRows.map(({ task, expected, done, missed }) => (
+          <div key={task.id} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 10,
+          }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                {hi && task.title_hi ? task.title_hi : task.title}
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap',
+                fontSize: 11.5, color: C.faint, marginTop: 4,
+              }}>
+                {/* The band gets its own colour. Buried in the grey run-on, the
+                    one word that changes how you read the row looked like the
+                    two that do not — and the list is sorted by count, so the
+                    bands interleave with nothing to group them by eye. */}
+                {(() => {
+                  const fk = taskFrequency(task)
+                  const f = FREQUENCY_MAP[fk] || {}
+                  return (
+                    <span style={{
+                      fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em',
+                      textTransform: 'uppercase', whiteSpace: 'nowrap',
+                      color: f.ink || C.tl, background: f.tint || C.cardAlt,
+                      borderRadius: 999, padding: '2px 8px',
+                    }}>
+                      {frequencyLabel(fk, lang)}
+                    </span>
+                  )
+                })()}
+                <span>
+                  {propName(task.property, lang)}
+                  {task.department ? ` · ${deptName(task.department, lang)}` : ''}
+                </span>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TR_ORANGE, fontVariantNumeric: 'tabular-nums' }}>
+                {missed}
+              </div>
+              <div style={{ fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                {done}/{expected} {hi ? 'हुआ' : 'done'}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  )
 }
 
 // Drill-down behind the "Overdue now" / "Open now" tiles. Those two are live

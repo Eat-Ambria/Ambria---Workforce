@@ -8,47 +8,125 @@ import { rateTone } from './analyticsUtils'
 // --- plain-language headline -------------------------------------------------
 // The one hero figure of the view: same sans as everything else, and
 // proportional figures — tabular digits make a big number look loose.
-export function Headline({ C, lang, totals, periodLabel, scopeLabel, onOverdueClick }) {
+export function Headline({ C, lang, totals, periodLabel, scopeLabel, onOverdue, onOpen }) {
   const hi = lang === 'hi'
-  const tone = rateTone(totals.onTimeRate, C)
-  const onTimeCount = Math.round((totals.onTimeRate / 100) * totals.completed)
+  // Nothing recorded, nothing to score. pct(0, 0) is 0 and rateTone(0) is red,
+  // so an untouched day used to render as a failed one.
+  const scored = totals.completed
+  const tone = rateTone(totals.onTimeRate, C, scored)
+
+  // Against the same length of time, one period back. Percentage points, not
+  // percent — a rate that moves from 80 to 84 has gained 4 points, and calling
+  // that "5% better" is the kind of arithmetic nobody can check at a glance.
+  const prevScored = totals.prev?.completed || 0
+  const shift = scored && prevScored ? totals.onTimeRate - totals.prev.onTimeRate : null
+
+  // Over the period, then true right now. Two different kinds of number, and
+  // mixing them in one row was half of why the old grid read as noise.
+  const period = [
+    { key: 'done', value: totals.completed, label: hi ? 'पूरे हुए' : 'Completed' },
+    {
+      key: 'due',
+      value: totals.due ? `${totals.kept}/${totals.due}` : '—',
+      label: hi ? 'दर्ज / आना था' : 'Recorded / due',
+      hint: hi ? 'बाकी "नहीं हुआ" में' : 'rest are in Not done',
+    },
+    { key: 'repairs', value: totals.repairs, label: hi ? 'मरम्मत' : 'Repairs' },
+  ]
+  const live = [
+    { key: 'overdue', value: totals.overdueNow, label: hi ? 'ओवरड्यू' : 'Overdue',
+      tone: totals.overdueNow ? C.red : null, onClick: onOverdue },
+    { key: 'open', value: totals.openNow, label: hi ? 'बाकी' : 'Open', onClick: onOpen },
+  ]
 
   return (
-    <Card style={{ padding: 18, marginBottom: 14, borderLeft: `4px solid ${tone}` }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 52, fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: '-0.03em' }}>
-          {totals.onTimeRate}%
+    <Card style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
+      {/* the rate, and what it is a rate OF, in a sentence */}
+      <div style={{ padding: 18, display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 46, fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: '-0.03em' }}>
+          {scored ? `${totals.onTimeRate}%` : '—'}
         </div>
-        <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+        <div style={{ minWidth: 0, flex: '1 1 240px' }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
-            {hi ? 'काम समय पर पूरा हुआ' : 'of work finished on time'}
+            {scored
+              ? (hi ? 'दर्ज हुआ काम समय पर पूरा हुआ' : 'of recorded work finished on time')
+              : (hi ? 'अभी कुछ दर्ज नहीं हुआ' : 'nothing recorded yet')}
           </div>
-          <div style={{ fontSize: 13, color: C.tl, marginTop: 3, lineHeight: 1.55 }}>
-            {hi
-              ? `${scopeLabel} पर ${periodLabel} — ${totals.completed} में से ${onTimeCount} टास्क समय पर मंज़ूर हुए।`
-              : `${onTimeCount} of ${totals.completed} approved tasks were on time, ${periodLabel.toLowerCase()} at ${scopeLabel}.`}
-            {totals.overdueNow > 0 && (
-              // clickable so the sentence leads straight to the tasks it names
-              <button
-                type="button"
-                onClick={onOverdueClick}
-                style={{
-                  background: 'transparent', padding: 0, font: 'inherit',
-                  color: C.red, fontWeight: 700,
-                  textDecoration: onOverdueClick ? 'underline' : 'none',
-                  textUnderlineOffset: 2, cursor: onOverdueClick ? 'pointer' : 'default',
-                }}
-              >
-                {hi
-                  ? ` अभी ${totals.overdueNow} टास्क ओवरड्यू हैं।`
-                  : ` ${totals.overdueNow} ${totals.overdueNow === 1 ? 'task is' : 'tasks are'} overdue right now.`}
-              </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: C.tl, lineHeight: 1.5 }}>
+              {periodLabel} · {scopeLabel}
+            </span>
+            {shift != null && shift !== 0 && (
+              <span style={{
+                fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap',
+                color: shift > 0 ? C.green : C.red,
+                background: shift > 0 ? C.gBg : C.rBg,
+                borderRadius: 999, padding: '2px 9px',
+              }}>
+                {shift > 0 ? '▲' : '▼'} {Math.abs(shift)}
+                {hi ? ' अंक' : 'pp'}
+                <span style={{ color: C.tl, fontWeight: 600 }}>
+                  {hi ? ' पिछली बार से' : ' vs last'}
+                </span>
+              </span>
             )}
           </div>
         </div>
       </div>
+
+      {/* the numbers behind it. Period figures, then a divider, then the two
+          that describe this moment rather than the period — an admin reading
+          "Overdue 3" needs to know it is not a count of things that went wrong
+          last month. */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 0,
+        borderTop: `1px solid ${C.border}`, background: C.cardAlt,
+      }}>
+        {period.map((m) => (
+          <Figure key={m.key} C={C} {...m} />
+        ))}
+        <div style={{ flex: '1 1 100%', height: 1, background: C.border }} />
+        <div style={{
+          flex: '1 1 100%', padding: '7px 18px 0', fontSize: 10.5, fontWeight: 800,
+          letterSpacing: '0.05em', textTransform: 'uppercase', color: C.faint,
+        }}>
+          {hi ? 'इस वक़्त' : 'Right now'}
+        </div>
+        {live.map((m) => (
+          <Figure key={m.key} C={C} {...m} />
+        ))}
+      </div>
     </Card>
   )
+}
+
+// One supporting number. Grey at zero, so a row of them stops shouting on a
+// quiet day; underlined only when it opens something.
+function Figure({ C, value, label, hint, tone, onClick }) {
+  const empty = !value || value === '—'
+  const inner = (
+    <>
+      <div style={{
+        fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums',
+        color: empty ? C.faint : (tone || C.text),
+        textDecoration: onClick ? 'underline' : 'none',
+        textUnderlineOffset: 3,
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 11.5, color: C.tl, fontWeight: 600, marginTop: 2 }}>{label}</div>
+      {hint && <div style={{ fontSize: 10.5, color: C.faint, marginTop: 1 }}>{hint}</div>}
+    </>
+  )
+  const style = {
+    flex: '1 1 130px', minWidth: 0, padding: '12px 18px 14px',
+    textAlign: 'left', background: 'transparent', border: 'none',
+    cursor: onClick ? 'pointer' : 'default',
+  }
+  return onClick
+    ? <button type="button" onClick={onClick} style={style}>{inner}</button>
+    : <div style={style}>{inner}</div>
 }
 
 export function StatusChip({ C, lang, rate }) {
