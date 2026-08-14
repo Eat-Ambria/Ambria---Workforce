@@ -396,16 +396,14 @@ export default function TaskBoard() {
         </div>
       )}
 
-      {/* name-wise filter — show only the requests assigned to one staff member */}
-      {/* The two narrowing filters, on one line. Both answer "show me less of
-          this list" rather than defining it, so neither earns a chip row.
-          They wrap instead of shrinking: two half-width selects on a phone are
-          worse than two stacked full-width ones. minWidth 0 is what allows the
-          shrink at all — a flex item defaults to its content width and would
-          push the row past the edge of the screen. */}
+      {/* The three narrowing filters. All answer "show me less of this list"
+          rather than defining it, so none earns a chip row.
+          Search gets its own line — it is typed into, and half a phone width is
+          not enough to read back what you typed. The two selects only ever show
+          a label, so they sit side by side at every width. minWidth 0 is what
+          lets them shrink at all: a flex item defaults to its content width and
+          would otherwise push the row off the screen. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-        {/* Ticket number or words. Sits with the other two because it narrows
-            the list the same way they do. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
           <Icon name="search" size={16} color={C.tl} style={{ flexShrink: 0 }} />
           <input
@@ -416,10 +414,14 @@ export default function TaskBoard() {
             aria-label={t.searchFix}
           />
         </div>
+        {/* The pair, on one line of their own — `1 1 0` rather than a pixel
+            basis, so they split whatever width there is instead of wrapping
+            when two 220s will not fit. */}
+        <div style={{ display: 'flex', gap: 10, flex: '1 1 320px', minWidth: 0 }}>
         {/* Priorities with nothing in them are left out: an option that returns
             an empty list is a dead end. 'low' is not offered on new requests,
             but old rows still carry it, so it appears only if one does. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 0', minWidth: 0 }}>
           <Icon name="warning" size={16} color={C.tl} style={{ flexShrink: 0 }} />
           <select
             style={inputStyle(C)}
@@ -437,7 +439,7 @@ export default function TaskBoard() {
         </div>
 
         {admin && memberOptions.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 0', minWidth: 0 }}>
             <Icon name="user" size={16} color={C.tl} style={{ flexShrink: 0 }} />
             <select
               style={inputStyle(C)}
@@ -450,6 +452,7 @@ export default function TaskBoard() {
             </select>
           </div>
         )}
+        </div>
       </div>
 
       {/* status tabs on wide screens; one labeled dropdown when tight (≤813px) */}

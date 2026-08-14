@@ -180,13 +180,22 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
             </div>
 
             {open && (
-              <div style={{ padding: '2px 16px 14px', display: 'grid', gap: 8 }}>
-                {p.tasks
-                  .slice()
-                  .sort((a, b) => (a.time_block || 'zz').localeCompare(b.time_block || 'zz'))
-                  .map((task) => (
-                    <TaskLine key={task.id} C={C} t={t} lang={lang} task={task} onOpen={onOpenTask} />
-                  ))}
+              <div style={{ padding: '2px 16px 14px', display: 'grid', gap: 14 }}>
+                {groupByBand(p.tasks).map(({ band, tasks }) => (
+                  <div key={band} style={{ display: 'grid', gap: 8 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
+                      textTransform: 'uppercase', color: (FREQUENCY_MAP[band] || {}).ink || C.tl,
+                    }}>
+                      {frequencyLabel(band, lang)}
+                      <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
+                    </div>
+                    {tasks.map((task) => (
+                      <TaskLine key={task.id} C={C} t={t} lang={lang} task={task} onOpen={onOpenTask} />
+                    ))}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -265,13 +274,34 @@ function Tally({ state, label, n, size = 'md' }) {
   )
 }
 
+// A person's jobs, split by how often each one runs and kept in the band order
+// the rest of the app uses — daily first, the monthly audit last, which is the
+// order the work arrives in. Bands nobody has work in are left out.
+//
+// Within a band, by time. Jobs with no window sort after the timed ones rather
+// than to the top, where a blank would push a 6 AM round down the list.
+const BANDS = ['daily', 'dailyMS', 'alternate', 'alternateMS', 'weekly', 'sunday', 'monthly']
+function groupByBand(tasks) {
+  const by = new Map()
+  for (const task of tasks || []) {
+    const band = taskFrequency(task)
+    if (!by.has(band)) by.set(band, [])
+    by.get(band).push(task)
+  }
+  return BANDS
+    .filter((band) => by.has(band))
+    .map((band) => ({
+      band,
+      tasks: by.get(band).sort((a, b) => (a.time_block || 'zz').localeCompare(b.time_block || 'zz')),
+    }))
+}
+
 // One job, and whether it is done. A tick beats the word "completed" repeated
 // down a list — the eye finds the ones that are NOT ticked.
 function TaskLine({ C, t, lang, task, onOpen }) {
   const done = task.status === TASK_STATUS.COMPLETED
   const doing = task.status === TASK_STATUS.IN_PROGRESS
   const tone = done ? C.green : doing ? C.yellow : '#475569'
-  const fk = taskFrequency(task)
   return (
     <div
       role={onOpen ? 'button' : undefined}
@@ -295,11 +325,14 @@ function TaskLine({ C, t, lang, task, onOpen }) {
         <span style={{ color: done ? C.tl : C.text, textDecoration: done ? 'line-through' : 'none' }}>
           {lang === 'hi' && task.title_hi ? task.title_hi : task.title}
         </span>
-        <span style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginTop: 2, fontSize: 12, color: C.tl }}>
-          {task.time_block && <span>{task.time_block}</span>}
-          <span style={{ color: (FREQUENCY_MAP[fk] || {}).ink }}>{frequencyLabel(fk, lang)}</span>
-          {doing && <span style={{ color: C.yellow, fontWeight: 700 }}>{t.inProgress}</span>}
-        </span>
+        {/* No frequency here any more — the heading above the group says it,
+            and repeating it on every line was the only thing on most of them. */}
+        {(task.time_block || doing) && (
+          <span style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginTop: 2, fontSize: 12, color: C.tl }}>
+            {task.time_block && <span>{task.time_block}</span>}
+            {doing && <span style={{ color: C.yellow, fontWeight: 700 }}>{t.inProgress}</span>}
+          </span>
+        )}
       </span>
       {onOpen && (
         <Icon name="chevronRight" size={15} color={C.faint} style={{ marginLeft: 'auto', flexShrink: 0, marginTop: 2 }} />
