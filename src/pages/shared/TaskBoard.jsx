@@ -1086,6 +1086,12 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   const [reminded, setReminded] = useState(false)
 
+  // An update needs somebody to reach. A request from the public link has no
+  // account behind it — posted_by is the literal string 'public' — and the
+  // tracker those people read does not show the thread, so there is nowhere for
+  // it to land. No recipient, no box.
+  const canUpdate = admin && !!row.posted_by && row.posted_by !== 'public'
+
   const loadUpdates = useCallback(async () => {
     const { data } = await supabase
       .from('work_board_updates')
@@ -1496,7 +1502,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           
           Hidden outright when there is neither: no updates yet and no right to
           write one is an empty heading. */}
-      {(admin || updates.length > 0) && (
+      {(canUpdate || updates.length > 0) && (
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <Icon name="mic" size={16} color={C.tl} />
@@ -1533,14 +1539,12 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           </div>
         )}
 
-        {admin && (
+        {canUpdate && (
           <>
             {/* Who it reaches, said before it is written rather than discovered
-                afterwards. A public request has no account behind it. */}
+                afterwards. */}
             <div style={{ fontSize: 12.5, color: C.tl, marginBottom: 8 }}>
-              {row.posted_by && row.posted_by !== 'public'
-                ? <>{t.updateGoesTo} <b>{row.posted_by_name || row.posted_by}</b></>
-                : <span style={{ color: C.faint }}>{t.updatePublicNote}</span>}
+              {t.updateGoesTo} <b>{row.posted_by_name || row.posted_by}</b>
             </div>
             <Field label={`${t.addUpdate} (${t.optional})`}>
               <textarea
