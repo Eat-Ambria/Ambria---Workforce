@@ -192,6 +192,26 @@ export default function MyTasks() {
   ]
   const sorted = [...filtered].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
 
+  // Split by how often each job runs, in the order the day runs them. Status
+  // still leads inside a band — something already started belongs at the top of
+  // its group — and after that, by time, with untimed jobs last rather than
+  // first, where a blank would push a 9 AM round below them.
+  const BANDS = ['daily', 'dailyMS', 'alternate', 'alternateMS', 'weekly', 'sunday', 'monthly']
+  const bands = useMemo(() => {
+    const by = new Map()
+    for (const task of sorted) {
+      const band = taskFrequency(task)
+      if (!by.has(band)) by.set(band, [])
+      by.get(band).push(task)
+    }
+    return BANDS.filter((b) => by.has(b)).map((band) => ({
+      band,
+      tasks: by.get(band).sort((a, b) => (order.indexOf(a.status) - order.indexOf(b.status))
+        || (a.time_block || 'zz').localeCompare(b.time_block || 'zz')),
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted])
+
   return (
     <div>
       <SectionTitle>{t.myTasks}</SectionTitle>
@@ -241,10 +261,27 @@ export default function MyTasks() {
       ) : sorted.length === 0 ? (
         <EmptyState icon={null} title={emptyTitle} hint={hiddenByFilter ? t.tryClearFilters : undefined} />
       ) : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {sorted.map((task) => (
-            <TaskRow key={task.id} task={task} C={C} t={t} today={today} hi={lang === 'hi'}
-              showVenue={showVenue} onOpen={() => setActive(task)} />
+        <div style={{ display: 'grid', gap: 18 }}>
+          {bands.map(({ band, tasks }) => (
+            <div key={band} style={{ display: 'grid', gap: 12 }}>
+              {/* Only worth a heading when there is more than one band on
+                  screen — under a frequency chip the list is already that one
+                  band, and the chip above says so. */}
+              {bands.length > 1 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  fontSize: 11.5, fontWeight: 800, letterSpacing: '0.05em',
+                  textTransform: 'uppercase', color: (FREQUENCY_MAP[band] || {}).ink || C.tl,
+                }}>
+                  {frequencyLabel(band, lang)}
+                  <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
+                </div>
+              )}
+              {tasks.map((task) => (
+                <TaskRow key={task.id} task={task} C={C} t={t} today={today} hi={lang === 'hi'}
+                  showVenue={showVenue} onOpen={() => setActive(task)} />
+              ))}
+            </div>
           ))}
         </div>
       )}
