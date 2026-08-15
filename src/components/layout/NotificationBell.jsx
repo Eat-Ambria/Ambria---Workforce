@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { pendingNotification } from '../../lib/pendingNotification'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -125,15 +126,13 @@ export default function NotificationBell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // arrived with ?n= — open it, then take the parameter out of the address bar
-  // so a refresh does not reopen it
+  // Opened from a closed app. The id was taken from the url in main.jsx before
+  // React mounted — by now the router has been through a redirect or two and the
+  // query string is long gone.
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search)
-    const id = q.get('n')
+    const id = pendingNotification.id
     if (!id) return
-    q.delete('n')
-    const rest = q.toString()
-    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''))
+    pendingNotification.id = null      // once only, however often this remounts
     openById(id)
   }, [openById])
 

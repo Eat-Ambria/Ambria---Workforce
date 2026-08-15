@@ -8,6 +8,7 @@ import { ThemeProvider } from './context/ThemeContext.jsx'
 import { LangProvider } from './context/LangContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ConfirmProvider } from './components/common/ConfirmDialog.jsx'
+import { captureNotificationParam } from './lib/pendingNotification'
 import './index.css'
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,10 @@ registerSW({
 
 // base path for GitHub Pages (must match vite.config base)
 const BASENAME = '/Ambria---Workforce'
+
+// A tapped push opened us at ?n=<id>. Taken now, before createRoot, because a
+// redirect during auth would rewrite the url and lose it — see the module.
+captureNotificationParam()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
