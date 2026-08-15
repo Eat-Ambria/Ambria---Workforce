@@ -28,10 +28,19 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const client of all) {
-      if ('focus' in client) {
-        if ('navigate' in client) { try { await client.navigate(url) } catch (e) { /* ignore */ } }
-        return client.focus()
+      if (!('focus' in client)) continue
+      // navigate() is refused on a client this worker does not control — which is
+      // every window that was already open when it installed. It used to be the
+      // only attempt, so the catch swallowed the refusal and the app came to the
+      // front still showing whatever it was showing.
+      let routed = false
+      if ('navigate' in client) {
+        try { await client.navigate(url); routed = true } catch (e) { /* not ours to navigate */ }
       }
+      // Either way, tell the app where to go. An open SPA can route itself
+      // without a reload, and this is the path that actually works above.
+      if (!routed) client.postMessage({ type: 'ambria:open', url })
+      return client.focus()
     }
     if (self.clients.openWindow) return self.clients.openWindow(url)
   })())

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -105,6 +106,50 @@ export default function NotificationBell() {
     if (issueStatus) state.issueStatus = issueStatus
     navigate(link, Object.keys(state).length ? { state } : undefined)
   }
+
+  // Open whatever a tapped push named. Two ways in, one handler:
+  //
+  //   ?n=<id>   the app was closed and the worker opened it at that url
+  //   postMessage  the app was already open, so the worker handed it the url
+  //     instead — see push-sw.js, where navigate() is refused on any window the
+  //     worker does not control
+  //
+  // openById reuses openItem, so a push and a tap on the bell land in exactly
+  // the same place. `busy` stops a re-render from opening it twice.
+  const openingRef = useRef(null)
+  const openById = useCallback(async (id) => {
+    if (!id || openingRef.current === id) return
+    openingRef.current = id
+    const { data } = await supabase.from('notifications').select('*').eq('id', id).maybeSingle()
+    if (data) openItem(data)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // arrived with ?n= — open it, then take the parameter out of the address bar
+  // so a refresh does not reopen it
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const id = q.get('n')
+    if (!id) return
+    q.delete('n')
+    const rest = q.toString()
+    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''))
+    openById(id)
+  }, [openById])
+
+  // already open when the push was tapped
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined
+    const onMsg = (e) => {
+      if (e.data?.type !== 'ambria:open' || !e.data.url) return
+      const id = new URL(e.data.url, window.location.origin).searchParams.get('n')
+      // a fresh tap on the same notification should open it again
+      openingRef.current = null
+      if (id) openById(id)
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [openById])
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>

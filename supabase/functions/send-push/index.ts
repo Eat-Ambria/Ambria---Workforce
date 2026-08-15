@@ -64,7 +64,11 @@ function render(n: Record<string, unknown>, lang: string) {
   const title = entry ? (hi ? entry[1] : entry[0]) : 'Ambria WorkForce'
   const path = entry ? entry[2] : 'dashboard'
   const needsWho = ['task_done', 'task_submitted', 'task_issue', 'fix_new', 'fix_approval', 'fix_logged', 'fix_reminder', 'quiz_completed', 'fix_update'].includes(n.type as string)
-  return { title, body: item + (needsWho ? who : ''), url: BASE + path, tag: `${n.type}-${n.entity_id ?? ''}` }
+  // The notification's own id rides along, so the tap can open the exact task or
+  // request rather than the page it lives on. The app reads ?n= on arrival, and
+  // the service worker hands the same url to an already-open window.
+  const url = BASE + path + (n.id ? `?n=${n.id}` : '')
+  return { title, body: item + (needsWho ? who : ''), url, tag: `${n.type}-${n.entity_id ?? ''}` }
 }
 
 Deno.serve(async (req) => {

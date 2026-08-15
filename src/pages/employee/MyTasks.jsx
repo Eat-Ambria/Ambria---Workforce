@@ -133,11 +133,15 @@ export default function MyTasks() {
   }, [location.state])
 
   // deep-link from a notification: open the exact task by id
+  // Guarded on the navigation, not the id. Remembering the id meant the second
+  // tap on the same notification was ignored for as long as the page lived;
+  // location.key is new for every navigation and unchanged across re-renders,
+  // which is exactly the difference that matters here.
   const focusedRef = useRef(null)
   useEffect(() => {
     const id = location.state?.focusTask
-    if (!id || focusedRef.current === id) return
-    focusedRef.current = id
+    if (!id || focusedRef.current === location.key) return
+    focusedRef.current = location.key
     ;(async () => {
       const { data } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle()
       if (data) setActive(data)
