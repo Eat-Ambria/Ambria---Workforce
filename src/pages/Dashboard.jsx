@@ -372,6 +372,7 @@ function AdminDashboard({ user }) {
 /* ---------------------------- EMPLOYEE ---------------------------- */
 function EmployeeDashboard({ user }) {
   const C = useColors()
+  const wide = useMediaQuery('(min-width: 900px)')
   const t = useT()
   const { lang } = useLang()
   const navigate = useNavigate()
@@ -476,9 +477,17 @@ function EmployeeDashboard({ user }) {
   return (
     <div>
       <SectionTitle>{t.welcome}, {personName(user, lang)}</SectionTitle>
-      {/* Two blocks instead of seven loose tiles: everything about my tasks in
-          one, and anything late in the other — so "what needs attention" is a
-          single place to look. */}
+      {/* Blocks instead of loose tiles: everything about my tasks in one,
+          anything late in the next, repairs in the third, training in the last —
+          so "what needs attention" is a single place to look.
+
+          Two to a row once there is room. Full width, Overdue was two figures at
+          opposite ends of a 1560px band, and the four blocks pushed everything
+          below the fold. */}
+      <div style={{
+        display: 'grid', gap: 14, alignItems: 'start',
+        gridTemplateColumns: wide ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+      }}>
       <StatBlock C={C} icon="tasks" tone={C.maroon} title={t.myTasks}
                  onView={() => navigate('/my-tasks', { state: { status: 'all' } })}>
         <StatCell C={C} icon="tasks" value={s.total} label={t.totalTasks} tone={C.maroon}
@@ -529,6 +538,22 @@ function EmployeeDashboard({ user }) {
         <StatCell C={C} icon="check" value={s.fixes?.done || 0} label={t.completed} tone={C.green}
                   onClick={() => navigate('/task-board', { state: { tab: 'completed' } })} />
       </StatBlock>
+
+      {/* The same block as the three above it. It used to be three cards in a
+          style of its own — bigger chips, bigger figures, a bare heading — which
+          made the section with the fewest numbers on it the loudest. */}
+      {s.training && s.training.total > 0 && (
+        <StatBlock C={C} icon="training" tone={C.indigo} title={t.training}
+                   onView={() => navigate('/training')}>
+          <StatCell C={C} icon="check" value={s.training.completed} label={t.completed} tone={TR_GREEN}
+                    onClick={() => navigate('/training', { state: { status: 'completed' } })} />
+          <StatCell C={C} icon="clock" value={s.training.pending} label={lang === 'hi' ? 'बाकी' : 'Pending'} tone={TR_YELLOW}
+                    onClick={() => navigate('/training', { state: { status: 'pending' } })} />
+          <StatCell C={C} icon="warning" value={s.training.overdue} label={lang === 'hi' ? 'समय पार' : 'Overdue'} tone={TR_ORANGE}
+                    onClick={() => navigate('/training', { state: { status: 'overdue' } })} />
+        </StatBlock>
+      )}
+      </div>
 
       {/* Priority tasks assigned by admin — high priority & still open */}
       {s.priorityTasks && s.priorityTasks.length > 0 && (
@@ -622,17 +647,6 @@ function EmployeeDashboard({ user }) {
         </>
       )}
 
-      {/* Training progress — completed (green) / pending (yellow) / overdue (orange) */}
-      {s.training && s.training.total > 0 && (
-        <>
-          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em', margin: '4px 0 12px' }}>{t.training}</div>
-          <div style={kpiGrid}>
-            <TrainTile C={C} icon="check" tone={TR_GREEN} value={s.training.completed} label={t.completed} onClick={() => navigate('/training', { state: { status: 'completed' } })} />
-            <TrainTile C={C} icon="clock" tone={TR_YELLOW} value={s.training.pending} label={lang === 'hi' ? 'बाकी' : 'Pending'} onClick={() => navigate('/training', { state: { status: 'pending' } })} />
-            <TrainTile C={C} icon="warning" tone={TR_ORANGE} value={s.training.overdue} label={lang === 'hi' ? 'समय पार' : 'Overdue'} onClick={() => navigate('/training', { state: { status: 'overdue' } })} />
-          </div>
-        </>
-      )}
     </div>
   )
 }
@@ -649,7 +663,6 @@ const FIX_PRIO_LABEL = { low: 'prioLow', normal: 'prioNormal', high: 'prioHigh',
 // fix-request status → existing translation key
 const FIX_STATUS_LABEL = { assigned: 'pending', in_progress: 'inProgress', approval_requested: 'reviewQueue', open: 'pending' }
 
-const kpiGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }
 const widgetGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }
 
 function MineChip({ C, label, value, onClick }) {
@@ -666,21 +679,6 @@ function MineChip({ C, label, value, onClick }) {
       <span style={{ background: C.maroon, color: '#fff', borderRadius: 999, padding: '1px 8px', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
       <Icon name="chevronRight" size={14} color={C.faint} />
     </button>
-  )
-}
-
-function TrainTile({ C, icon, tone, value, label, onClick }) {
-  return (
-    <Card onClick={onClick} style={{ cursor: 'pointer', padding: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: tint(tone, 0.12), display: 'grid', placeItems: 'center' }}>
-          <Icon name={icon} size={22} color={tone} />
-        </div>
-        <Icon name="chevronRight" size={16} color={C.faint} />
-      </div>
-      <div style={{ fontSize: 32, fontWeight: 800, color: tone, lineHeight: 1.15, marginTop: 14, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{value ?? 0}</div>
-      <div style={{ fontSize: 13, color: C.tl, fontWeight: 600, marginTop: 2 }}>{label}</div>
-    </Card>
   )
 }
 
@@ -776,8 +774,13 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
 }
 
 // One number inside a StatBlock: icon chip, figure, label, and a short rule in
-// the cell's colour. Zero values go grey — chip included — so the eye lands on
-// whatever actually has work in it.
+// the cell's colour.
+//
+// A zero greys the figure and nothing else. The chip and the rule say what the
+// cell is; the figure says how much there is, and that is the only part worth
+// quietening. Greying all three turned a block whose values were all zero — a
+// repair board with nothing on it — into a grey skeleton beside a coloured one,
+// which reads as unfinished rather than empty.
 //
 // `strong` paints the figure itself in the tone rather than in ink. Overdue uses
 // it: there the number being alarming is the message. Everything else about the
@@ -801,10 +804,10 @@ function StatCell({ C, icon, value, label, tone, onClick, strong, divider }) {
     >
       <span style={{
         width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-        background: dim ? C.cardAlt : tint(tone, 0.12),
+        background: tint(tone, 0.12),
         display: 'grid', placeItems: 'center',
       }}>
-        <Icon name={icon} size={16} color={dim ? C.faint : tone} />
+        <Icon name={icon} size={16} color={tone} />
       </span>
       {/* tabular figures: without them a row of 157 / 127 / 12 / 18 has its
           digits at four different widths and never lines up */}
@@ -818,7 +821,7 @@ function StatCell({ C, icon, value, label, tone, onClick, strong, divider }) {
       <span style={{ fontSize: 11, fontWeight: 600, color: C.tl, textAlign: 'center', lineHeight: 1.25 }}>
         {label}
       </span>
-      <span style={{ width: 22, height: 3, borderRadius: 999, background: dim ? C.border : tone }} />
+      <span style={{ width: 22, height: 3, borderRadius: 999, background: tone }} />
     </button>
   )
 }
