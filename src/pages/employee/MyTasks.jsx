@@ -11,7 +11,7 @@ import {
   propName,
 } from '../../constants/org'
 import { statusColors } from '../../constants/status'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
 import AudioPlayer from '../../components/common/AudioPlayer'
@@ -223,35 +223,20 @@ export default function MyTasks() {
       <SectionTitle>{t.myTasks}</SectionTitle>
 
       {/* two filters: normal task status + a separate issue status (share one filter) */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.taskStatus}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name="inbox" size={16} color={C.tl} />
-            <select
-              style={inputStyle(C)}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              aria-label={t.taskStatus}
-            >
-              {statusChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
-            </select>
-          </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.issueStatus}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name="warning" size={16} color={C.tl} />
-            <select
-              style={inputStyle(C)}
-              value={issueStatus}
-              onChange={(e) => setIssueStatus(e.target.value)}
-              aria-label={t.issueStatus}
-            >
-              {issueChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
-            </select>
-          </div>
-        </div>
+      <div style={{
+        display: 'grid', gap: 8, marginBottom: 10,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      }}>
+        <FilterField label={t.taskStatus}>
+          <select style={filterStyle(C)} value={status} onChange={(e) => setStatus(e.target.value)}>
+            {statusChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label={t.issueStatus}>
+          <select style={filterStyle(C)} value={issueStatus} onChange={(e) => setIssueStatus(e.target.value)}>
+            {issueChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
+          </select>
+        </FilterField>
       </div>
 
       {/* One setting with five values, made to fit rather than made to scroll.
