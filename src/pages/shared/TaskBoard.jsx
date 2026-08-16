@@ -154,16 +154,18 @@ export default function TaskBoard() {
       all.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
       setRows(all)
 
-      if (admin) {
-        // staff *and* fellow admins can take a repair request.
-        // Neither propScope nor deptScope applies here. A department scope says
-        // which requests this admin is responsible FOR; it must not say who they
-        // may hand one to. A broken camera is a security request and an
-        // electrician's job — Sandeep could only ever pick other guards.
-        // (The one real restriction is the kitchen rule, in assignableFor.)
-        const { data: mem } = await assigneesQuery()
-        setMembers(mem || [])
-      }
+      // Everyone, not only the people who can assign. This list is what every
+      // name on the board is read out of — without it nameOf() falls back to the
+      // English snapshot stored on the row, and a staff member reading in Hindi
+      // saw English names throughout, including their own.
+      //
+      // Neither propScope nor deptScope applies. A department scope says which
+      // requests an admin is responsible FOR; it must not say who they may hand
+      // one to. A broken camera is a security request and an electrician's job —
+      // Sandeep could only ever pick other guards.
+      // (The one real restriction is the kitchen rule, in assignableFor.)
+      const { data: mem } = await assigneesQuery()
+      setMembers(mem || [])
     } catch {
       /* ignore — don't hang the loader */
     } finally {
@@ -489,7 +491,9 @@ export default function TaskBoard() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{fixTitle(r, lang === 'hi')}</div>
-                    <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>{r.posted_by_name} · {fmtDateTime(r.created_at)}</div>
+                    <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
+                      {nameOf(r.posted_by, r.posted_by_name)} · {fmtDateTime(r.created_at)}
+                    </div>
                     {r.assigned_to_name && (
                       <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Icon name="user" size={12} /> {nameOf(r.assigned_to, r.assigned_to_name)}
@@ -959,6 +963,10 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // their new name; fall back to the snapshot when they are no longer listed.
   const assigneeName = personName(members.find((m) => m.id === row.assigned_to) || {}, lang)
     || row.assigned_to_name
+  // Same for whoever raised it. 'public' has no user record — the snapshot is
+  // the only name that request will ever have.
+  const posterName = personName(members.find((m) => m.id === row.posted_by) || {}, lang)
+    || row.posted_by_name || row.posted_by
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
   // kitchen requests only offer the kitchen team — unless nobody is in it yet
   const assignPool = assignableFor(row.category, members)
@@ -1400,7 +1408,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           <AudioPlayer src={row.voice_url} label={t.voiceNote} />
         </div>
       )}
-      <div style={{ fontSize: 13, color: C.tl, marginBottom: 12 }}>{row.posted_by_name} · {fmtDateTime(row.created_at)}</div>
+      <div style={{ fontSize: 13, color: C.tl, marginBottom: 12 }}>
+        {posterName} · {fmtDateTime(row.created_at)}
+      </div>
 
       {postedPhotos.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -1548,7 +1558,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
             {/* Who it reaches, said before it is written rather than discovered
                 afterwards. */}
             <div style={{ fontSize: 12.5, color: C.tl, marginBottom: 8 }}>
-              {t.updateGoesTo} <b>{row.posted_by_name || row.posted_by}</b>
+              {t.updateGoesTo} <b>{posterName}</b>
             </div>
             <Field label={`${t.addUpdate} (${t.optional})`}>
               <textarea
@@ -1593,7 +1603,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           with no note and no photo, and the sign-off must still be visible. */}
       {['approval_requested', 'completed', 'approved'].includes(s) && (row.resolution_note || (row.resolution_photos || []).length > 0 || row.resolution_voice_url || row.approved_by_name) && (
         <div style={{ background: C.bg, borderRadius: 10, padding: 12, marginTop: 4 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{t.completed} — {row.assigned_to_name}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{t.completed} — {assigneeName}</div>
           {/* Who signed it off. Both admins and the super admin see this; it is
               the whole point of storing it. */}
           {row.approved_by_name && (
