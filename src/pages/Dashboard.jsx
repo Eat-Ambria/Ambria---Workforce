@@ -779,9 +779,10 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
 // the cell's colour. Zero values go grey — chip included — so the eye lands on
 // whatever actually has work in it.
 //
-// `strong` paints the figure itself in the tone and drops the rule. Overdue uses
-// it: there the number being alarming is the whole message, and it should not
-// look like the neutral counts above it.
+// `strong` paints the figure itself in the tone rather than in ink. Overdue uses
+// it: there the number being alarming is the message. Everything else about the
+// cell stays identical, so a cell is the same height in every block and the two
+// blocks line up.
 //
 // `divider` is set by StatBlock, not by the caller — only it knows which cell
 // is first.
@@ -814,12 +815,10 @@ function StatCell({ C, icon, value, label, tone, onClick, strong, divider }) {
       }}>
         {value ?? 0}
       </span>
-      <span style={{ fontSize: 10.5, fontWeight: 600, color: C.tl, textAlign: 'center', lineHeight: 1.25 }}>
+      <span style={{ fontSize: 11, fontWeight: 600, color: C.tl, textAlign: 'center', lineHeight: 1.25 }}>
         {label}
       </span>
-      {!strong && (
-        <span style={{ width: 22, height: 3, borderRadius: 999, background: dim ? C.border : tone }} />
-      )}
+      <span style={{ width: 22, height: 3, borderRadius: 999, background: dim ? C.border : tone }} />
     </button>
   )
 }

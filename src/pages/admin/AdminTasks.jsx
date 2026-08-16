@@ -381,7 +381,7 @@ export default function AdminTasks() {
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
                 padding: roomy ? '8px 16px' : '7px 6px', borderRadius: 9,
-                fontSize: roomy ? 13.5 : 12, fontWeight: on ? 700 : 600,
+                fontSize: roomy ? 13.5 : 13, fontWeight: on ? 700 : 600,
                 background: on ? C.card : 'transparent',
                 color: on ? C.maroon : C.tl,
                 border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',

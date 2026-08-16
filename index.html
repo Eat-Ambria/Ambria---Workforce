@@ -8,12 +8,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#7B1E2F" />
     <meta name="description" content="Ambria Admin — task, training and team management for Ambria event venues" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <!-- The font ships with the app now — see @font-face in src/index.css.
+         Fetching it from a font CDN meant every cold start painted in
+         the fallback first, and headings asking for weight 800 came out as a
+         browser-thickened 700: heavier and blockier than the real thing. -->
     <title>Ambria Admin</title>
   </head>
   <body>

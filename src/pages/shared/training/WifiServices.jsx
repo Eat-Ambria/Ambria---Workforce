@@ -37,10 +37,10 @@ function dueStatus(due, hi) {
 }
 
 const thCell = {
-  padding: '11px 12px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
+  padding: '11px 10px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
   textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'left',
 }
-const tdCell = { padding: '9px 12px', minWidth: 0 }
+const tdCell = { padding: '9px 10px', minWidth: 0 }
 const cellInput = (C) => ({
   width: '100%', background: C.white, color: C.text,
   border: `1px solid ${C.border}`, borderRadius: 7,
@@ -78,6 +78,11 @@ export default function WifiServices() {
       // soonest first, and connections with no date at the end rather than the
       // top, where a blank would outrank a bill due tomorrow
       .order('due_date', { ascending: true, nullsFirst: false })
+      // ...then id, which is the part that was missing. Most rows have no due
+      // date, so most rows tied — and a tie leaves the order to the database,
+      // which returns an updated row wherever it now sits on disk. Saving a row
+      // made it jump down the list. With a tiebreaker every row has one place.
+      .order('id', { ascending: true })
     if (propScope) q = q.eq('property', propScope)
     const { data, error } = await q
     if (error) setErr(error.message)
@@ -138,7 +143,7 @@ export default function WifiServices() {
   const addRow = () => setRows((list) => [...list, {
     key: newKey(),
     property: propScope || venues[0]?.code || '',
-    wifi_name: '', wifi_name_hi: '', password: '',
+    wifi_name: '', wifi_name_hi: '', password: '', location: '',
     operator_name: '', operator_name_hi: '', contact: '', due_date: '', notes: '',
   }])
 
@@ -150,7 +155,7 @@ export default function WifiServices() {
       if (r.key.startsWith('new:')) return !!(r.wifi_name.trim() || r.wifi_name_hi?.trim())
       const b = before.get(r.key)
       if (!b) return false
-      return ['property', 'wifi_name', 'wifi_name_hi', 'password',
+      return ['property', 'location', 'wifi_name', 'wifi_name_hi', 'password',
         'operator_name', 'operator_name_hi', 'contact', 'due_date', 'notes']
         .some((f) => (r[f] || '') !== (b[f] || ''))
     })
@@ -180,6 +185,12 @@ export default function WifiServices() {
     try { return (await transliterateToHindi(q)) || null } catch { return null }
   }
 
+  // A dropped request, not a refused one: no status, no body, just a fetch that
+  // did not finish. Worth one more try; anything the server actually rejected
+  // will fail again the same way and is not retried.
+  const isDropped = (e) => /failed to fetch|networkerror|load failed|network request failed/i
+    .test(e?.message || String(e || ''))
+
   async function saveAll() {
     if (!dirty.length) return
     const bad = dirty.find((r) => phoneErrors[r.key])
@@ -188,6 +199,10 @@ export default function WifiServices() {
       return
     }
     setBusy(true); setErr('')
+    // Rows go one at a time, so a failure part way through leaves the earlier
+    // ones written. Which ones is the difference between "try again" and "try
+    // again and hope it is not saved twice".
+    let done = 0
     try {
       for (const r of dirty) {
         const patch = {
@@ -197,6 +212,7 @@ export default function WifiServices() {
           // not trimmed to nothing: a password may legitimately start or end
           // with a space, and silently eating one makes it simply wrong
           password: r.password || null,
+          location: r.location?.trim() || null,
           operator_name: r.operator_name?.trim() || null,
           operator_name_hi: await otherScript(r.operator_name, r.operator_name_hi),
           contact: r.contact?.trim() || null,
@@ -204,16 +220,29 @@ export default function WifiServices() {
           notes: r.notes?.trim() || null,
           updated_at: new Date().toISOString(),
         }
-        const { error } = r.key.startsWith('new:')
-          ? await supabase.from('wifi_services').insert(patch)
-          : await supabase.from('wifi_services').update(patch).eq('id', r.id)
+        const write = () => (r.key.startsWith('new:')
+          ? supabase.from('wifi_services').insert(patch)
+          : supabase.from('wifi_services').update(patch).eq('id', r.id))
+
+        let { error } = await write()
+        if (error && isDropped(error)) {
+          // Long enough for a wifi handover or a sleeping radio to come back,
+          // short enough that nobody reaches for the button again.
+          await new Promise((ok) => setTimeout(ok, 900))
+          ;({ error } = await write())
+        }
         if (error) throw error
+        done += 1
       }
       await load()
       setToast(true)
       setTimeout(() => setToast(false), 2200)
     } catch (e) {
-      setErr(e.message || String(e))
+      setErr(isDropped(e)
+        ? (hi
+          ? `नेटवर्क नहीं मिला। ${dirty.length} में से ${done} पंक्तियाँ सहेजी गईं — बाकी नीचे वैसी ही हैं, दोबारा सहेजें।`
+          : `No network. Saved ${done} of ${dirty.length} rows — the rest are still below, just save again.`)
+        : (e.message || String(e)))
     } finally {
       setBusy(false)
     }
@@ -252,15 +281,25 @@ export default function WifiServices() {
 
   if (loading) return <Loader label={t.loading} />
 
-  // name | property | operator | contact | due | status | bin
+  // name | password | property | location | operator | contact | due+status | remarks | bin
   //
   // 156px on the property, measured: "Pushpanjali" is the longest venue and a
   // <select> spends about 26px of its own width on the arrow. At 120px every
   // name was clipped.
+  //
+  // Location shares the stretch with name and operator rather than taking a
+  // fixed width — "MD office" and "1st floor pantry, behind the door" both
+  // belong in it, and only the wide layout has room to be generous.
   const COLS = wide
-    ? 'minmax(140px, 1.2fr) 156px minmax(130px, 1fr) minmax(130px, 1fr) minmax(140px, 1fr) 146px 84px 40px'
-    : '170px 156px 160px 150px 160px 146px 84px 40px'
-  const gridMin = wide ? 0 : 1086
+    // Floors, summed: 175+175+156+130+120+135+152+140+40 = 1223, against 1528px
+    // of content now that Training is a wide route. Sized to the values rather
+    // than to a budget: "MD office Skynet" and "Ambria@0044" set the first two,
+    // and password matches the name for shorter text because its copy button
+    // comes out of the same track.
+    ? 'minmax(175px, 1.2fr) minmax(175px, 1fr) 156px minmax(130px, 1.1fr) minmax(120px, 1fr) minmax(135px, 1fr) 152px minmax(140px, 1.2fr) 40px'
+    : '200px 190px 156px 170px 160px 155px 152px 185px 40px'
+  // 200+190+156+170+160+155+152+185+40
+  const gridMin = wide ? 0 : 1408
 
   return (
     <div>
@@ -288,9 +327,12 @@ export default function WifiServices() {
       ) : (
         <div style={{
           border: `1px solid ${C.borderStrong}`, borderRadius: 10,
-          // sideways only when the columns genuinely do not fit — `auto` on a box
-          // that always fits makes it a scrollport on both axes for nothing
-          overflowX: wide ? 'visible' : 'auto',
+          // `auto` at every width, not just narrow. It used to be `visible` on
+          // wide screens on the bet that the columns always fit there — then a
+          // column was added, the bet quietly lost, and the last two columns were
+          // painted outside the border rather than scrolled to. A box that cannot
+          // hold its contents should scroll, not leak.
+          overflowX: 'auto',
         }}>
           <div style={{ minWidth: gridMin || undefined }}>
             <div style={{ display: 'grid', gridTemplateColumns: COLS,
@@ -298,10 +340,11 @@ export default function WifiServices() {
               <span style={thCell}>{hi ? 'वाई-फ़ाई' : 'WiFi name'}</span>
               <span style={thCell}>{hi ? 'पासवर्ड' : 'Password'}</span>
               <span style={thCell}>{t.properties}</span>
+              <span style={thCell}>{hi ? 'सटीक जगह' : 'Location'}</span>
               <span style={thCell}>{hi ? 'ऑपरेटर' : 'Operator'}</span>
               <span style={thCell}>{hi ? 'संपर्क' : 'Contact'}</span>
               <span style={thCell}>{hi ? 'देय तारीख़' : 'Due date'}</span>
-              <span style={thCell}>{hi ? 'हालत' : 'Status'}</span>
+              <span style={thCell}>{hi ? 'टिप्पणी' : 'Remarks'}</span>
               <span style={thCell} />
             </div>
 
@@ -372,6 +415,19 @@ export default function WifiServices() {
                       ))}
                     </select>
                   </span>
+                  {/* Not transliterated, unlike the name and the operator: this
+                      is a direction to a place, and a machine-written Hindi
+                      spelling of "MD office" helps nobody find the router. Type
+                      it in whichever script the person reading it will use. */}
+                  <span style={tdCell}>
+                    <input
+                      className="sheet-cell"
+                      style={cellInput(C)}
+                      value={r.location || ''}
+                      placeholder={hi ? 'जैसे एमडी ऑफ़िस, रिसेप्शन के पीछे' : 'e.g. MD office, behind reception'}
+                      onChange={(e) => set(r.key, { location: e.target.value })}
+                    />
+                  </span>
                   <span style={tdCell}>
                     <input
                       className="sheet-cell"
@@ -422,6 +478,10 @@ export default function WifiServices() {
                       </span>
                     )}
                   </span>
+                  {/* Status lives here, not in a column of its own. It is
+                      computed from this date and from nothing else, so as a
+                      separate column it was the same fact written twice — and
+                      "—" on every row without a date. */}
                   <span style={tdCell}>
                     <input
                       type="date"
@@ -430,9 +490,27 @@ export default function WifiServices() {
                       value={r.due_date || ''}
                       onChange={(e) => set(r.key, { due_date: e.target.value })}
                     />
+                    {r.due_date && (
+                      <span style={{
+                        display: 'block', marginTop: 3, fontSize: 10.5, fontWeight: 700,
+                        color: C[st.color] || C.faint,
+                      }}>
+                        {st.label}
+                      </span>
+                    )}
                   </span>
-                  <span style={{ ...tdCell, fontSize: 11.5, fontWeight: 700, color: C[st.color] || C.faint }}>
-                    {st.label}
+                  {/* Whatever the row does not have a column for. Not
+                      transliterated — a remark is a sentence somebody wrote, and
+                      a machine rewriting it in the other script would change
+                      what it says. */}
+                  <span style={tdCell}>
+                    <input
+                      className="sheet-cell"
+                      style={cellInput(C)}
+                      value={r.notes || ''}
+                      placeholder={hi ? 'जैसे बिल मार्च तक भरा' : 'e.g. bill paid till Mar'}
+                      onChange={(e) => set(r.key, { notes: e.target.value })}
+                    />
                   </span>
                   <span style={{ ...tdCell, textAlign: 'right' }}>
                     <button

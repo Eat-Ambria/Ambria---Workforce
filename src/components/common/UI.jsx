@@ -165,7 +165,7 @@ export function inputStyle(C) {
 // quietly above the thing it filters. Oval to say so — nothing here is typed,
 // every one of them is a choice from a short list.
 export function filterStyle(C) {
-  return { ...inputStyle(C), padding: '7px 12px', fontSize: 12.5, borderRadius: 999 }
+  return { ...inputStyle(C), padding: '7px 12px', fontSize: 14, borderRadius: 999 }
 }
 
 export function ProgressBar({ value = 0, tone, height = 10 }) {
@@ -204,7 +204,7 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
               aria-pressed={on}
               style={{
                 padding: '7px 10px', borderRadius: 999, lineHeight: 1.3,
-                fontSize: 12.5, fontWeight: on ? 700 : 600,
+                fontSize: 13.5, fontWeight: on ? 700 : 600,
                 background: on ? C.maroon : C.cardAlt,
                 color: on ? '#fff' : C.tl,
                 border: `1px solid ${on ? C.maroon : C.border}`,

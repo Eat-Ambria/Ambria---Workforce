@@ -196,7 +196,7 @@ export default function ChemicalUsage() {
 function Chip({ children, active, onClick, C }) {
   return (
     <button onClick={onClick} style={{
-      padding: '7px 11px', borderRadius: 999, fontSize: 13, fontWeight: 600, lineHeight: 1.3,
+      padding: '7px 11px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, lineHeight: 1.3,
       background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl, border: `1px solid ${active ? C.maroon : C.border}`,
     }}>{children}</button>
   )

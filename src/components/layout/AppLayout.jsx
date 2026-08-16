@@ -9,8 +9,15 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import PoweredBy from '../common/PoweredBy'
 
-// Pages that are a table rather than a column of cards.
-const WIDE_ROUTES = ['/tasks']
+// Almost every page here is a table, a board, or a grid of cards, and all three
+// use whatever width they are given. So width is the default and narrow is the
+// exception — the other way round, this was a list of exceptions long enough to
+// be a default in disguise.
+//
+// Account is the one real form: a column of labelled fields, where a text input
+// stretched to 1560px is harder to fill in, not easier. That is the case the
+// 1100px cap was written for, and the only one left.
+const NARROW_ROUTES = ['/account']
 
 export default function AppLayout() {
   const C = useColors()
@@ -40,11 +47,7 @@ export default function AppLayout() {
             flex: 1,
             padding: 16,
             paddingBottom: isMobile ? 'calc(20px + env(safe-area-inset-bottom, 0px))' : 24,
-            // 1100 keeps prose and cards readable on a wide screen, which is
-            // right for almost every page. The roster is a sixteen-column sheet:
-            // capping it there left empty margins on both sides and made the
-            // last columns scroll off, which is the opposite of readable.
-            maxWidth: WIDE_ROUTES.includes(location.pathname) ? 1560 : 1100,
+            maxWidth: NARROW_ROUTES.includes(location.pathname) ? 1100 : 1560,
             width: '100%',
             margin: '0 auto',
           }}

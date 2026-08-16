@@ -65,10 +65,17 @@ const COL_W = {
   // Trimmed so the sheet fits a laptop beside the sidebar. Every pixel here is
   // one the last columns do not have to be scrolled to reach.
   pick: 34, num: 34, task: 240,
-  weekly: 88, monthly: 88, day: 37,
+  // Measured against the text, not guessed. Both cells use freqCell below,
+  // which pays 6px of side padding instead of the usual 14 — a cell holding one
+  // full-width control has no use for a margin, and at 14 each side the track
+  // was buying padding rather than letters. Budget inside `freq`: 122 - 12 cell
+  // - 8 select - 18 arrow = 84px, and the longest option, "Alternate days", is
+  // about 80. Inside `detail`: 92 - 12 - 8 - 18 = 54px for "Mon" or "22nd", and
+  // 72px for "Tick days", which is a label and has no arrow.
+  freq: 122, detail: 92, day: 37,
   // The 205px PROPERTIES column moved into the assign panel; 65 of it went to
   // ASSIGNED, which holds five wrapped names on a busy job, and the rest to the
-  // sheet, which is now 1167px wide instead of 1307.
+  // sheet, which is now 1205px wide instead of 1307.
   assigned: 250, time: 112, actions: 96,
 }
 const TASK_W = COL_W.task
@@ -81,8 +88,8 @@ const sheetTracks = ({ picking }) => [
   picking && COL_W.pick,
   COL_W.num,
   COL_W.task,
-  COL_W.weekly,
-  COL_W.monthly,
+  COL_W.freq,
+  COL_W.detail,
   ...Array(7).fill(COL_W.day),
   COL_W.assigned,
   COL_W.time,
@@ -123,6 +130,10 @@ const thCell = {
   textTransform: 'uppercase', letterSpacing: '0.1em',
 }
 const tdCell = { padding: '13px 14px' }
+// A cell whose whole contents is one full-width control. The 14px sides of
+// tdCell are there to keep text off the column edge; a select already has its
+// own padding, so here they only make the track narrower than it looks.
+const freqCell = { padding: '13px 6px' }
 // inputStyle is built for a form field; inside a 100px sheet cell it needs to
 // give back the padding and the font size
 const miniInput = (C) => ({
@@ -311,6 +322,30 @@ const setDays = (days) => {
   if (d.length === 1) return { ...BLANK, category: 'weekly', weekDay: d[0] }
   return { ...BLANK, category: 'alternate', weekDays: d, skipSunday: !d.includes(7) }
 }
+// The five schedules the dropdown offers. Sunday-only and Alternate (Mon-Sat)
+// are not among them: both are a variant the detail select or the ticks reach —
+// Sunday is Weekly with the day set to Sunday, and dropping Sunday from an
+// alternate set is one untick.
+const FREQ_CHOICES = ['daily', 'dailyMS', 'alternate', 'weekly', 'monthly']
+
+// Which of the five a row is showing. alternateMS and sunday fold into their
+// parent; the detail select and the ticks say which variant it is.
+const freqChoice = (fk) => (fk === 'alternateMS' ? 'alternate' : fk === 'sunday' ? 'weekly' : fk)
+
+// Picking a frequency goes through the same setters the ticks use, so the two
+// controls cannot disagree — there is only one schedule underneath them.
+const setFreq = (g, key) => {
+  if (key === 'daily') return setDays([1, 2, 3, 4, 5, 6, 7])
+  if (key === 'dailyMS') return setDays([1, 2, 3, 4, 5, 6])
+  if (key === 'weekly') return setWeekly(Number(g.weekDay) || 1)
+  if (key === 'monthly') return setMonthly(Number(g.monthWeek) || 1)
+  // Alternate needs a day list. Keep theirs if it is already a gapped set;
+  // otherwise Mon/Wed/Fri, which is what "alternate" means to most people and
+  // is one untick away from anything else.
+  const d = rowDays(g)
+  return setDays(d.length >= 2 && d.length <= 5 ? d : [1, 3, 5])
+}
+
 // What the row calls itself, read back off the days. "Alternate" is reserved for
 // the case it actually describes — days with gaps between them.
 const scheduleChip = (g, t, lang) => {
@@ -340,7 +375,11 @@ const scheduleChip = (g, t, lang) => {
 //
 // Behind memo() with no `lang` prop: a clock face reads the same in both
 // languages, so switching cannot invalidate these.
-const TimeCell = memo(function TimeCell({ C, gKey, from, to, pick, onPatch }) {
+// `pick` is the placeholder inside the dropdown — "— pick a time —" — which is
+// right there and wrong in the closed cell, where a 112px column breaks it after
+// "time" and strands the trailing dash on a line of its own. `empty` is the
+// closed cell's own short affordance, matching "+ Assign" beside it.
+const TimeCell = memo(function TimeCell({ C, gKey, from, to, pick, empty, onPatch }) {
   const [editing, setEditing] = useState(false)
 
   if (!editing) {
@@ -352,7 +391,9 @@ const TimeCell = memo(function TimeCell({ C, gKey, from, to, pick, onPatch }) {
           style={{
             width: '100%', textAlign: 'left', background: 'transparent',
             padding: 0, fontSize: 11.5, fontWeight: 600,
-            color: from ? C.text : C.faint, fontVariantNumeric: 'tabular-nums',
+            // maroon when set: it is the one editable value in the row drawn as
+            // plain text, and in ink it read as part of the description
+            color: from ? C.maroon : C.faint, fontVariantNumeric: 'tabular-nums',
           }}
         >
           {/* Each time stays whole and the line may only break at the dash.
@@ -363,7 +404,7 @@ const TimeCell = memo(function TimeCell({ C, gKey, from, to, pick, onPatch }) {
               <span style={{ whiteSpace: 'nowrap' }}>{fmt12(from)}</span>
               {to && <>{' - '}<span style={{ whiteSpace: 'nowrap' }}>{fmt12(to)}</span></>}
             </>
-          ) : pick}
+          ) : empty}
         </button>
       </span>
     )
@@ -445,6 +486,15 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [])
+  // Which department bands are shut. A 121-row sheet is mostly rows you are not
+  // looking at right now.
+  const [collapsed, setCollapsed] = useState(() => new Set())
+  const toggleDept = (d) => setCollapsed((prev) => {
+    const next = new Set(prev)
+    if (next.has(d)) next.delete(d); else next.add(d)
+    return next
+  })
+
   const tapTarget = {
     background: 'transparent', display: 'grid', placeItems: 'center',
     width: wide ? 26 : 34, height: wide ? 26 : 34,
@@ -967,7 +1017,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       }
       nInDept += 1
       dRef.n += 1
-      out.push({ kind: 'row', key: g.key, g, no: nInDept })
+      out.push({ kind: 'row', key: g.key, g, no: nInDept, dept: d })
     })
     return out
   }, [sheetRows])
@@ -1885,24 +1935,30 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     {picking && <span style={thCell} />}
                     <span style={{ ...thCell, textAlign: 'center' }}>#</span>
                     <span style={thCell}>{t.task}</span>
-                    <span style={thCell}>{t.weekly}</span>
-                    <span style={thCell}>{t.monthly}</span>
-                    {/* The seven day letters, on one line. They carry the
-                        alternate ink so the group reads as one column without a
-                        word above it — "ALTERNATE" over a 32px cell made the
-                        first header two lines tall and knocked the letters out
-                        of line with each other. */}
+                    {/* One heading over both selects. Named separately they read
+                        as two unrelated columns — and on a daily row, which is
+                        most of them, both sit at "—" with nothing to say why
+                        there are two. */}
+                    <span style={{ ...thCell, gridColumn: 'span 2' }}>{t.frequency}</span>
+                    {/* The seven day letters, on one line and in the same grey
+                        as every other heading. They used to carry the alternate
+                        ink to mark the group as one column, but the ticks below
+                        do that unaided — and the ink named a cadence that most
+                        of these rows do not have. No word above them: "ALTERNATE"
+                        over a 32px cell made the first header two lines tall and
+                        knocked the letters out of line with each other. */}
                     {DAY_COLS.map((d) => (
-                      <span key={d} style={{ ...thCell, textAlign: 'center', padding: '11px 1px', color: FREQ_MAP.alternate.ink }}>
+                      <span key={d} style={{ ...thCell, textAlign: 'center', padding: '11px 1px' }}>
                         {lang === 'hi' ? dayShort(d, lang) : DAY_INITIAL[d]}
                       </span>
                     ))}
                     <span style={{ ...thCell, textAlign: 'center' }}>{t.assigned}</span>
                     <span style={thCell}>{t.time}</span>
-                    <span style={thCell} />
+                    <span style={{ ...thCell, textAlign: 'right' }}>{t.actions}</span>
                   </div>
 
                   {sections.map((item, i) => {
+                    if (item.kind === 'row' && collapsed.has(item.dept)) return null
                     if (item.kind === 'dept') {
                       const dc = item.dept === '_' ? C.tl : (DEPARTMENT_MAP[item.dept]?.color || C.tl)
                       return (
@@ -1918,13 +1974,29 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               left edge. A full-width sticky band showed you its
                               empty middle once you scrolled right, with the name
                               clipped off the side. */}
-                          <span style={{ position: 'sticky', left: 14, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleDept(item.dept)}
+                            aria-expanded={!collapsed.has(item.dept)}
+                            style={{
+                              position: 'sticky', left: 14, display: 'inline-flex', alignItems: 'center',
+                              gap: 10, background: 'transparent', padding: 0, cursor: 'pointer',
+                            }}
+                          >
                             <span style={{ width: 3, height: 16, borderRadius: 2, background: dc, flexShrink: 0 }} />
                             <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
                               {item.dept === '_' ? t.unassigned : deptName(item.dept, lang)}
                             </span>
+                            {/* The count stays while the band is shut — a closed
+                                band should still say what is inside it. */}
                             <span style={{ fontSize: 12, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{item.n}</span>
-                          </span>
+                            <Icon
+                              name="chevronRight"
+                              size={15}
+                              color={C.faint}
+                              style={{ transform: collapsed.has(item.dept) ? 'rotate(90deg)' : 'rotate(-90deg)' }}
+                            />
+                          </button>
                         </div>
                       )
                     }
@@ -2029,34 +2101,63 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             )}
                           </div>
 
-                          {/* Four controls, one schedule. Picking in any of them
-                              clears the other three. */}
-                          <span style={tdCell}>
+                          {/* Frequency, and whatever that frequency still needs
+                              answered. Both write through the same setters as the
+                              tick columns, so the schedule has one owner. */}
+                          <span style={freqCell}>
                             <select
                               style={miniInput(C)}
-                              value={['weekly', 'sunday'].includes(freqOf(g)) ? (g.weekDay || 7) : ''}
-                              onChange={(e) => e.target.value && setGroupTime(g.key, setWeekly(e.target.value))}
-                              aria-label={t.weekly}
+                              value={freqChoice(freqOf(g))}
+                              onChange={(e) => setGroupTime(g.key, setFreq(g, e.target.value))}
+                              aria-label={t.frequency}
                             >
-                              <option value="">—</option>
-                              {WEEK_DAYS.map((d) => <option key={d.v} value={d.v}>{dayShort(d.v, lang)}</option>)}
+                              {FREQ_CHOICES.map((k) => (
+                                <option key={k} value={k}>
+                                  {/* "Daily (Mon-Sat)" under a heading that already
+                                      says FREQUENCY spends half its width on the
+                                      word the column supplies. */}
+                                  {k === 'daily' ? t.freqEveryDay
+                                    : k === 'dailyMS' ? t.freqMonSat
+                                    : frequencyLabel(k, lang)}
+                                </option>
+                              ))}
                             </select>
                           </span>
 
-                          <span style={tdCell}>
-                            <select
-                              style={miniInput(C)}
-                              value={freqOf(g) === 'monthly' ? (g.monthWeek || 1) : ''}
-                              onChange={(e) => e.target.value && setGroupTime(g.key, setMonthly(e.target.value))}
-                              aria-label={t.monthly}
-                            >
-                              <option value="">—</option>
-                              {/* "8" alone reads as a count; the date says which
-                                  day of the month the job lands on. */}
-                              {[1, 2, 3, 4].map((w) => (
-                                <option key={w} value={w}>{ordinal(monthlyDate(w), lang)}</option>
-                              ))}
-                            </select>
+                          <span style={freqCell}>
+                            {['weekly', 'sunday'].includes(freqOf(g)) ? (
+                              <select
+                                style={miniInput(C)}
+                                value={g.weekDay || 7}
+                                onChange={(e) => e.target.value && setGroupTime(g.key, setWeekly(e.target.value))}
+                                aria-label={t.weekly}
+                              >
+                                {WEEK_DAYS.map((d) => <option key={d.v} value={d.v}>{dayShort(d.v, lang)}</option>)}
+                              </select>
+                            ) : freqOf(g) === 'monthly' ? (
+                              <select
+                                style={miniInput(C)}
+                                value={g.monthWeek || 1}
+                                onChange={(e) => e.target.value && setGroupTime(g.key, setMonthly(e.target.value))}
+                                aria-label={t.monthly}
+                              >
+                                {/* "8" alone reads as a count; the date says which
+                                    day of the month the job lands on. */}
+                                {[1, 2, 3, 4].map((w) => (
+                                  <option key={w} value={w}>{ordinal(monthlyDate(w), lang)}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              // Daily and alternate have nothing left to answer
+                              // here — a live select that changes nothing is worse
+                              // than a label saying so.
+                              <span style={{
+                                ...miniInput(C), display: 'grid', placeItems: 'center',
+                                background: C.cardAlt, color: C.faint, cursor: 'default',
+                              }}>
+                                {freqOf(g).startsWith('alternate') ? t.tickDays : t.allDay}
+                              </span>
+                            )}
                           </span>
 
                           {DAY_COLS.map((d) => {
@@ -2074,7 +2175,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                     if (!next.length) return
                                     setGroupTime(g.key, setDays(next))
                                   }}
-                                  style={{ width: 15, height: 15, accentColor: FREQ_MAP.alternate.ink, cursor: 'pointer' }}
+                                  style={{ width: 15, height: 15, accentColor: C.maroon, cursor: 'pointer' }}
                                 />
                               </span>
                             )
@@ -2088,15 +2189,24 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               onClick={(e) => openAssign(e, g.key)}
                               style={{
                                 width: '100%', textAlign: 'center', fontSize: 11.5, lineHeight: 1.35,
-                                background: 'transparent', color: names.length ? C.maroon : C.faint,
-                                fontWeight: names.length ? 700 : 600, padding: 0,
+                                background: 'transparent', color: names.length ? C.text : C.faint,
+                                fontWeight: 600, padding: 0,
                               }}
                             >
                               {names.length ? names.join(', ') : `+ ${t.assign}`}
                             </button>
+                            {/* A pill, so it does not read as one more name on
+                                the end of the list. */}
                             {g.staffing && (
-                              <span style={{ display: 'block', fontSize: 10.5, color: C.faint, marginTop: 2, textAlign: 'center' }}>
-                                {staffingLabel(g.staffing, lang)}
+                              <span style={{ display: 'flex', justifyContent: 'center', marginTop: 3 }}>
+                                <span style={{
+                                  fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
+                                  color: C.tl, background: C.cardAlt,
+                                  border: `1px solid ${C.border}`,
+                                  borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap',
+                                }}>
+                                  {staffingLabel(g.staffing, lang)}
+                                </span>
                               </span>
                             )}
                           </span>
@@ -2107,6 +2217,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             from={g.from}
                             to={g.to}
                             pick={t.pickTime}
+                            empty={`+ ${t.time}`}
                             onPatch={setGroupTime}
                           />
 
@@ -2117,14 +2228,15 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                               title={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
                               aria-label={`${t.photoRequired}: ${g.photoRequired ? t.yes : t.no}`}
                               aria-pressed={g.photoRequired}
-                              style={tapTarget}
+                              style={{ ...tapTarget, background: g.photoRequired ? `${C.maroon}14` : C.cardAlt }}
                             >
                               <Icon name={g.photoRequired ? 'camera' : 'cameraOff'} size={iconSize} color={g.photoRequired ? C.maroon : C.faint} />
                             </button>
-                            <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={tapTarget}>
-                              <Icon name="edit" size={iconSize} color={C.tl} />
+                            <button type="button" onClick={() => openEdit(g)} title={t.edit} aria-label={t.edit} style={{ ...tapTarget, background: `${C.blue}14` }}>
+                              <Icon name="edit" size={iconSize} color={C.blue} />
                             </button>
-                            <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={tapTarget}>
+                            {/* Marked before it is clicked, not after. */}
+                            <button type="button" onClick={() => deleteGroup(g)} title={t.delete} aria-label={t.delete} style={{ ...tapTarget, background: `${C.red}14` }}>
                               <Icon name="trash" size={iconSize} color={C.red} />
                             </button>
                           </div>
