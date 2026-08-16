@@ -22,6 +22,12 @@ function ago(iso, hi) {
 function meta(n, hi) {
   const item = n.task_text || ''
   const who = n.by_name ? ` · ${n.by_name}` : ''
+  // The actor, for the titles that name one. `by` is the bare name; `named`
+  // takes the sentence to use when we have it and the one to use when we do not,
+  // so an old row with no by_name still reads properly instead of starting with
+  // a blank.
+  const by = n.by_name || ''
+  const named = (withName, without) => (by ? withName(by) : without)
   switch (n.type) {
     case 'task_assigned': return { icon: 'myTasks', link: '/my-tasks', status: 'pending', title: hi ? 'नया टास्क सौंपा गया' : 'New task assigned', body: item }
     case 'task_sent_back': return { icon: 'warning', link: '/my-tasks', status: 'in_progress', title: hi ? 'टास्क वापस भेजा गया — दोबारा करें' : 'Task sent back — please redo', body: item }
@@ -29,17 +35,17 @@ function meta(n, hi) {
     case 'task_closed_by_admin': return { icon: 'check', link: '/my-tasks', status: 'completed', title: hi ? 'एडमिन ने आपका टास्क पूरा मार्क किया' : 'Admin marked your task complete', body: item }
     // staff finished a task themselves — nothing to approve, but the admin is
     // told so they can look and, if it will not do, send it back for a redo
-    case 'task_done': return { icon: 'check', link: '/tasks', tab: 'completed', title: hi ? 'स्टाफ ने टास्क पूरा किया' : 'Staff completed a task', body: item + who }
-    case 'task_submitted': return { icon: 'inbox', link: '/tasks', tab: 'review', title: hi ? 'मंज़ूरी के लिए टास्क आया' : 'Task submitted for approval', body: item + who }
-    case 'task_issue': return { icon: 'warning', link: '/tasks', tab: 'issues', title: hi ? 'स्टाफ ने समस्या बताई' : 'Staff reported an issue', body: item + who }
+    case 'task_done': return { icon: 'check', link: '/tasks', tab: 'completed', title: named((b) => (hi ? `${b} ने टास्क पूरा किया` : `${b} completed a task`), hi ? 'स्टाफ ने टास्क पूरा किया' : 'Staff completed a task'), body: item }
+    case 'task_submitted': return { icon: 'inbox', link: '/tasks', tab: 'review', title: named((b) => (hi ? `${b} ने मंज़ूरी के लिए भेजा` : `${b} sent a task for approval`), hi ? 'मंज़ूरी के लिए टास्क आया' : 'Task submitted for approval'), body: item }
+    case 'task_issue': return { icon: 'warning', link: '/tasks', tab: 'issues', title: named((b) => (hi ? `${b} ने समस्या बताई` : `${b} reported an issue`), hi ? 'स्टाफ ने समस्या बताई' : 'Staff reported an issue'), body: item }
     case 'issue_working': return { icon: 'clock', link: '/my-tasks', issueStatus: 'issue_working', title: hi ? 'एडमिन आपकी समस्या पर काम कर रहा है' : 'Admin is working on your issue', body: item }
     case 'issue_resolved': return { icon: 'check', link: '/my-tasks', issueStatus: 'issue_resolved', title: hi ? 'आपकी समस्या हल हो गई' : 'Your issue was resolved', body: item }
     case 'fix_assigned': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'मरम्मत अनुरोध सौंपा गया' : 'Repair request assigned to you', body: item }
-    case 'fix_new': return { icon: 'taskBoard', link: '/task-board', title: hi ? 'नया मरम्मत अनुरोध' : 'New repair request raised', body: item + who }
-    case 'fix_approval': return { icon: 'inbox', link: '/task-board', title: hi ? 'मरम्मत मंज़ूरी के लिए' : 'Repair awaiting approval', body: item + who }
+    case 'fix_new': return { icon: 'taskBoard', link: '/task-board', title: named((b) => (hi ? `${b} ने मरम्मत अनुरोध भेजा` : `${b} raised a repair request`), hi ? 'नया मरम्मत अनुरोध' : 'New repair request raised'), body: item }
+    case 'fix_approval': return { icon: 'inbox', link: '/task-board', title: named((b) => (hi ? `${b} की मरम्मत मंज़ूरी के लिए` : `${b} sent a repair for approval`), hi ? 'मरम्मत मंज़ूरी के लिए' : 'Repair awaiting approval'), body: item }
     // Work somebody did and then logged. The admins hear about it; the person
     // who did it obviously already knows.
-    case 'fix_logged': return { icon: 'check', link: '/task-board', title: hi ? 'काम हो गया — दर्ज किया' : 'Work done and logged', body: item + who }
+    case 'fix_logged': return { icon: 'check', link: '/task-board', title: named((b) => (hi ? `${b} ने काम दर्ज किया` : `${b} logged work done`), hi ? 'काम हो गया — दर्ज किया' : 'Work done and logged'), body: item }
     // An admin nudging whoever is holding an overdue repair. Orange, not red:
     // it is late, not broken.
     case 'fix_reminder': return { icon: 'bell', link: '/task-board', title: hi ? 'याद दिलाया गया — यह अब भी बाकी है' : 'Reminder — this is still pending', body: item + who }
@@ -47,10 +53,10 @@ function meta(n, hi) {
     // An update on a request you are on — from the person who raised it, or the
     // person doing it. Named, because "someone said something" is not a reason
     // to open an app.
-    case 'fix_update': return { icon: 'mic', link: '/task-board', title: hi ? 'मरम्मत पर नया अपडेट' : 'New update on a repair', body: item + who }
+    case 'fix_update': return { icon: 'mic', link: '/task-board', title: named((b) => (hi ? `${b} ने अपडेट भेजा` : `${b} sent an update`), hi ? 'मरम्मत पर नया अपडेट' : 'New update on a repair'), body: item }
     case 'fix_closed_by_admin': return { icon: 'check', link: '/task-board', title: hi ? 'एडमिन ने आपकी रिक्वेस्ट पूरी मार्क की' : 'Admin marked your repair complete', body: item }
     case 'valet_booking': return { icon: 'valet', link: '/valet', title: hi ? 'नई वैले बुकिंग' : 'New valet booking', body: item }
-    case 'quiz_completed': return { icon: 'training', link: '/training', title: hi ? 'क्विज़ पूरा हुआ' : 'Quiz completed', body: item + who }
+    case 'quiz_completed': return { icon: 'training', link: '/training', title: named((b) => (hi ? `${b} ने क्विज़ पूरा किया` : `${b} completed a quiz`), hi ? 'क्विज़ पूरा हुआ' : 'Quiz completed'), body: item }
     case 'training_assigned': return { icon: 'training', link: '/training', title: hi ? 'नई ट्रेनिंग सौंपी गई' : 'New training assigned', body: item }
     // one reminder per person per day: a single task carries its title + id,
     // several arrive as a digest whose task_text is just the count
