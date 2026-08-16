@@ -30,12 +30,13 @@ export function Loader({ label }) {
   )
 }
 
-export function Card({ children, style, onClick }) {
+export function Card({ children, style, onClick, className }) {
   const C = useColors()
   return (
     <div
       onClick={onClick}
-      className={onClick ? 'hoverable' : undefined}
+      // A clickable card lifts by default; anything else has to ask, and now can
+      className={[onClick ? 'hoverable' : '', className || ''].filter(Boolean).join(' ') || undefined}
       style={{
         background: C.card,
         border: `1px solid ${C.border}`,

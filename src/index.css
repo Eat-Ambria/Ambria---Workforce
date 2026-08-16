@@ -104,6 +104,28 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .hoverable { transition: transform .16s ease, box-shadow .16s ease; }
 .hoverable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,24,40,0.10); }
 
+/* Video cards. Only where hover is real: on a touch screen :hover latches
+   after a tap and the card sits lifted until you touch something else, which
+   looks like it is stuck rather than responding. */
+@media (hover: hover) {
+  .video-card { transition: transform .16s ease, box-shadow .16s ease; }
+  /* !important is not a flourish here: Card sets box-shadow as an inline style,
+     and an inline style is beaten by nothing else. Without it the card lifted on
+     hover while the shadow beneath it stayed put. */
+  .video-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.15) !important;
+  }
+
+  /* The thumbnail is the subject, so it leads. It is absolutely positioned and
+     cropped by the card's overflow, so it pushes in rather than spilling. */
+  .video-card img { transition: transform .3s ease; }
+  .video-card:hover img { transform: scale(1.06); }
+
+  .play-badge { transition: transform .16s ease, background .16s ease; }
+  .video-card:hover .play-badge { transform: scale(1.09); background: #fff; }
+}
+
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 
 /* Sheet cells (wifi register, and any grid that reuses the class).

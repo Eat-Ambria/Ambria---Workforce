@@ -239,8 +239,20 @@ export default function Videos() {
             const chip = deadlineChip(admin ? v.deadline : deadlines[v.id], done, C, lang, admin)
             const qCount = quizCounts[v.id] || 0
             const res = results[v.id]
+            // The resting shadow is set on the element, not in the stylesheet:
+            // Card writes box-shadow inline and an inline style beats a class
+            // rule. The default is 1px at 5% opacity — invisible under a
+            // bordered card, which is why these read as flat.
             return (
-              <Card key={v.id} style={{ padding: 0, overflow: 'hidden', border: `1px solid ${done ? C.green : C.border}` }}>
+              <Card
+                key={v.id}
+                className="video-card"
+                style={{
+                  padding: 0, overflow: 'hidden',
+                  border: `1px solid ${done ? C.green : C.border}`,
+                  boxShadow: C.shadowMd,
+                }}
+              >
                 {/* thumbnail / placeholder */}
                 <button
                   onClick={() => setPlaying(v)}
@@ -257,7 +269,7 @@ export default function Videos() {
                   {/* play overlay when a youtube thumbnail is shown */}
                   {thumb && !done && (
                     <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.15)' }}>
-                      <span style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'grid', placeItems: 'center' }}>
+                      <span className="play-badge" style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'grid', placeItems: 'center' }}>
                         <Icon name="play" size={16} color={C.maroon} fill={C.maroon} />
                       </span>
                     </span>

@@ -27,13 +27,20 @@ const daysUntil = (d) => Math.ceil((new Date(d) - new Date(todayISO())) / DAY)
 // A date turns amber before it turns red. A bill that lapsed yesterday is
 // already somebody's problem; the point of the register is to catch it the week
 // before, so "6 days left" gets its own colour rather than sharing "fine".
+// How far off the renewal is. These read as full phrases because they sit under
+// the date now rather than in an 84px column of their own — "5 days overdue"
+// against "On track" is legible at a glance where "5d over" against "ok" was a
+// puzzle to be worked out.
 function dueStatus(due, hi) {
-  if (!due) return { color: 'faint', label: hi ? '—' : '—' }
+  if (!due) return { color: 'faint', label: '—' }
   const d = daysUntil(due)
-  if (d < 0) return { color: 'red', label: hi ? `${Math.abs(d)} दिन ऊपर` : `${Math.abs(d)}d over` }
-  if (d === 0) return { color: 'red', label: hi ? 'आज' : 'today' }
-  if (d <= 7) return { color: 'yellow', label: hi ? `${d} दिन` : `${d}d left` }
-  return { color: 'green', label: hi ? 'ठीक' : 'ok' }
+  if (d < 0) {
+    const n = Math.abs(d)
+    return { color: 'red', label: hi ? `${n} दिन देरी` : `${n} day${n === 1 ? '' : 's'} overdue` }
+  }
+  if (d === 0) return { color: 'red', label: hi ? 'आज देय' : 'Due today' }
+  if (d <= 7) return { color: 'yellow', label: hi ? `${d} दिन में` : `In ${d} day${d === 1 ? '' : 's'}` }
+  return { color: 'green', label: hi ? 'ठीक है' : 'On track' }
 }
 
 const thCell = {
@@ -355,7 +362,10 @@ export default function WifiServices() {
                 <div
                   key={r.key}
                   style={{
-                    display: 'grid', gridTemplateColumns: COLS, alignItems: 'center',
+                    // start, not center: the date cell is taller than the rest
+                    // whenever it carries a status pill, and centring lifted its
+                    // input above every other input in the row
+                    display: 'grid', gridTemplateColumns: COLS, alignItems: 'start',
                     borderBottom: i === rows.length - 1 ? 'none' : `1px solid ${C.border}`,
                     // an unsaved line is tinted, so it is obvious what Save will write
                     background: isNew ? C.maroonSoft : 'transparent',
@@ -491,11 +501,15 @@ export default function WifiServices() {
                       onChange={(e) => set(r.key, { due_date: e.target.value })}
                     />
                     {r.due_date && (
-                      <span style={{
-                        display: 'block', marginTop: 3, fontSize: 10.5, fontWeight: 700,
-                        color: C[st.color] || C.faint,
-                      }}>
-                        {st.label}
+                      <span style={{ display: 'flex', justifyContent: 'center', marginTop: 5 }}>
+                        <span style={{
+                          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em',
+                          color: C[st.color] || C.faint,
+                          background: `${C[st.color] || C.faint}18`,
+                          borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
+                        }}>
+                          {st.label}
+                        </span>
                       </span>
                     )}
                   </span>
@@ -512,7 +526,11 @@ export default function WifiServices() {
                       onChange={(e) => set(r.key, { notes: e.target.value })}
                     />
                   </span>
-                  <span style={{ ...tdCell, textAlign: 'right' }}>
+                  <span style={{
+                    ...tdCell,
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    minHeight: 33 + 18,   // a field, plus tdCell's 9px top and bottom
+                  }}>
                     <button
                       type="button"
                       onClick={() => remove(r)}
