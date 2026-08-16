@@ -8,6 +8,7 @@ import Videos from './training/Videos'
 import ChemicalUsage from './training/ChemicalUsage'
 import FireSafety from './training/FireSafety'
 import StaffProgress from './training/StaffProgress'
+import WifiServices from './training/WifiServices'
 
 export default function Training() {
   const t = useT()
@@ -21,6 +22,7 @@ export default function Training() {
     ...(admin ? [
       { key: 'progress', label: lang === 'hi' ? 'स्टाफ़ प्रगति' : 'Staff Progress' },
       { key: 'fire', label: t.fireSafety },
+      { key: 'wifi', label: lang === 'hi' ? 'वाई-फ़ाई सेवाएँ' : 'WiFi Services' },
     ] : []),
   ]
   // allow deep-linking to a tab (e.g. from the dashboard Fire Safety widget)
@@ -36,6 +38,7 @@ export default function Training() {
       {tab === 'chemical' && <ChemicalUsage />}
       {tab === 'progress' && admin && <StaffProgress />}
       {tab === 'fire' && admin && <FireSafety />}
+      {tab === 'wifi' && admin && <WifiServices />}
     </div>
   )
 }

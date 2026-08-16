@@ -77,3 +77,14 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .hoverable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,24,40,0.10); }
 
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Sheet cells (wifi register, and any grid that reuses the class).
+   The inline style sets `outline: none` so the box can carry its own border
+   colour — which left no focus indicator at all. This puts one back: a ring
+   drawn outside the border, so it does not shift the row by a pixel. */
+.sheet-cell:focus,
+.sheet-cell:focus-visible {
+  outline: none;
+  border-color: #7B1E2F;
+  box-shadow: 0 0 0 3px rgba(123, 30, 47, 0.15);
+}

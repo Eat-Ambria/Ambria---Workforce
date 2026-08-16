@@ -1566,7 +1566,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
               onClick={postUpdate}
               style={{ marginTop: 10 }}
             >
-              {posting ? t.saving : t.sendUpdate}
+              {t.sendUpdate}
             </Button>
           </>
         )}
