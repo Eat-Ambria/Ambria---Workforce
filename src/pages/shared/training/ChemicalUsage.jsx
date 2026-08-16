@@ -5,7 +5,7 @@ import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
 import { PROPERTIES, PROPERTY_MAP, propName, unitName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment } from '../../../constants/org'
-import { Card, Loader, EmptyState, Button, Field, inputStyle, SectionTitle } from '../../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Field, inputStyle, SectionTitle, ChipRow } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import Icon from '../../../components/common/Icon'
 import { useConfirm } from '../../../components/common/ConfirmDialog'
@@ -126,12 +126,12 @@ export default function ChemicalUsage() {
 
       {/* Property filter — only for users who oversee more than one property */}
       {seeAll && (
-        <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
+        <ChipRow style={{ marginBottom: 14 }}>
           <Chip C={C} active={propFilter === 'all'} onClick={() => setPropFilter('all')}>{t.all}</Chip>
           {visibleProps.map((p) => (
             <Chip key={p.code} C={C} active={propFilter === p.code} onClick={() => setPropFilter(p.code)}>{propName(p.code, lang)}</Chip>
           ))}
-        </div>
+        </ChipRow>
       )}
 
       {/* Usage log */}
@@ -196,7 +196,7 @@ export default function ChemicalUsage() {
 function Chip({ children, active, onClick, C }) {
   return (
     <button onClick={onClick} style={{
-      whiteSpace: 'nowrap', padding: '7px 13px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+      padding: '7px 11px', borderRadius: 999, fontSize: 13, fontWeight: 600, lineHeight: 1.3,
       background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl, border: `1px solid ${active ? C.maroon : C.border}`,
     }}>{children}</button>
   )

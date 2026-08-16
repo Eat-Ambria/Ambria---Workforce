@@ -88,3 +88,12 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   border-color: #7B1E2F;
   box-shadow: 0 0 0 3px rgba(123, 30, 47, 0.15);
 }
+
+/* A row that scrolls sideways without drawing a bar under itself.
+   The segmented filters (dashboard properties, Analytics period, the two
+   frequency rows) need overflow-x so they never wrap to a second line — but a
+   scrollbar beneath a 36px-tall control reads as a rendering fault, and on a
+   desktop it sits there permanently even when everything already fits.
+   Still scrollable by wheel, trackpad, touch and keyboard; only the bar goes. */
+.no-bar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-bar::-webkit-scrollbar { display: none; }

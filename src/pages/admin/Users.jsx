@@ -10,7 +10,7 @@ import {
 } from '../../constants/org'
 import { navForRole, ALWAYS_VISIBLE } from '../../constants/nav'
 import { normalizePhone, typedPhone, isValidPhone } from '../../lib/phone'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
@@ -133,10 +133,10 @@ export default function Users() {
           onClick={() => { setShowInactive((v) => !v); setPage(0) }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
-            padding: '0 14px', height: 38, borderRadius: 999,
+            padding: '0 13px', height: 32, borderRadius: 999,
             background: showInactive ? C.rBg : C.card,
             border: `1px solid ${showInactive ? C.red : C.border}`,
-            color: showInactive ? C.red : C.tl, fontSize: 13.5, fontWeight: 600,
+            color: showInactive ? C.red : C.tl, fontSize: 12.5, fontWeight: 600,
           }}
         >
           {showInactive ? t.showActive : t.showInactive}
@@ -149,32 +149,63 @@ export default function Users() {
         {showInactive && <span style={{ fontSize: 12.5, color: C.tl }}>{t.inactiveUsersHint}</span>}
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+      {/* Search on its own line — it is typed into, and half a phone width is
+          not enough to read back what you typed. The icon sits inside the
+          field: a text box has no vocabulary of its own to announce itself
+          with, which is why the three dropdowns below need no icons. */}
+      <div style={{ position: 'relative', maxWidth: 380, marginBottom: 10 }}>
+        <Icon
+          name="search"
+          size={15}
+          color={C.faint}
+          style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+        />
         <input
-          style={{ ...inputStyle(C), flex: 2, minWidth: 200 }}
+          style={{ ...filterStyle(C), paddingLeft: 34 }}
           placeholder={t.searchNameUser}
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          aria-label={t.searchNameUser}
         />
-        <MultiSelect C={C} placeholder={t.allRoles} options={roleOptions} selected={roleSel} onChange={changeRole} />
-        <MultiSelect C={C} placeholder={t.allDepts} options={deptOptions} selected={deptSel} onChange={changeDept} />
-        <MultiSelect C={C} placeholder={t.allProps} options={propOptions} selected={propSel} onChange={changeProp} />
-        {filtered && (
+      </div>
+
+      {/* Captioned, so each one still says what it controls after you have
+          chosen something: "All roles" becomes "Site Head" and takes the word
+          "roles" with it. Two columns on a phone, one row on a desktop. */}
+      <div style={{
+        display: 'grid', gap: 8, marginBottom: 12,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      }}>
+        <FilterField label={t.role}>
+          <MultiSelect C={C} minWidth={0} placeholder={t.all} options={roleOptions} selected={roleSel} onChange={changeRole} />
+        </FilterField>
+        <FilterField label={t.department}>
+          <MultiSelect C={C} minWidth={0} placeholder={t.all} options={deptOptions} selected={deptSel} onChange={changeDept} />
+        </FilterField>
+        <FilterField label={t.properties}>
+          <MultiSelect C={C} minWidth={0} placeholder={t.all} options={propOptions} selected={propSel} onChange={changeProp} />
+        </FilterField>
+      </div>
+
+      {/* Only once something is filtered, and on its own line at the right —
+          in the row above it was a fourth cell with no caption, sitting a
+          caption's height out of line with the three that had one. */}
+      {filtered && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button
             type="button"
             onClick={clearFilters}
-            title={t.clearFilters}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-              padding: '0 14px', height: 42, borderRadius: 10,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 999,
               background: C.card, border: `1px solid ${C.border}`,
-              color: C.tl, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap',
+              color: C.tl, fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap',
             }}
           >
-            <Icon name="close" size={15} color={C.tl} /> {t.clearFilters}
+            <Icon name="close" size={14} color={C.tl} /> {t.clearFilters}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {listLoading && rows.length === 0 ? (
         <Loader label={t.loading} />

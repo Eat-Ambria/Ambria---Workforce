@@ -7,7 +7,7 @@ import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
 import { isAdminRole, DEPARTMENTS, DEPARTMENT_MAP, scopedDepartment, deptName } from '../../../constants/org'
-import { Card, Loader, EmptyState, ProgressBar, Button } from '../../../components/common/UI'
+import { Card, Loader, EmptyState, ProgressBar, Button, ChipRow } from '../../../components/common/UI'
 import { useConfirm } from '../../../components/common/ConfirmDialog'
 import Icon from '../../../components/common/Icon'
 import PlayerModal from './videos/PlayerModal'
@@ -217,12 +217,12 @@ export default function Videos() {
             </Button>
           </div>
           {deptChips.length > 0 && (
-            <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
+            <ChipRow style={{ marginBottom: 16 }}>
               <Chip C={C} active={deptFilter === 'all'} onClick={() => setDeptFilter('all')}>{t.all}</Chip>
               {deptChips.map((d) => (
                 <Chip key={d.code} C={C} active={deptFilter === d.code} onClick={() => setDeptFilter(d.code)}>{deptName(d.code, lang)}</Chip>
               ))}
-            </div>
+            </ChipRow>
           )}
         </>
       )}
@@ -359,7 +359,7 @@ function Chip({ children, active, onClick, C }) {
     <button
       onClick={onClick}
       style={{
-        whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
+        padding: '8px 11px', borderRadius: 999, fontSize: 13, fontWeight: 600, lineHeight: 1.3,
         background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
       }}

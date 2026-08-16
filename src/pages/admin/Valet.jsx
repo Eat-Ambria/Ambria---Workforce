@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext'
 import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
 import { typedPhone } from '../../lib/phone'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
-import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, Spinner } from '../../components/common/UI'
+import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, filterStyle, FilterField, Spinner } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
@@ -187,12 +187,13 @@ export default function Valet() {
               ))}
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, maxWidth: 320 }}>
-              <Icon name="pin" size={16} color={C.tl} />
-              <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
-                <option value="all">{t.properties} — {t.all}</option>
-                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
-              </select>
+            <div style={{ marginBottom: 14, maxWidth: 320 }}>
+              <FilterField label={t.properties}>
+                <select style={filterStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)}>
+                  <option value="all">{t.all}</option>
+                  {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+                </select>
+              </FilterField>
             </div>
           ))}
 
@@ -927,14 +928,15 @@ function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {scopeAll && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-            <Icon name="pin" size={16} color={C.tl} />
-            <select style={inputStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)} aria-label={t.properties}>
-              <option value="all">{t.properties} — {t.all}</option>
-              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
-            </select>
+          <div style={{ flex: 1, minWidth: 150 }}>
+            <FilterField label={t.properties}>
+              <select style={filterStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)}>
+                <option value="all">{t.all}</option>
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+              </select>
+            </FilterField>
           </div>
         )}
         {upcoming.length > 0 && (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Children, cloneElement, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { todayISO, fmtDate } from '../lib/time'
@@ -7,7 +7,7 @@ import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
 import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, notDueToday, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
-import { Card, Loader, SectionTitle, FilterChip, inputStyle } from '../components/common/UI'
+import { Card, Loader, SectionTitle, filterStyle, FilterField } from '../components/common/UI'
 import Icon from '../components/common/Icon'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
@@ -202,51 +202,79 @@ function AdminDashboard({ user }) {
 
   return (
     <div>
-      <SectionTitle subtitle={scopeAll ? `${t.properties}: ${scopeLabel}` : propName(user?.property, lang)}>
+      {/* An all-venue admin has the chip row below saying which venue; repeating
+          it here as "Properties: All" was the same answer twice. Today's date is
+          the thing nothing else on the page states, and every figure on it is
+          today's. A single-venue admin keeps their venue, which they have no
+          chips to read it from. */}
+      <SectionTitle subtitle={scopeAll ? fmtDate(todayISO()) : propName(user?.property, lang)}>
         {t.welcome}, {personName(user, lang)}
       </SectionTitle>
 
       {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {scopeAll && (wide ? (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <FilterChip active={prop === 'all'} onClick={() => setProp('all')}>{t.all}</FilterChip>
-            {PROPERTIES.map((p) => (
-              <FilterChip key={p.code} active={prop === p.code} onClick={() => setProp(p.code)}>
-                {propName(p.code, lang)}
-              </FilterChip>
-            ))}
+          /* One setting with six values, drawn as one object. Six separate
+             pills read as six independent toggles, which is not what they are —
+             the same control the Analytics period bar uses. */
+          <div className="no-bar" style={{
+            display: 'flex', gap: 2, padding: 3, minWidth: 0,
+            background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10,
+            // contained, or six unshrinkable buttons push the page sideways
+            overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+          }}>
+            {[{ code: 'all', name: t.all }, ...PROPERTIES.map((p) => ({ code: p.code, name: propName(p.code, lang) }))]
+              .map((p) => {
+                const on = prop === p.code
+                return (
+                  <button
+                    key={p.code}
+                    type="button"
+                    onClick={() => setProp(p.code)}
+                    aria-pressed={on}
+                    style={{
+                      whiteSpace: 'nowrap', padding: '7px 15px', borderRadius: 8,
+                      fontSize: 13, fontWeight: on ? 700 : 600,
+                      background: on ? C.card : 'transparent',
+                      color: on ? C.maroon : C.tl,
+                      border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
+                    }}
+                  >
+                    {p.name}
+                  </button>
+                )
+              })}
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-            <Icon name="pin" size={16} color={C.tl} />
-            <select style={inputStyle(C)} value={prop} onChange={(e) => setProp(e.target.value)} aria-label={t.properties}>
-              <option value="all">{t.properties} — {t.all}</option>
-              {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
-            </select>
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+            <FilterField label={t.properties}>
+              <select style={filterStyle(C)} value={prop} onChange={(e) => setProp(e.target.value)}>
+                <option value="all">{t.all}</option>
+                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+              </select>
+            </FilterField>
           </div>
         ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-          <Icon name="user" size={16} color={C.tl} />
-          <select
-            style={inputStyle(C)}
-            value={member}
-            onChange={(e) => setMember(e.target.value)}
-            aria-label={t.members}
-          >
-            <option value="all">{t.members} — {t.all}</option>
-            {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
-          </select>
+        <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+          <FilterField label={t.members}>
+            <select style={filterStyle(C)} value={member} onChange={(e) => setMember(e.target.value)}>
+              <option value="all">{t.all}</option>
+              {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
+            </select>
+          </FilterField>
         </div>
       </div>
 
-      {/* work handed to this admin personally — only shown when there is some,
-          so the rest of the time the dashboard stays purely org-wide */}
+      {/* Work handed to this admin personally — only shown when there is some, so
+          the rest of the time the dashboard stays purely org-wide.
+          A line, not a banner: two chips in a full-width tinted bar with their
+          own icon read as an alert, and this is just the admin's own work. */}
       {(d.mine.tasks > 0 || d.mine.fixes > 0) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: C.maroonSoft, border: `1px solid ${C.maroon}33`, borderLeft: `3px solid ${C.maroon}`, borderRadius: 12, padding: '11px 14px', marginBottom: 18 }}>
-          <Icon name="myTasks" size={17} color={C.maroon} />
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.maroon }}>{t.assignedToMe}</span>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.faint }}>
+            {t.assignedToMe}
+          </span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {d.mine.tasks > 0 && (
               <MineChip C={C} label={t.myTasks} value={d.mine.tasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
             )}
@@ -257,17 +285,24 @@ function AdminDashboard({ user }) {
         </div>
       )}
 
+      {/* Side by side once there is room. Overdue carries two numbers and was
+          taking a band as wide as the four above it, which pushed everything
+          worth reading below the fold. */}
+      <div style={{
+        display: 'grid', gap: 14, alignItems: 'start', marginBottom: 4,
+        gridTemplateColumns: wide ? 'minmax(0, 3fr) minmax(0, 2fr)' : '1fr',
+      }}>
       {/* Tasks — every task figure in one block */}
       <StatBlock C={C} icon="tasks" tone={C.maroon} title={t.tasks} onView={() => go('/tasks', 'all')}>
-        <StatCell C={C} value={task.total} label={t.totalTasks} tone={C.maroon} onClick={() => go('/tasks', 'all')} />
-        <StatCell C={C} value={task.pending} label={t.pending} tone={C.yellow} onClick={() => go('/tasks', 'pending')} />
-        <StatCell C={C} value={task.inProgress} label={t.inProgress} tone={C.blue} onClick={() => go('/tasks', 'inprogress')} />
+        <StatCell C={C} icon="tasks" value={task.total} label={t.totalTasks} tone={C.maroon} onClick={() => go('/tasks', 'all')} />
+        <StatCell C={C} icon="clock" value={task.pending} label={t.pending} tone={C.yellow} onClick={() => go('/tasks', 'pending')} />
+        <StatCell C={C} icon="refresh" value={task.inProgress} label={t.inProgress} tone={C.blue} onClick={() => go('/tasks', 'inprogress')} />
         {/* staff close their own tasks now — this only counts rows left over
             from the old approval queue, so the tile goes once they are cleared */}
         {task.waiting > 0 && (
-          <StatCell C={C} value={task.waiting} label={t.reviewQueue} tone={C.indigo} onClick={() => go('/tasks', 'review')} />
+          <StatCell C={C} icon="inbox" value={task.waiting} label={t.reviewQueue} tone={C.indigo} onClick={() => go('/tasks', 'review')} />
         )}
-        <StatCell C={C} value={task.done} label={t.completed} tone={C.green} onClick={() => go('/tasks', 'completed')} />
+        <StatCell C={C} icon="check" value={task.done} label={t.completed} tone={C.green} onClick={() => go('/tasks', 'completed')} />
       </StatBlock>
 
       {/* Overdue — tasks and repairs together, because both are late work */}
@@ -277,9 +312,10 @@ function AdminDashboard({ user }) {
           ? (lang === 'hi' ? 'कुछ भी बाकी नहीं — शाबाश' : 'Nothing late — all clear')
           : undefined}
       >
-        <StatCell C={C} value={task.overdue} label={t.tasks} tone={C.red} onClick={() => go('/tasks', 'overdue')} />
-        <StatCell C={C} value={d.board.overdue} label={t.taskBoard} tone={TR_ORANGE} onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
+        <StatCell C={C} icon="calendar" strong value={task.overdue} label={t.tasks} tone={C.red} onClick={() => go('/tasks', 'overdue')} />
+        <StatCell C={C} icon="taskBoard" strong value={d.board.overdue} label={t.taskBoard} tone={C.red} onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
       </StatBlock>
+      </div>
 
       {/* section widgets */}
       <div style={widgetGrid}>
@@ -445,18 +481,18 @@ function EmployeeDashboard({ user }) {
           single place to look. */}
       <StatBlock C={C} icon="tasks" tone={C.maroon} title={t.myTasks}
                  onView={() => navigate('/my-tasks', { state: { status: 'all' } })}>
-        <StatCell C={C} value={s.total} label={t.totalTasks} tone={C.maroon}
+        <StatCell C={C} icon="tasks" value={s.total} label={t.totalTasks} tone={C.maroon}
                   onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
-        <StatCell C={C} value={s.pending} label={t.pending} tone={C.yellow}
+        <StatCell C={C} icon="clock" value={s.pending} label={t.pending} tone={C.yellow}
                   onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.PENDING } })} />
-        <StatCell C={C} value={s.inProgress} label={t.inProgress} tone={C.blue}
+        <StatCell C={C} icon="refresh" value={s.inProgress} label={t.inProgress} tone={C.blue}
                   onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.IN_PROGRESS } })} />
         {/* nothing waits for approval any more; shown only if something still is */}
         {s.waiting > 0 && (
-          <StatCell C={C} value={s.waiting} label={t.completionRequested} tone={C.indigo}
+          <StatCell C={C} icon="inbox" value={s.waiting} label={t.completionRequested} tone={C.indigo}
                     onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETION_REQUESTED } })} />
         )}
-        <StatCell C={C} value={s.done} label={t.completed} tone={C.green}
+        <StatCell C={C} icon="check" value={s.done} label={t.completed} tone={C.green}
                   onClick={() => navigate('/my-tasks', { state: { status: TASK_STATUS.COMPLETED } })} />
       </StatBlock>
 
@@ -468,9 +504,9 @@ function EmployeeDashboard({ user }) {
                      // appearing here at 6 PM looks like a bug
                      ? t.dailyLateAfter.replace('{h}', dailyOverdueLabel())
                      : undefined}>
-        <StatCell C={C} value={s.overdue} label={t.tasks} tone={C.red}
+        <StatCell C={C} icon="calendar" strong value={s.overdue} label={t.tasks} tone={C.red}
                   onClick={() => navigate('/my-tasks', { state: { status: 'overdue' } })} />
-        <StatCell C={C} value={s.fixOverdue} label={t.taskBoard} tone={TR_ORANGE}
+        <StatCell C={C} icon="taskBoard" strong value={s.fixOverdue} label={t.taskBoard} tone={C.red}
                   onClick={() => navigate('/task-board', { state: { tab: 'overdue' } })} />
       </StatBlock>
 
@@ -480,17 +516,17 @@ function EmployeeDashboard({ user }) {
           repair work" from "the app did not look". */}
       <StatBlock C={C} icon="taskBoard" tone={C.maroon} title={t.taskBoard}
                  onView={() => navigate('/task-board', { state: { tab: 'all' } })}>
-        <StatCell C={C} value={s.fixes?.total || 0} label={t.total} tone={C.maroon}
+        <StatCell C={C} icon="taskBoard" value={s.fixes?.total || 0} label={t.total} tone={C.maroon}
                   onClick={() => navigate('/task-board', { state: { tab: 'all' } })} />
-        <StatCell C={C} value={s.fixes?.open || 0} label={t.open} tone={C.yellow}
+        <StatCell C={C} icon="clock" value={s.fixes?.open || 0} label={t.open} tone={C.yellow}
                   onClick={() => navigate('/task-board', { state: { tab: 'open' } })} />
-        <StatCell C={C} value={s.fixes?.inProgress || 0} label={t.inProgress} tone={C.blue}
+        <StatCell C={C} icon="refresh" value={s.fixes?.inProgress || 0} label={t.inProgress} tone={C.blue}
                   onClick={() => navigate('/task-board', { state: { tab: 'in_progress' } })} />
         {s.fixes?.waiting > 0 && (
-          <StatCell C={C} value={s.fixes?.waiting || 0} label={t.reviewQueue} tone={C.indigo}
+          <StatCell C={C} icon="inbox" value={s.fixes?.waiting || 0} label={t.reviewQueue} tone={C.indigo}
                     onClick={() => navigate('/task-board', { state: { tab: 'review' } })} />
         )}
-        <StatCell C={C} value={s.fixes?.done || 0} label={t.completed} tone={C.green}
+        <StatCell C={C} icon="check" value={s.fixes?.done || 0} label={t.completed} tone={C.green}
                   onClick={() => navigate('/task-board', { state: { tab: 'completed' } })} />
       </StatBlock>
 
@@ -704,13 +740,16 @@ function Row({ C, label, value, tone, danger, onClick }) {
 // A titled block holding several related numbers, so the dashboard reads as
 // "here are my tasks" / "here is what's late" rather than a wall of tiles.
 function StatBlock({ C, icon, tone, title, hint, onView, children }) {
+  // toArray drops the conditional cells that render as false, so the column
+  // count and the dividers are both taken from what is actually shown.
+  const cells = Children.toArray(children)
   return (
     <Card style={{ padding: 16, marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 9, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-          <Icon name={icon} size={16} color={tone} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 11, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <Icon name={icon} size={17} color={tone} />
         </span>
-        <span style={{ fontSize: 14.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
+        <span style={{ fontSize: 15.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
         {onView && (
           <button
             type="button"
@@ -726,33 +765,61 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
           <Icon name="check" size={15} color={C.green} /> {hint}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))', gap: 10 }}>
-          {children}
+        // One row, always. auto-fit dropped the fifth cell onto a line of its
+        // own where it read as a separate figure rather than the last of five.
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}>
+          {cells.map((cell, i) => cloneElement(cell, { divider: i > 0 }))}
         </div>
       )}
     </Card>
   )
 }
 
-// One number inside a StatBlock. Zero values stay muted so the eye lands on
+// One number inside a StatBlock: icon chip, figure, label, and a short rule in
+// the cell's colour. Zero values go grey — chip included — so the eye lands on
 // whatever actually has work in it.
-function StatCell({ C, value, label, tone, onClick }) {
-  const empty = !value
+//
+// `strong` paints the figure itself in the tone and drops the rule. Overdue uses
+// it: there the number being alarming is the whole message, and it should not
+// look like the neutral counts above it.
+//
+// `divider` is set by StatBlock, not by the caller — only it knows which cell
+// is first.
+function StatCell({ C, icon, value, label, tone, onClick, strong, divider }) {
+  const dim = !value && !strong
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        background: empty ? C.cardAlt : tint(tone, 0.08),
-        border: `1px solid ${empty ? C.border : tint(tone, 0.22)}`,
-        borderRadius: 11, padding: '10px 12px', textAlign: 'left',
+        display: 'grid', justifyItems: 'center', gap: 5, padding: '2px 4px',
+        background: 'transparent', border: 'none',
+        borderLeft: divider ? `1px solid ${C.border}` : undefined,
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: empty ? C.faint : tone }}>
+      <span style={{
+        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+        background: dim ? C.cardAlt : tint(tone, 0.12),
+        display: 'grid', placeItems: 'center',
+      }}>
+        <Icon name={icon} size={16} color={dim ? C.faint : tone} />
+      </span>
+      {/* tabular figures: without them a row of 157 / 127 / 12 / 18 has its
+          digits at four different widths and never lines up */}
+      <span style={{
+        fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums',
+        color: dim ? C.faint : (strong ? tone : C.text),
+      }}>
         {value ?? 0}
-      </div>
-      <div style={{ fontSize: 11.5, color: C.tl, fontWeight: 600, marginTop: 3 }}>{label}</div>
+      </span>
+      <span style={{ fontSize: 10.5, fontWeight: 600, color: C.tl, textAlign: 'center', lineHeight: 1.25 }}>
+        {label}
+      </span>
+      {!strong && (
+        <span style={{ width: 22, height: 3, borderRadius: 999, background: dim ? C.border : tone }} />
+      )}
     </button>
   )
 }

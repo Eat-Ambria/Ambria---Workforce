@@ -10,7 +10,7 @@ import {
   PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName, TASK_STATUS,
   FREQUENCY_MAP, frequencyLabel, taskFrequency,
 } from '../../constants/org'
-import { Card, Loader, EmptyState, Button, SectionTitle, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, SectionTitle, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { pct, avgOf, sumBy, rateTone } from './analyticsUtils'
@@ -439,7 +439,7 @@ export default function Analytics() {
       {/* One setting with five values, drawn as one object rather than five
           pills stretched edge to edge. Scrolls sideways on a phone instead of
           wrapping to two rows of uneven widths. */}
-      <div style={{
+      <div className="no-bar" style={{
         display: 'flex', gap: 2, marginBottom: 16, padding: 3,
         background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12,
         overflowX: 'auto', WebkitOverflowScrolling: 'touch',
@@ -509,52 +509,47 @@ export default function Analytics() {
           table, the day breakdown, the person grid and the missed work. */}
       {!loading && !err && (
         <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 200px' }}>
-              <Icon name="pin" size={16} color={C.tl} />
+          <div style={{
+            display: 'grid', gap: 8,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          }}>
+            <FilterField label={t.properties}>
               <select
-                style={inputStyle(C)}
+                style={filterStyle(C)}
                 value={propFilter}
                 onChange={(e) => { setPropFilter(e.target.value); setExpanded(null) }}
-                aria-label={t.properties}
               >
-                <option value="all">{t.properties} — {t.all}</option>
+                <option value="all">{t.all}</option>
                 {PROPERTIES.map((pr) => <option key={pr.code} value={pr.code}>{propName(pr.code, lang)}</option>)}
               </select>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 200px' }}>
-              <Icon name="tasks" size={16} color={C.tl} />
+            </FilterField>
+            <FilterField label={t.department}>
               <select
-                style={inputStyle(C)}
+                style={filterStyle(C)}
                 value={deptFilter}
                 onChange={(e) => { setDeptFilter(e.target.value); setExpanded(null) }}
-                aria-label={t.department}
               >
-                <option value="all">{t.department} — {t.all}</option>
+                <option value="all">{t.all}</option>
                 {deptOptions.map((d) => (
                   <option key={d.code} value={d.code}>{d.name}{d.retired ? ' · ⊖' : ''}</option>
                 ))}
               </select>
-            </div>
+            </FilterField>
             {/* One person, and the whole page reads as theirs. Only the people
                 the two pickers above have left, so it can never offer somebody
                 whose numbers would come back empty. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 200px' }}>
-              <Icon name="user" size={16} color={C.tl} />
+            <FilterField label={lang === 'hi' ? 'स्टाफ़' : 'Staff'}>
               <select
-                style={inputStyle(C)}
+                style={filterStyle(C)}
                 value={personFilter}
                 onChange={(e) => { setPersonFilter(e.target.value); setExpanded(null) }}
-                aria-label={lang === 'hi' ? 'स्टाफ़' : 'Staff'}
               >
-                <option value="all">
-                  {(lang === 'hi' ? 'स्टाफ़' : 'Staff')} — {t.all} ({personOptions.length})
-                </option>
+                <option value="all">{t.all} ({personOptions.length})</option>
                 {personOptions.map((u) => (
                   <option key={u.id} value={u.id}>{personName(u, lang)}</option>
                 ))}
               </select>
-            </div>
+            </FilterField>
           </div>
 
         </div>

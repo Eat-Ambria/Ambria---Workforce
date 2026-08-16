@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { inputStyle } from './UI'
+import { inputStyle, filterStyle } from './UI'
 import { useT } from '../../context/LangContext'
 import Icon from './Icon'
 
@@ -58,7 +58,9 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
         type="button"
         onClick={() => setOpen((o) => !o)}
         title={names.join(', ') || placeholder}
-        style={{ ...inputStyle(C), display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, cursor: 'pointer', textAlign: 'left' }}
+        // filterStyle, not inputStyle: every call site of this component is a
+        // filter, and sitting in a row beside a native one it was a head taller.
+        style={{ ...filterStyle(C), display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, cursor: 'pointer', textAlign: 'left' }}
       >
         <span style={{ color: selected.length ? C.text : C.tl, fontWeight: selected.length ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
         <Icon name="chevronRight" size={16} color={C.tl} style={{ transform: 'rotate(90deg)', flexShrink: 0 }} />

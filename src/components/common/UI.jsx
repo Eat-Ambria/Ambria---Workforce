@@ -1,4 +1,6 @@
+import { Children } from 'react'
 import { useColors } from '../../context/ThemeContext'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import Icon from './Icon'
 
 export function Spinner({ size = 22, color }) {
@@ -158,6 +160,14 @@ export function inputStyle(C) {
   }
 }
 
+// A filter is not a form field. The standard input above is 15px text in 11px
+// of padding, sized for something you type into; a row of filters wants to sit
+// quietly above the thing it filters. Oval to say so — nothing here is typed,
+// every one of them is a choice from a short list.
+export function filterStyle(C) {
+  return { ...inputStyle(C), padding: '7px 12px', fontSize: 12.5, borderRadius: 999 }
+}
+
 export function ProgressBar({ value = 0, tone, height = 10 }) {
   const C = useColors()
   const pct = Math.max(0, Math.min(100, Math.round(value)))
@@ -170,6 +180,44 @@ export function ProgressBar({ value = 0, tone, height = 10 }) {
 
 export function Tabs({ tabs, active, onChange, noMargin }) {
   const C = useColors()
+  // Not "is this a phone" but "can five labels sit on one line", which they can
+  // from about 560px up.
+  const roomy = useMediaQuery('(min-width: 560px)')
+
+  // Pills below that. An underline row cannot wrap — a second row would leave
+  // the first row's underlines hanging away from the border — so it scrolled
+  // instead, and a tab you have to scroll to find is a tab you do not know is
+  // there. Pills wrap, so every tab stays on the screen.
+  if (!roomy) {
+    return (
+      <div style={{
+        display: 'grid', gap: 6, marginBottom: noMargin ? 0 : 14,
+        gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, tabs.length))}, minmax(0, 1fr))`,
+        gridAutoRows: '1fr',
+      }}>
+        {tabs.map((tab) => {
+          const on = active === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => onChange(tab.key)}
+              aria-pressed={on}
+              style={{
+                padding: '7px 10px', borderRadius: 999, lineHeight: 1.3,
+                fontSize: 12.5, fontWeight: on ? 700 : 600,
+                background: on ? C.maroon : C.cardAlt,
+                color: on ? '#fff' : C.tl,
+                border: `1px solid ${on ? C.maroon : C.border}`,
+              }}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="no-scrollbar" style={{ display: 'flex', gap: 6, marginBottom: noMargin ? 0 : 16, overflowX: 'auto', borderBottom: `1px solid ${C.border}` }}>
       {tabs.map((tab) => (
@@ -187,6 +235,50 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
       ))}
     </div>
   )
+}
+
+// A row of choice chips. Never scrolls sideways: these rows all hid their
+// scrollbar, so a chip past the right edge had nothing at all to announce it —
+// the choice was simply invisible.
+//
+// On a phone it is a three-column grid rather than free wrapping. Wrapping left
+// ragged rows of differently-sized chips that lined up with nothing; fixed
+// columns make the second row sit under the first and the block read as one
+// control. Fewer than three chips get one column each, so a two-chip row does
+// not sit beside a hole. Above 560px there is room to let chips be their own
+// width again.
+// Caption above, value inside. Folding the label into the first option
+// ("Properties — All") is what you do when there is no room for a label — but
+// it only holds while nothing is selected. Choose a venue and the option reads
+// "Pushpanjali", and the screen no longer says what that dropdown controls.
+// The caption costs one 10px line and is always there.
+//
+// A <label> element, so tapping the caption opens the select: the whole cell
+// becomes the tap target, not just the 32px pill.
+export function FilterField({ label, children }) {
+  const C = useColors()
+  return (
+    <label style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: C.faint,
+      }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  )
+}
+
+export function ChipRow({ children, gap = 8, style }) {
+  const roomy = useMediaQuery('(min-width: 560px)')
+  const cols = Math.min(3, Math.max(1, Children.count(children)))
+  const layout = roomy
+    ? { display: 'flex', flexWrap: 'wrap' }
+    // 1fr rows: a label that wraps to two lines would otherwise make its own
+    // row taller than the rest and the grid would step.
+    : { display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: '1fr' }
+  return <div style={{ ...layout, gap, ...style }}>{children}</div>
 }
 
 export function SectionTitle({ children, subtitle, right }) {

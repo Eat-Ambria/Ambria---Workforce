@@ -17,6 +17,7 @@ import PhotoCapture from '../../components/common/PhotoCapture'
 import AudioPlayer from '../../components/common/AudioPlayer'
 import Icon from '../../components/common/Icon'
 import PhotoViewer from '../../components/common/PhotoViewer'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 const AUTO_REFRESH_MS = 30000
 const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
@@ -75,6 +76,7 @@ function Notice({ C, tone, bg, icon, title, sub }) {
 
 export default function MyTasks() {
   const C = useColors()
+  const roomy = useMediaQuery('(min-width: 560px)')
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
@@ -252,12 +254,37 @@ export default function MyTasks() {
         </div>
       </div>
 
-      {/* category filter — full-width segmented row */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <Chip C={C} full active={cat === 'all'} onClick={() => setCat('all')}>{t.all}</Chip>
-        {TASK_CATEGORIES.map((c) => (
-          <Chip key={c} C={C} full active={cat === c} onClick={() => setCat(c)}>{t[c]}</Chip>
-        ))}
+      {/* One setting with five values, made to fit rather than made to scroll.
+          Wrapping to a second row reads as two controls; scrolling left the last
+          value off the edge, which is worse — an unseen filter is an unused one.
+          So it tightens on narrow and shortens the one long label there, exactly
+          as the same row does on Daily Task. */}
+      <div className="no-bar" style={{
+        display: 'flex', gap: 2, marginBottom: 16, padding: 3,
+        background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 11,
+        overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+      }}>
+        {['all', ...TASK_CATEGORIES].map((c) => {
+          const on = cat === c
+          return (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCat(c)}
+              aria-pressed={on}
+              style={{
+                flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
+                padding: roomy ? '8px 16px' : '7px 6px', borderRadius: 9,
+                fontSize: roomy ? 13.5 : 12, fontWeight: on ? 700 : 600,
+                background: on ? C.card : 'transparent',
+                color: on ? C.maroon : C.tl,
+                border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
+              }}
+            >
+              {c === 'all' ? t.all : (!roomy && c === 'alternate' ? t.alternateShort : t[c])}
+            </button>
+          )
+        })}
       </div>
 
       {loading ? (
@@ -299,25 +326,6 @@ export default function MyTasks() {
         />
       )}
     </div>
-  )
-}
-
-function Chip({ children, active, onClick, C, full }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 14, fontWeight: 600,
-        background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
-        border: `1px solid ${active ? C.maroon : C.border}`,
-        // share a wide row, but wrap rather than clip once five categories no
-        // longer fit a phone
-        flex: full ? '1 1 auto' : undefined,
-        minWidth: full ? 86 : undefined,
-      }}
-    >
-      {children}
-    </button>
   )
 }
 

@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, overdueReason, dailyOverdueLabel, dayName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import RosterModal from './RosterModal'
@@ -18,6 +18,7 @@ import StaffProgress from './StaffProgress'
 import MyTasks from '../employee/MyTasks'
 import PhotoViewer from '../../components/common/PhotoViewer'
 import { useConfirm } from '../../components/common/ConfirmDialog'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import VoiceRecorder from '../../components/common/VoiceRecorder'
 import { deleteStorageFile } from '../../lib/storage'
 import { translateToHindi } from '../../lib/translate'
@@ -26,6 +27,7 @@ const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
 
 export default function AdminTasks() {
   const C = useColors()
+  const roomy = useMediaQuery('(min-width: 560px)')
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
@@ -314,72 +316,81 @@ export default function AdminTasks() {
       <>
       <SectionTitle>{t.tasks}</SectionTitle>
 
-      {/* venue + staff filters — both dropdowns, side by side (stack on narrow).
-          They sit above the progress table because they narrow it. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+      {/* Four filters, one strip. The leading icons are gone: every option
+          already names its own filter -- "Properties - All" -- so each icon
+          repeated the word beside it while costing the select 24px, which is
+          why that option was arriving truncated. auto-fit rather than a
+          breakpoint: it lands on two columns on a phone and one row on a
+          desktop, and stays right when an admin scoped to one venue or one
+          department sees only two of them. */}
+      <div style={{
+        display: 'grid', gap: 8, marginBottom: 12,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      }}>
         {canSeeAllProps && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-            <Icon name="pin" size={16} color={C.tl} />
-            <select
-              style={inputStyle(C)}
-              value={propFilter}
-              onChange={(e) => changeProp(e.target.value)}
-              aria-label={t.properties}
-            >
-              <option value="all">{t.properties} — {t.all}</option>
+          <FilterField label={t.properties}>
+            <select style={filterStyle(C)} value={propFilter} onChange={(e) => changeProp(e.target.value)}>
+              <option value="all">{t.all}</option>
               {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
             </select>
-          </div>
+          </FilterField>
         )}
         {/* department — hidden for an admin already locked to one, who has no
             choice to make */}
         {!scopedDepartment(user) && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-            <Icon name="team" size={16} color={C.tl} />
-            <select
-              style={inputStyle(C)}
-              value={deptFilter}
-              onChange={(e) => changeDept(e.target.value)}
-              aria-label={t.department}
-            >
-              <option value="all">{t.department} — {t.all}</option>
+          <FilterField label={t.department}>
+            <select style={filterStyle(C)} value={deptFilter} onChange={(e) => changeDept(e.target.value)}>
+              <option value="all">{t.all}</option>
               {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{deptName(d.code, lang)}</option>)}
             </select>
-          </div>
+          </FilterField>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-          <Icon name="warning" size={16} color={C.tl} />
-          <select
-            style={inputStyle(C)}
-            value={prioFilter}
-            onChange={(e) => changePrio(e.target.value)}
-            aria-label={t.priority}
-          >
-            <option value="all">{t.priority} — {t.all}</option>
+        <FilterField label={t.priority}>
+          <select style={filterStyle(C)} value={prioFilter} onChange={(e) => changePrio(e.target.value)}>
+            <option value="all">{t.all}</option>
             {PRIORITIES.map((p) => <option key={p} value={p}>{t[`priority${p[0].toUpperCase()}${p.slice(1)}`] || p}</option>)}
           </select>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 150 }}>
-          <Icon name="user" size={16} color={C.tl} />
-          <select
-            style={inputStyle(C)}
-            value={memberFilter}
-            onChange={(e) => changeMember(e.target.value)}
-            aria-label={t.members}
-          >
-            <option value="all">{t.members} — {t.all}</option>
+        </FilterField>
+        <FilterField label={t.members}>
+          <select style={filterStyle(C)} value={memberFilter} onChange={(e) => changeMember(e.target.value)}>
+            <option value="all">{t.all}</option>
             {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
           </select>
-        </div>
+        </FilterField>
       </div>
 
-      {/* category filter — a segmented row that WRAPS. Five categories no longer
-          fit a phone in one line, and a fixed row simply clipped the last one. */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <PropChip C={C} full active={catFilter === 'all'} onClick={() => changeCat('all')}>{t.all}</PropChip>
-        {TASK_CATEGORIES.map((cat) => (
-          <PropChip key={cat} C={C} full active={catFilter === cat} onClick={() => changeCat(cat)}>{t[cat]}</PropChip>
-        ))}
+      {/* One setting with five values, made to fit rather than made to scroll.
+          Sideways scrolling left "Monthly" off the edge of a phone, and a filter
+          nobody can see is a filter nobody uses. On narrow the type and padding
+          tighten and "Alternate days" shortens — the roster already labels that
+          band ALT / बदल. overflow stays as a backstop for a longer translation,
+          with the bar hidden. */}
+      <div className="no-bar" style={{
+        display: 'flex', gap: 2, marginBottom: 14, padding: 3,
+        background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 11,
+        overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+      }}>
+        {['all', ...TASK_CATEGORIES].map((cat) => {
+          const on = catFilter === cat
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => changeCat(cat)}
+              aria-pressed={on}
+              style={{
+                flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
+                padding: roomy ? '8px 16px' : '7px 6px', borderRadius: 9,
+                fontSize: roomy ? 13.5 : 12, fontWeight: on ? 700 : 600,
+                background: on ? C.card : 'transparent',
+                color: on ? C.maroon : C.tl,
+                border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
+              }}
+            >
+              {cat === 'all' ? t.all : (!roomy && cat === 'alternate' ? t.alternateShort : t[cat])}
+            </button>
+          )
+        })}
       </div>
 
       {/* Hidden while looking at issues or the leftover approval queue. That

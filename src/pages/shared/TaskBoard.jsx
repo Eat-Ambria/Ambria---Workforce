@@ -7,7 +7,7 @@ import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { DEPARTMENTS, isAdminRole, isSuperAdmin, scopedProperty, scopedProperties, scopedDepartment, DEPARTMENT_MAP, PROPERTY_MAP, propName, PROPERTIES, deptName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, isFlaggedPriority } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Tabs, Field, inputStyle, filterStyle, ChipRow, FilterField } from '../../components/common/UI'
 import HindiInput from '../../components/common/HindiInput'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
@@ -367,10 +367,10 @@ export default function TaskBoard() {
 
       {/* staff view toggle — work assigned to me vs requests I raised */}
       {!admin && (
-        <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
+        <ChipRow style={{ marginBottom: 14 }}>
           <ScopeChip C={C} active={scope === 'assigned'} onClick={() => setScope('assigned')}>{t.assignedToMe}</ScopeChip>
           <ScopeChip C={C} active={scope === 'posted'} onClick={() => setScope('posted')}>{t.myRequests}</ScopeChip>
-        </div>
+        </ChipRow>
       )}
 
       {/* Counted from every row in scope, not from the filtered list, so the
@@ -381,102 +381,91 @@ export default function TaskBoard() {
           Seven of them do not fit a phone, and a sideways-scrolling row hides
           whichever ones you have not scrolled to — so below 900px it becomes a
           dropdown, the same way the status tabs already do. */}
-      {catCompact ? (
-        <div style={{ marginBottom: 14 }}>
-          <select
-            style={inputStyle(C)}
-            value={catFilter}
-            onChange={(e) => setCatFilter(e.target.value)}
-            aria-label={t.requestType}
-          >
-            {catChoices.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      {/* Wide only. Every kind is listed, including the ones sitting at zero:
+          this doubles as the list of what a repair can be filed as, and a trade
+          that only appears once someone has used it is a trade nobody
+          discovers. Seven of them do not fit a phone, so below 900px it drops
+          into the filter grid below as a select. */}
+      {!catCompact && (
+        <ChipRow style={{ marginBottom: 14 }}>
           {catChoices.map((c) => (
             <ScopeChip key={c.key} C={C} active={catFilter === c.key} onClick={() => setCatFilter(c.key)}>
               {c.label}
             </ScopeChip>
           ))}
-        </div>
+        </ChipRow>
       )}
 
-      {/* The three narrowing filters. All answer "show me less of this list"
-          rather than defining it, so none earns a chip row.
-          Search gets its own line — it is typed into, and half a phone width is
-          not enough to read back what you typed. The two selects only ever show
-          a label, so they sit side by side at every width. minWidth 0 is what
-          lets them shrink at all: a flex item defaults to its content width and
-          would otherwise push the row off the screen. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
-          <Icon name="search" size={16} color={C.tl} style={{ flexShrink: 0 }} />
-          <input
-            style={inputStyle(C)}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t.searchFix}
-            aria-label={t.searchFix}
-          />
-        </div>
-        {/* The pair, on one line of their own — `1 1 0` rather than a pixel
-            basis, so they split whatever width there is instead of wrapping
-            when two 220s will not fit. */}
-        <div style={{ display: 'flex', gap: 10, flex: '1 1 320px', minWidth: 0 }}>
+      {/* Search sits on its own line: it is typed into, and half a phone width
+          is not enough to read back what you typed. The icon lives inside the
+          field — a text box has no vocabulary of its own to announce itself
+          with, which is exactly why the selects below need no icons. */}
+      <div style={{ position: 'relative', maxWidth: 380, marginBottom: 10 }}>
+        <Icon
+          name="search"
+          size={15}
+          color={C.faint}
+          style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+        />
+        <input
+          style={{ ...filterStyle(C), paddingLeft: 34 }}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t.searchFix}
+          aria-label={t.searchFix}
+        />
+      </div>
+
+      {/* One grid, however many filters this viewer actually has. auto-fit
+          rather than a breakpoint: two columns on a phone, one row on a
+          desktop, and still right for a non-admin who sees no assignee filter
+          or a wide screen where type and status are not selects at all. */}
+      <div style={{
+        display: 'grid', gap: 8, marginBottom: 14,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      }}>
+        {catCompact && (
+          <FilterField label={t.requestType}>
+            <select style={filterStyle(C)} value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+              {catChoices.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </FilterField>
+        )}
+
+        {statusCompact && (
+          <FilterField label={t.repairStatus}>
+            <select style={filterStyle(C)} value={tab} onChange={(e) => setTab(e.target.value)}>
+              {tabs.map((tb) => <option key={tb.key} value={tb.key}>{tb.label}</option>)}
+            </select>
+          </FilterField>
+        )}
+
         {/* Priorities with nothing in them are left out: an option that returns
             an empty list is a dead end. 'low' is not offered on new requests,
             but old rows still carry it, so it appears only if one does. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 0', minWidth: 0 }}>
-          <Icon name="warning" size={16} color={C.tl} style={{ flexShrink: 0 }} />
-          <select
-            style={inputStyle(C)}
-            value={prioFilter}
-            onChange={(e) => setPrioFilter(e.target.value)}
-            aria-label={t.priority}
-          >
-            <option value="all">{t.priority} — {t.all}</option>
+        <FilterField label={t.priority}>
+          <select style={filterStyle(C)} value={prioFilter} onChange={(e) => setPrioFilter(e.target.value)}>
+            <option value="all">{t.all}</option>
             {['urgent', 'high', 'normal', 'low'].map((pkey) => {
               const n = prioPool.filter((r) => (r.priority || 'normal') === pkey).length
               if (!n) return null
               return <option key={pkey} value={pkey}>{prioLabel(pkey, t)} ({n})</option>
             })}
           </select>
-        </div>
+        </FilterField>
 
         {admin && memberOptions.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 0', minWidth: 0 }}>
-            <Icon name="user" size={16} color={C.tl} style={{ flexShrink: 0 }} />
-            <select
-              style={inputStyle(C)}
-              value={memberFilter}
-              onChange={(e) => setMemberFilter(e.target.value)}
-              aria-label={t.assignedTo}
-            >
-              <option value="all">{t.assignedTo} — {t.all}</option>
+          <FilterField label={t.assignedTo}>
+            <select style={filterStyle(C)} value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)}>
+              <option value="all">{t.all}</option>
               {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
-          </div>
+          </FilterField>
         )}
-        </div>
       </div>
 
-      {/* status tabs on wide screens; one labeled dropdown when tight (≤813px) */}
-      {statusCompact ? (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 6 }}>{t.repairStatus}</div>
-          <select
-            style={inputStyle(C)}
-            value={tab}
-            onChange={(e) => setTab(e.target.value)}
-            aria-label={t.repairStatus}
-          >
-            {tabs.map((tb) => <option key={tb.key} value={tb.key}>{tb.label}</option>)}
-          </select>
-        </div>
-      ) : (
-        <Tabs tabs={tabs} active={tab} onChange={setTab} />
-      )}
+      {/* Wide only — the same choice the status select above offers when tight. */}
+      {!statusCompact && <Tabs tabs={tabs} active={tab} onChange={setTab} />}
 
       {list.length === 0 ? (
         <EmptyState icon={null} title={t[EMPTY_TITLE[tab]] || t.noData} />
@@ -1767,7 +1756,7 @@ function ScopeChip({ children, active, onClick, C, full }) {
       type="button"
       onClick={onClick}
       style={{
-        whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
+        padding: '8px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, lineHeight: 1.3,
         background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
         flex: full ? 1 : undefined, // full: share the row evenly (segmented control)
