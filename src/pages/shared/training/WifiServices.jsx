@@ -57,6 +57,9 @@ const tdCell = { padding: '9px 10px', minWidth: 0 }
 const INDENT = 20
 // Where a row of depth d draws the rail belonging to its parent.
 const railX = (depth) => 10 + (depth - 1) * INDENT + 6
+// A maroon tint, not the border grey. This line has to be followed by eye across
+// a 1500px sheet, and in grey it vanished into the row rules crossing it.
+const RAIL = (C) => `${C.maroon}55`
 const cellInput = (C) => ({
   width: '100%', background: C.white, color: C.text,
   border: `1px solid ${C.border}`, borderRadius: 7,
@@ -140,9 +143,15 @@ export default function WifiServices() {
     const walk = (key, depth) => {
       const kids = byParent.get(key) || []
       kids.forEach((r, idx) => {
-        // isLastChild decides whether the rail continues past this row or ends
-        // in an elbow — it is what makes the segments read as one line.
-        out.push({ ...r, depth, isLastChild: idx === kids.length - 1 })
+        // isLastChild decides whether the rail continues past this row or ends in
+        // an elbow; hasKids tells a parent to draw the top half of the line, from
+        // its own field down to where its first child picks it up.
+        const mine = r.id ? (byParent.get(String(r.id)) || []) : []
+        out.push({
+          ...r, depth,
+          isLastChild: idx === kids.length - 1,
+          hasKids: mine.length > 0,
+        })
         if (r.id) walk(String(r.id), depth + 1)
       })
     }
@@ -339,10 +348,10 @@ export default function WifiServices() {
     // than to a budget: "MD office Skynet" and "Ambria@0044" set the first two,
     // and password matches the name for shorter text because its copy button
     // comes out of the same track.
-    ? 'minmax(175px, 1.2fr) minmax(175px, 1fr) 156px minmax(130px, 1.1fr) minmax(120px, 1fr) minmax(135px, 1fr) 152px minmax(140px, 1.2fr) 40px'
-    : '200px 190px 156px 170px 160px 155px 152px 185px 40px'
-  // 200+190+156+170+160+155+152+185+40
-  const gridMin = wide ? 0 : 1408
+    ? 'minmax(175px, 1.2fr) minmax(175px, 1fr) 156px minmax(130px, 1.1fr) minmax(120px, 1fr) minmax(135px, 1fr) 152px minmax(140px, 1.2fr) 46px'
+    : '200px 190px 156px 170px 160px 155px 152px 185px 46px'
+  // 200+190+156+170+160+155+152+185+46 — 26px of button plus the cell's padding
+  const gridMin = wide ? 0 : 1414
 
   return (
     <div>
@@ -417,27 +426,41 @@ export default function WifiServices() {
                   {/* In Hindi the cell edits the Hindi name, with the English
                       as the placeholder so the row is still recognisable before
                       a Hindi spelling exists. Saving fills the blank one. */}
-                  {/* Wired to its parent, not just indented. The rail runs the
-                      full height of the row unless this is the last child, where
-                      it stops at the field and turns — so the segments of a
-                      family stack into one line that ends where the family does.
-                      Absolutely positioned because a row is a grid child and
-                      cannot be wrapped in a container of its own. */}
+                  {/* Wired to its parent, not just indented, and both ends draw
+                      their half:
+
+                        a parent with branches runs a line from the middle of its
+                        own field down to its bottom edge;
+                        a child runs one from its top edge down to its own field
+                        and turns into it — the full height instead if more
+                        branches follow, so the line carries on past.
+
+                      They meet at the row border, so a family reads as one line
+                      from the parent's name to the last branch's elbow. Drawn per
+                      row and positioned absolutely because a row is a grid child:
+                      it cannot be wrapped in a container of its own without
+                      breaking the columns. */}
                   <span style={{
                     ...tdCell, position: 'relative',
                     display: 'flex', alignItems: 'center', gap: 0,
                     paddingLeft: 10 + (r.depth || 0) * INDENT,
                   }}>
+                    {r.hasKids && (
+                      <span aria-hidden="true" style={{
+                        position: 'absolute', left: railX((r.depth || 0) + 1), top: 24, bottom: 0,
+                        width: 2, borderRadius: 1, background: RAIL(C),
+                      }} />
+                    )}
                     {r.depth > 0 && (
                       <>
                         <span aria-hidden="true" style={{
                           position: 'absolute', left: railX(r.depth), top: 0,
-                          width: 2, borderRadius: 1, background: C.borderStrong,
-                          height: r.isLastChild ? 25 : '100%',
+                          width: 2, borderRadius: 1, background: RAIL(C),
+                          height: r.isLastChild ? 26 : '100%',
                         }} />
                         <span aria-hidden="true" style={{
                           position: 'absolute', left: railX(r.depth), top: 24,
-                          width: INDENT - 8, height: 2, borderRadius: 1, background: C.borderStrong,
+                          width: INDENT - 8, height: 2, borderRadius: 1, background: RAIL(C),
                         }} />
                       </>
                     )}
@@ -583,10 +606,15 @@ export default function WifiServices() {
                       onChange={(e) => set(r.key, { notes: e.target.value })}
                     />
                   </span>
+                  {/* One above the other. Side by side, two 26px buttons never
+                      fitted the column — 20px of usable width — and no amount of
+                      redrawing the + was going to fix that. Stacked, one button
+                      wide is all the column has to be.
+                      No minHeight: the buttons set the height, and the row is
+                      top-aligned, so the + sits level with the fields. */}
                   <span style={{
                     ...tdCell,
-                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                    minHeight: 33 + 18,   // a field, plus tdCell's 9px top and bottom
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5,
                   }}>
                     {/* Only on a saved row: a child stores its parent's id, and
                         an unsaved parent has not got one yet. */}
@@ -598,11 +626,15 @@ export default function WifiServices() {
                         aria-label={hi ? 'इससे जुड़ा वाई-फ़ाई जोड़ें' : 'Add a wifi branching off this'}
                         style={{
                           display: 'grid', placeItems: 'center', flexShrink: 0,
-                          width: 24, height: 24, borderRadius: 7,
-                          background: C.maroonSoft, lineHeight: 0,
+                          width: 26, height: 26, borderRadius: 8,
+                          background: C.maroonSoft, border: `1px solid ${C.maroon}33`,
+                          lineHeight: 0,
                         }}
                       >
-                        <Icon name="plus" size={14} color={C.maroon} />
+                        {/* strokeWidth, not size: two hairlines in a 24px viewBox
+                            scale to about 1.17px at 14 and vanish next to the
+                            bin's five paths. */}
+                        <Icon name="plus" size={16} strokeWidth={2.6} color={C.maroon} />
                       </button>
                     )}
                     <button
@@ -610,9 +642,14 @@ export default function WifiServices() {
                       onClick={() => remove(r)}
                       title={t.delete}
                       aria-label={t.delete}
-                      style={{ background: 'transparent', padding: 3, lineHeight: 0 }}
+                      style={{
+                        display: 'grid', placeItems: 'center', flexShrink: 0,
+                        width: 26, height: 26, borderRadius: 8,
+                        background: `${C.red}14`, border: `1px solid ${C.red}33`,
+                        lineHeight: 0,
+                      }}
                     >
-                      <Icon name="trash" size={15} color={C.red} />
+                      <Icon name="trash" size={14} color={C.red} />
                     </button>
                   </span>
                 </div>
