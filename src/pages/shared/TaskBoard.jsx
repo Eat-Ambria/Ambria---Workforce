@@ -1181,6 +1181,39 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
 
   // The assignee never finished it (or nobody was on it) and the job is done —
   // an admin closes it out. Recorded with resolved_at like any other completion.
+  // A second report of a fault already on the board. Closed rather than
+  // deleted: deleting it would erase the fact that somebody reported it.
+  //
+  // Nothing new is written — the same three fields "close it myself" sets, so it
+  // drops out of the working tabs and turns up under Completed, where the
+  // resolution note says it was a duplicate instead of implying it was fixed.
+  const canMarkDuplicate = admin && !['completed', 'approved'].includes(s)
+
+  async function markDuplicate() {
+    const ok = await confirm({
+      message: t.markDuplicateAsk,
+      detail: fixTitle(row, lang === 'hi'),
+      confirmLabel: t.markDuplicate,
+    })
+    if (!ok) return
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('work_board')
+      .update({
+        status: 'completed',
+        resolved_at: nowISO(),
+        resolution_note: t.duplicateNote,
+        // which admin decided this, the same question every other close answers
+        approved_by: user.id,
+        approved_by_name: user.name,
+      })
+      .eq('id', row.id)
+      // same race guard as the other closes: not if somebody has finished it
+      .neq('status', 'completed')
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
   async function completeNow() {
     setBusy(true); setErr('')
     // The admin's own photo of the finished work, when they have one. With no
@@ -1359,6 +1392,12 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {canDelete && (
             <Button variant="danger" disabled={busy} onClick={del} style={{ flex: '1 1 110px', whiteSpace: 'nowrap' }}>
               <Icon name="trash" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.delete}
+            </Button>
+          )}
+          {canMarkDuplicate && (
+            <Button variant="ghost" disabled={busy} onClick={markDuplicate} style={{ flex: '1 1 150px', whiteSpace: 'nowrap' }}>
+              <Icon name="copy" size={15} color={C.tl} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+              {t.markDuplicate}
             </Button>
           )}
           {canCloseNow && (
