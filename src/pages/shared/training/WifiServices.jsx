@@ -5,7 +5,6 @@ import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
 import { propName, PROPERTIES, scopedProperty } from '../../../constants/org'
-import { typedPhone, isValidPhone } from '../../../lib/phone'
 import { transliterateToHindi } from '../../../lib/translate'
 import { Loader, EmptyState, Button } from '../../../components/common/UI'
 import Icon from '../../../components/common/Icon'
@@ -31,6 +30,11 @@ const daysUntil = (d) => Math.ceil((new Date(d) - new Date(todayISO())) / DAY)
 // the date now rather than in an 84px column of their own — "5 days overdue"
 // against "On track" is legible at a glance where "5d over" against "ok" was a
 // puzzle to be worked out.
+// Enough of a number to be worth a button. Ten-digit mobiles, eight-digit
+// landlines and "0120 4567890" all pass; "98" does not, and a tel: link to half
+// a number places a wrong call.
+const dialable = (v) => ((v || '').match(/\d/g) || []).length >= 6
+
 function dueStatus(due, hi) {
   if (!due) return { color: 'faint', label: '—' }
   const d = daysUntil(due)
@@ -111,6 +115,33 @@ export default function WifiServices() {
   const set = (key, patch) =>
     setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)))
 
+  // Parent first, then whatever hangs off it, then whatever hangs off that. The
+  // load already returns them in the order the register wants (due date, then
+  // id); this only lifts each child up to sit under its own parent, and records
+  // how deep it is so the name cell can show it.
+  //
+  // Anything whose parent is not in this list — a child of a row filtered out by
+  // the venue scope — is treated as top level rather than dropped. A row you
+  // cannot see is not a reason to hide a row you can.
+  const ordered = useMemo(() => {
+    const byParent = new Map()
+    const present = new Set(rows.map((r) => String(r.id)))
+    rows.forEach((r) => {
+      const key = r.parent_id && present.has(String(r.parent_id)) ? String(r.parent_id) : 'root'
+      if (!byParent.has(key)) byParent.set(key, [])
+      byParent.get(key).push(r)
+    })
+    const out = []
+    const walk = (key, depth) => {
+      (byParent.get(key) || []).forEach((r) => {
+        out.push({ ...r, depth })
+        if (r.id) walk(String(r.id), depth + 1)
+      })
+    }
+    walk('root', 0)
+    return out
+  }, [rows])
+
   // Which Hindi cells the machine is allowed to write. A cell starts out its own
   // once it has been typed in, and stays that way — `tenda` transliterates to
   // ठंडा ("cold"), and re-imposing that every time somebody fixed it would make
@@ -147,12 +178,27 @@ export default function WifiServices() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceSig])
 
-  const addRow = () => setRows((list) => [...list, {
+  const blank = (over = {}) => ({
     key: newKey(),
     property: propScope || venues[0]?.code || '',
     wifi_name: '', wifi_name_hi: '', password: '', location: '',
     operator_name: '', operator_name_hi: '', contact: '', due_date: '', notes: '',
-  }])
+    parent_id: null,
+    ...over,
+  })
+
+  const addRow = () => setRows((list) => [...list, blank()])
+
+  // A branch off an existing connection. Property and operator come from the
+  // parent because it is the same line — a branch off Airtel at Pushpanjali is
+  // not going to be a Tenda line at Exotica — and they are the two fields that
+  // would otherwise be retyped identically every time.
+  const addChild = (parent) => setRows((list) => [...list, blank({
+    parent_id: parent.id,
+    property: parent.property,
+    operator_name: parent.operator_name || '',
+    operator_name_hi: parent.operator_name_hi || '',
+  })])
 
   // What the save has to write. A new row counts only once it has a name — an
   // empty row somebody added and thought better of is not a change.
@@ -162,26 +208,12 @@ export default function WifiServices() {
       if (r.key.startsWith('new:')) return !!(r.wifi_name.trim() || r.wifi_name_hi?.trim())
       const b = before.get(r.key)
       if (!b) return false
-      return ['property', 'location', 'wifi_name', 'wifi_name_hi', 'password',
+      return ['property', 'location', 'parent_id', 'wifi_name', 'wifi_name_hi', 'password',
         'operator_name', 'operator_name_hi', 'contact', 'due_date', 'notes']
         .some((f) => (r[f] || '') !== (b[f] || ''))
     })
     return changed
   }, [rows, saved])
-
-  // A bad number is worth stopping for: it is the one field here whose only
-  // purpose is to be dialled, and a wrong one is worse than a blank.
-  const phoneErrors = useMemo(() => {
-    const out = {}
-    rows.forEach((r) => {
-      // typedPhone already keeps the box to ten digits, so the only way to be
-      // invalid here is to be short — a half-typed number somebody moved on from.
-      if (r.contact && !isValidPhone(r.contact)) {
-        out[r.key] = hi ? '10 अंक चाहिए' : 'Needs 10 digits'
-      }
-    })
-    return out
-  }, [rows, hi])
 
   // A last resort only. The effect above fills these as you type; this catches
   // the row saved before it finished, or one whose transliteration failed.
@@ -200,11 +232,6 @@ export default function WifiServices() {
 
   async function saveAll() {
     if (!dirty.length) return
-    const bad = dirty.find((r) => phoneErrors[r.key])
-    if (bad) {
-      setErr(hi ? 'फ़ोन नंबर ठीक करें' : 'Fix the phone number first')
-      return
-    }
     setBusy(true); setErr('')
     // Rows go one at a time, so a failure part way through leaves the earlier
     // ones written. Which ones is the difference between "try again" and "try
@@ -220,6 +247,7 @@ export default function WifiServices() {
           // with a space, and silently eating one makes it simply wrong
           password: r.password || null,
           location: r.location?.trim() || null,
+          parent_id: r.parent_id || null,
           operator_name: r.operator_name?.trim() || null,
           operator_name_hi: await otherScript(r.operator_name, r.operator_name_hi),
           contact: r.contact?.trim() || null,
@@ -355,7 +383,7 @@ export default function WifiServices() {
               <span style={thCell} />
             </div>
 
-            {rows.map((r, i) => {
+            {ordered.map((r, i) => {
               const st = dueStatus(r.due_date, hi)
               const isNew = r.key.startsWith('new:')
               return (
@@ -366,7 +394,7 @@ export default function WifiServices() {
                     // whenever it carries a status pill, and centring lifted its
                     // input above every other input in the row
                     display: 'grid', gridTemplateColumns: COLS, alignItems: 'start',
-                    borderBottom: i === rows.length - 1 ? 'none' : `1px solid ${C.border}`,
+                    borderBottom: i === ordered.length - 1 ? 'none' : `1px solid ${C.border}`,
                     // an unsaved line is tinted, so it is obvious what Save will write
                     background: isNew ? C.maroonSoft : 'transparent',
                   }}
@@ -374,7 +402,12 @@ export default function WifiServices() {
                   {/* In Hindi the cell edits the Hindi name, with the English
                       as the placeholder so the row is still recognisable before
                       a Hindi spelling exists. Saving fills the blank one. */}
-                  <span style={tdCell}>
+                  {/* Indented under whatever it hangs off, with an arrow, so a
+                      branch is not read as a fourth subscription. */}
+                  <span style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 10 + (r.depth || 0) * 14 }}>
+                    {r.depth > 0 && (
+                      <span style={{ color: C.faint, fontSize: 12, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">↳</span>
+                    )}
                     <input
                       className="sheet-cell"
                       style={cellInput(C)}
@@ -453,25 +486,20 @@ export default function WifiServices() {
                     />
                   </span>
                   <span style={tdCell}>
+                    {/* Whatever the operator actually gave you. The column is
+                        text on purpose — landlines with extensions, two numbers
+                        split by a slash, sometimes an email — and a ten-digit
+                        rule refused all three and stopped the save with them. */}
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <input
                         className="sheet-cell"
                         inputMode="tel"
-                        style={{
-                          ...cellInput(C),
-                          borderColor: phoneErrors[r.key] ? C.red : C.border,
-                        }}
+                        style={cellInput(C)}
                         value={r.contact || ''}
                         placeholder="9876543210"
-                        maxLength={10}
-                        // capped and cleaned as it is typed: letters dropped, and a
-                        // pasted "+91 98765 43210" becomes the ten-digit number
-                        // rather than being cut off into a different one
-                        onChange={(e) => set(r.key, { contact: typedPhone(e.target.value) })}
+                        onChange={(e) => set(r.key, { contact: e.target.value })}
                       />
-                      {/* Only for a complete number. A tel: link to half of one
-                          places a wrong call, which is worse than no button. */}
-                      {isValidPhone(r.contact) && (
+                      {dialable(r.contact) && (
                         <a
                           href={`tel:${r.contact}`}
                           title={hi ? 'कॉल करें' : 'Call'}
@@ -482,11 +510,6 @@ export default function WifiServices() {
                         </a>
                       )}
                     </span>
-                    {phoneErrors[r.key] && (
-                      <span style={{ display: 'block', fontSize: 10.5, color: C.red, marginTop: 3 }}>
-                        {phoneErrors[r.key]}
-                      </span>
-                    )}
                   </span>
                   {/* Status lives here, not in a column of its own. It is
                       computed from this date and from nothing else, so as a
@@ -518,9 +541,10 @@ export default function WifiServices() {
                       a machine rewriting it in the other script would change
                       what it says. */}
                   <span style={tdCell}>
-                    <input
+                    <textarea
                       className="sheet-cell"
-                      style={cellInput(C)}
+                      rows={2}
+                      style={{ ...cellInput(C), resize: 'vertical', lineHeight: 1.35, minHeight: 46 }}
                       value={r.notes || ''}
                       placeholder={hi ? 'जैसे बिल मार्च तक भरा' : 'e.g. bill paid till Mar'}
                       onChange={(e) => set(r.key, { notes: e.target.value })}
@@ -531,6 +555,19 @@ export default function WifiServices() {
                     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
                     minHeight: 33 + 18,   // a field, plus tdCell's 9px top and bottom
                   }}>
+                    {/* Only on a saved row: a child stores its parent's id, and
+                        an unsaved parent has not got one yet. */}
+                    {!isNew && r.id && (
+                      <button
+                        type="button"
+                        onClick={() => addChild(r)}
+                        title={hi ? 'इससे जुड़ा वाई-फ़ाई जोड़ें' : 'Add a wifi branching off this'}
+                        aria-label={hi ? 'इससे जुड़ा वाई-फ़ाई जोड़ें' : 'Add a wifi branching off this'}
+                        style={{ background: 'transparent', padding: 3, lineHeight: 0, flexShrink: 0 }}
+                      >
+                        <Icon name="plus" size={15} color={C.tl} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => remove(r)}
