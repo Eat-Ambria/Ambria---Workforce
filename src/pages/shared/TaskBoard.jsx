@@ -1247,9 +1247,30 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       .eq('id', row.id)
     if (error) setErr(error.message)
   }
+  // An admin finishing work they were assigned themselves has nobody to submit
+  // to: the approve button is gated on `admin && !ownWork`, so approval_requested
+  // would be a queue with no one able to clear it. Straight to completed, signed
+  // off in their own name — the same two fields approve() and completeNow() write,
+  // because it answers the same question: which admin stands behind this.
+  const selfApproves = admin && ownWork
+
   function submitForApproval() {
     if (resPhotos.length === 0) { setErr(t.photoRequired || 'Add a photo of the completed work'); return }
-    setStatus('approval_requested', { resolution_note: note || null, resolution_photos: resPhotos, resolution_voice_url: resVoice || null })
+    const done = {
+      resolution_note: note || null,
+      resolution_photos: resPhotos,
+      resolution_voice_url: resVoice || null,
+    }
+    if (selfApproves) {
+      setStatus('completed', {
+        ...done,
+        resolved_at: nowISO(),
+        approved_by: user.id,
+        approved_by_name: user.name,
+      })
+      return
+    }
+    setStatus('approval_requested', done)
   }
 
   // footer actions depend on status + who's looking
@@ -1259,7 +1280,13 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   } else if (s === 'assigned' && isAssignee) {
     actions = <Button variant="primary" disabled={busy} onClick={() => setStatus('in_progress')} style={{ flex: 2 }}>{t.startWork}</Button>
   } else if (s === 'in_progress' && isAssignee) {
-    actions = <Button variant="success" disabled={busy || resPhotos.length === 0} onClick={submitForApproval} style={{ flex: 2 }}>{t.markForCompletion || 'Submit for Approval'}</Button>
+    // The label has to match what the button does: for an admin on their own
+    // assignment this completes the request rather than submitting it anywhere.
+    actions = (
+      <Button variant="success" disabled={busy || resPhotos.length === 0} onClick={submitForApproval} style={{ flex: 2 }}>
+        {selfApproves ? t.markDone : (t.markForCompletion || 'Submit for Approval')}
+      </Button>
+    )
   } else if (s === 'approval_requested' && admin && !ownWork) {
     actions = (
       <>
