@@ -123,6 +123,40 @@ export default function WifiServices() {
   const set = (key, patch) =>
     setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)))
 
+  // The narrowest the sheet can be drawn — the sum of the column floors in COLS
+  // below. gridMin is 0 on a wide screen because nothing needs forcing there, so
+  // it cannot answer "does this fit"; this can. Declared here rather than beside
+  // COLS because the effect below reads it in a dependency array, which is
+  // evaluated during render — a const declared further down is still in its
+  // temporal dead zone at that point and throws.
+  const FLOOR_W = wide ? 1229 : 1414
+
+  // Whether the columns fit, and how far down the page the app header ends.
+  //
+  // Both are needed for one thing: pinning the heading row. `overflow-x: auto`
+  // makes a box a scrollport on both axes, and a sticky child of a scrollport
+  // pins to the box — which never scrolls vertically here, so it would pin to a
+  // line that does not move. Only when the sheet fits can the wrapper be
+  // `visible`, and only then does sticky reach the page.
+  const sheetRef = useRef(null)
+  const [fits, setFits] = useState(true)
+  const [headerH, setHeaderH] = useState(0)
+  useEffect(() => {
+    const el = sheetRef.current
+    const measure = () => {
+      if (el) setFits(el.clientWidth >= FLOOR_W)
+      // The app header is sticky at top: 0, so anything pinned to 0 hides behind
+      // it — and it is a different height on a phone, so it is measured.
+      setHeaderH(document.querySelector('header')?.offsetHeight || 0)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (el) ro.observe(el)
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [FLOOR_W, loading, rows.length])
+
   // Parent first, then whatever hangs off it, then whatever hangs off that. The
   // load already returns them in the order the register wants (due date, then
   // id); this only lifts each child up to sit under its own parent, and records
@@ -159,6 +193,17 @@ export default function WifiServices() {
     walk('root', 0)
     return out
   }, [rows])
+
+  // The ordered list, cut into families: each one starts at a depth-0 row and
+  // runs until the next. Every family gets its own box.
+  const families = useMemo(() => {
+    const out = []
+    ordered.forEach((r) => {
+      if (!r.depth || !out.length) out.push([r])
+      else out[out.length - 1].push(r)
+    })
+    return out
+  }, [ordered])
 
   // Which Hindi cells the machine is allowed to write. A cell starts out its own
   // once it has been typed in, and stays that way — `tenda` transliterates to
@@ -385,18 +430,31 @@ export default function WifiServices() {
           hint={hi ? '“वाई-फ़ाई जोड़ें” से पहला जोड़ें।' : 'Use “Add wifi” to enter the first one.'}
         />
       ) : (
-        <div style={{
-          border: `1px solid ${C.borderStrong}`, borderRadius: 10,
-          // `auto` at every width, not just narrow. It used to be `visible` on
-          // wide screens on the bet that the columns always fit there — then a
-          // column was added, the bet quietly lost, and the last two columns were
-          // painted outside the border rather than scrolled to. A box that cannot
-          // hold its contents should scroll, not leak.
-          overflowX: 'auto',
-        }}>
-          <div style={{ minWidth: gridMin || undefined }}>
-            <div style={{ display: 'grid', gridTemplateColumns: COLS,
-                          background: C.cardAlt, borderBottom: `1px solid ${C.borderStrong}` }}>
+        <div
+          ref={sheetRef}
+          style={{
+            // No border of its own — the heading row and each family draw their
+            // own. Sideways scroll only when the columns genuinely do not fit:
+            // `auto` unconditionally would make this a scrollport on both axes
+            // and the sticky heading below would pin to it instead of the page.
+            overflowX: fits ? 'visible' : 'auto',
+          }}
+        >
+          <div style={{ minWidth: gridMin || undefined, display: 'grid', gap: 12 }}>
+            {/* Boxed like the families below it. Flush inside a single outer
+                border it would be 2px wider than they are and every column would
+                sit one pixel out. */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: COLS,
+              // opaque: rows scroll underneath this, and any translucency there
+              // reads as a rendering fault
+              background: C.cardAlt,
+              border: `1px solid ${C.borderStrong}`, borderRadius: 10,
+              // Only while the wrapper is not a scrollport — see it above. A
+              // heading pinned over columns it has slid sideways from would be
+              // worse than one that scrolls away honestly.
+              ...(fits ? { position: 'sticky', top: headerH, zIndex: 20 } : null),
+            }}>
               <span style={thCell}>{hi ? 'वाई-फ़ाई' : 'WiFi name'}</span>
               <span style={thCell}>{hi ? 'पासवर्ड' : 'Password'}</span>
               <span style={thCell}>{t.properties}</span>
@@ -408,7 +466,28 @@ export default function WifiServices() {
               <span style={thCell} />
             </div>
 
-            {ordered.map((r, i) => {
+            {/* One box per connection. Its branches are the rows underneath it
+                inside the same box, so the shape of the register — which lines are
+                lines and which are extensions of one — is visible before you read
+                a single field. */}
+            {families.map((fam) => (
+            <div
+              key={fam[0].key}
+              style={{
+                border: `1px solid ${C.borderStrong}`, borderRadius: 10,
+                overflow: 'hidden',   // so a row's tint respects the rounded corner
+                background: C.white,
+                // A maroon edge on a box that holds branches, so a family is
+                // distinguishable from a single line at a glance. Drawn as an
+                // inset shadow rather than a border-left: a 3px border would take
+                // 3px off this box's content width and its columns would then sit
+                // out of line with every other box on the sheet.
+                boxShadow: fam.length > 1
+                  ? `inset 3px 0 0 ${C.maroon}66, ${C.shadow}`
+                  : C.shadow,
+              }}
+            >
+            {fam.map((r, i) => {
               const st = dueStatus(r.due_date, hi)
               const isNew = r.key.startsWith('new:')
               return (
@@ -419,16 +498,14 @@ export default function WifiServices() {
                     // whenever it carries a status pill, and centring lifted its
                     // input above every other input in the row
                     display: 'grid', gridTemplateColumns: COLS, alignItems: 'start',
-                    // A strong rule where one family ends and the next line of
-                    // its own begins; a hairline inside a family. Without it a
-                    // parent and the row above it looked equally related.
-                    borderBottom: i === ordered.length - 1
-                      ? 'none'
-                      : `1px solid ${(ordered[i + 1]?.depth || 0) === 0 ? C.borderStrong : C.border}`,
-                    // an unsaved line is tinted, so it is obvious what Save will
-                    // write; otherwise a branch sits on a faint band so the whole
-                    // family reads as one block
-                    background: isNew ? C.maroonSoft : (r.depth > 0 ? C.cardAlt : 'transparent'),
+                    // A hairline between a connection and its branches. Nothing
+                    // after the last one — the box edge is already there.
+                    borderBottom: i === fam.length - 1 ? 'none' : `1px solid ${C.border}`,
+                    // Only an unsaved line is tinted, so it is obvious what Save
+                    // will write. Branches are not: the box already says they
+                    // belong together, and banding them made one connection and
+                    // its extensions look like two kinds of row.
+                    background: isNew ? C.maroonSoft : 'transparent',
                   }}
                 >
                   {/* In Hindi the cell edits the Hindi name, with the English
@@ -450,7 +527,13 @@ export default function WifiServices() {
                       breaking the columns. */}
                   <span style={{
                     ...tdCell, position: 'relative',
-                    display: 'flex', alignItems: 'center', gap: 0,
+                    // stretch: the row is aligned to the top, so a cell is
+                    // otherwise only as tall as its own field — and the rail's
+                    // 100% and bottom: 0 then resolve against that instead of the
+                    // row, leaving a gap above the next row's segment. flex-start
+                    // keeps the field itself on the same line as the others.
+                    alignSelf: 'stretch',
+                    display: 'flex', alignItems: 'flex-start', gap: 0,
                     paddingLeft: 10 + (r.depth || 0) * INDENT,
                   }}>
                     {r.hasKids && (
@@ -560,7 +643,7 @@ export default function WifiServices() {
                         inputMode="tel"
                         style={cellInput(C)}
                         value={r.contact || ''}
-                        placeholder="9876543210"
+                        placeholder="98XXXXXXXX"
                         onChange={(e) => set(r.key, { contact: e.target.value })}
                       />
                       {dialable(r.contact) && (
@@ -663,6 +746,8 @@ export default function WifiServices() {
                 </div>
               )
             })}
+            </div>
+            ))}
           </div>
         </div>
       )}
