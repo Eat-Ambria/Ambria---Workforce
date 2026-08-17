@@ -214,8 +214,15 @@ export default function WifiServices() {
 
   // Fill the Hindi from the English once typing stops. One network call per
   // name, so it waits rather than firing per keystroke.
-  const PAIRS = [['wifi_name', 'wifi_name_hi'], ['operator_name', 'operator_name_hi']]
-  const sourceSig = rows.map((r) => `${r.key}:${r.wifi_name || ''}:${r.operator_name || ''}`).join('|')
+  const PAIRS = [
+    ['wifi_name', 'wifi_name_hi'],
+    ['operator_name', 'operator_name_hi'],
+    ['location', 'location_hi'],
+    ['notes', 'notes_hi'],
+  ]
+  const sourceSig = rows
+    .map((r) => `${r.key}:${r.wifi_name || ''}:${r.operator_name || ''}:${r.location || ''}:${r.notes || ''}`)
+    .join('|')
   useEffect(() => {
     const id = setTimeout(async () => {
       const jobs = []
@@ -244,8 +251,10 @@ export default function WifiServices() {
   const blank = (over = {}) => ({
     key: newKey(),
     property: propScope || venues[0]?.code || '',
-    wifi_name: '', wifi_name_hi: '', password: '', location: '',
-    operator_name: '', operator_name_hi: '', contact: '', due_date: '', notes: '',
+    wifi_name: '', wifi_name_hi: '', password: '',
+    location: '', location_hi: '',
+    operator_name: '', operator_name_hi: '', contact: '', due_date: '',
+    notes: '', notes_hi: '',
     parent_id: null,
     ...over,
   })
@@ -299,8 +308,10 @@ export default function WifiServices() {
       if (r.key.startsWith('new:')) return !!(r.wifi_name.trim() || r.wifi_name_hi?.trim())
       const b = before.get(r.key)
       if (!b) return false
-      return ['property', 'location', 'parent_id', 'wifi_name', 'wifi_name_hi', 'password',
-        'operator_name', 'operator_name_hi', 'contact', 'due_date', 'notes']
+      return ['property', 'location', 'location_hi', 'parent_id',
+        'wifi_name', 'wifi_name_hi', 'password',
+        'operator_name', 'operator_name_hi', 'contact', 'due_date',
+        'notes', 'notes_hi']
         .some((f) => (r[f] || '') !== (b[f] || ''))
     })
     return changed
@@ -338,12 +349,14 @@ export default function WifiServices() {
           // with a space, and silently eating one makes it simply wrong
           password: r.password || null,
           location: r.location?.trim() || null,
+          location_hi: await otherScript(r.location, r.location_hi),
           parent_id: r.parent_id || null,
           operator_name: r.operator_name?.trim() || null,
           operator_name_hi: await otherScript(r.operator_name, r.operator_name_hi),
           contact: r.contact?.trim() || null,
           due_date: r.due_date || null,
           notes: r.notes?.trim() || null,
+          notes_hi: await otherScript(r.notes, r.notes_hi),
           updated_at: new Date().toISOString(),
         }
         const write = () => (r.key.startsWith('new:')
@@ -634,17 +647,24 @@ export default function WifiServices() {
                       ))}
                     </select>
                   </span>
-                  {/* Not transliterated, unlike the name and the operator: this
-                      is a direction to a place, and a machine-written Hindi
-                      spelling of "MD office" helps nobody find the router. Type
-                      it in whichever script the person reading it will use. */}
+                  {/* Devanagari sibling like the name and the operator. The
+                      respelling is phonetic, not a translation — and for somebody
+                      who reads no Latin script, "हर्ष सर ऑफ़िस" is readable where
+                      "Harsh sir office" is not. */}
                   <span style={tdCell}>
                     <input
                       className="sheet-cell"
                       style={cellInput(C)}
-                      value={r.location || ''}
-                      placeholder={hi ? 'जैसे एमडी ऑफ़िस, रिसेप्शन के पीछे' : 'e.g. MD office, behind reception'}
-                      onChange={(e) => set(r.key, { location: e.target.value })}
+                      value={(hi ? r.location_hi : r.location) || ''}
+                      placeholder={hi
+                        ? (r.location || 'जैसे एमडी ऑफ़िस, रिसेप्शन के पीछे')
+                        : 'e.g. MD office, behind reception'}
+                      onChange={(e) => {
+                        if (hi) claim(r.key, 'location_hi')
+                        set(r.key, hi
+                          ? { location_hi: e.target.value }
+                          : { location: e.target.value })
+                      }}
                     />
                   </span>
                   <span style={tdCell}>
@@ -712,18 +732,24 @@ export default function WifiServices() {
                       </span>
                     )}
                   </span>
-                  {/* Whatever the row does not have a column for. Not
-                      transliterated — a remark is a sentence somebody wrote, and
-                      a machine rewriting it in the other script would change
-                      what it says. */}
+                  {/* Whatever the row does not have a column for, in either
+                      script. Respelt phonetically rather than translated, which is
+                      what the transliterator does everywhere else here — and the
+                      moment somebody edits the Hindi by hand it stops being
+                      overwritten. */}
                   <span style={tdCell}>
                     <textarea
                       className="sheet-cell"
                       rows={2}
                       style={{ ...cellInput(C), resize: 'vertical', lineHeight: 1.35, minHeight: 46 }}
-                      value={r.notes || ''}
-                      placeholder={hi ? 'जैसे बिल मार्च तक भरा' : 'e.g. bill paid till Mar'}
-                      onChange={(e) => set(r.key, { notes: e.target.value })}
+                      value={(hi ? r.notes_hi : r.notes) || ''}
+                      placeholder={hi ? (r.notes || 'जैसे बिल मार्च तक भरा') : 'e.g. bill paid till Mar'}
+                      onChange={(e) => {
+                        if (hi) claim(r.key, 'notes_hi')
+                        set(r.key, hi
+                          ? { notes_hi: e.target.value }
+                          : { notes: e.target.value })
+                      }}
                     />
                   </span>
                   {/* One above the other. Side by side, two 26px buttons never
