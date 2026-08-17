@@ -151,6 +151,7 @@ export default function WifiServices() {
           ...r, depth,
           isLastChild: idx === kids.length - 1,
           hasKids: mine.length > 0,
+          kidCount: mine.length,
         })
         if (r.id) walk(String(r.id), depth + 1)
       })
@@ -306,11 +307,18 @@ export default function WifiServices() {
       setRows((list) => list.filter((x) => x.key !== r.key))
       return
     }
+    // Deleting a link in the chain does not orphan what hangs off it — the
+    // branches move up to whatever this row hung off. Right, but not guessable
+    // from the row's name alone, so it is said out loud.
+    const upTo = r.parent_id ? rows.find((x) => String(x.id) === String(r.parent_id)) : null
+    const branchNote = !r.kidCount ? '' : (hi
+      ? ` · ${r.kidCount} जुड़े वाई-फ़ाई ${upTo ? `"${upTo.wifi_name_hi || upTo.wifi_name}" से जुड़ जाएँगे` : 'अलग लाइन बन जाएँगे'}`
+      : ` · ${r.kidCount} branch${r.kidCount === 1 ? '' : 'es'} ${upTo ? `will move up to "${upTo.wifi_name}"` : 'will become lines of their own'}`)
     const ok = await confirm({
       message: hi
         ? `"${r.wifi_name_hi || r.wifi_name}" हटाएँ?`
         : `Remove "${r.wifi_name}"?`,
-      detail: propName(r.property, lang),
+      detail: propName(r.property, lang) + branchNote,
       confirmLabel: t.delete,
     })
     if (!ok) return
