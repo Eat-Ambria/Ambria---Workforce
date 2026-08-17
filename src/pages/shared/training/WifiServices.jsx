@@ -250,18 +250,46 @@ export default function WifiServices() {
     ...over,
   })
 
-  const addRow = () => setRows((list) => [...list, blank()])
+  // Which row to jump to once it has rendered. Both add paths set it; the
+  // effect below clears it, so it fires once per row rather than on every
+  // re-render that happens to still have it set.
+  const [focusKey, setFocusKey] = useState(null)
+
+  const addRow = () => {
+    const row = blank()
+    setRows((list) => [...list, row])
+    setFocusKey(row.key)
+  }
 
   // A branch off an existing connection. Property and operator come from the
   // parent because it is the same line — a branch off Airtel at Pushpanjali is
   // not going to be a Tenda line at Exotica — and they are the two fields that
   // would otherwise be retyped identically every time.
-  const addChild = (parent) => setRows((list) => [...list, blank({
-    parent_id: parent.id,
-    property: parent.property,
-    operator_name: parent.operator_name || '',
-    operator_name_hi: parent.operator_name_hi || '',
-  })])
+  const addChild = (parent) => {
+    const row = blank({
+      parent_id: parent.id,
+      property: parent.property,
+      operator_name: parent.operator_name || '',
+      operator_name_hi: parent.operator_name_hi || '',
+    })
+    setRows((list) => [...list, row])
+    setFocusKey(row.key)
+  }
+
+  // Scroll to the row that was just added and put the cursor in its name. The
+  // button that makes a row is at the top of the page and the row appears at the
+  // bottom of a sheet several boxes long, so without this the button looked like
+  // it had done nothing at all.
+  useEffect(() => {
+    if (!focusKey) return
+    const el = document.querySelector(`[data-row="${focusKey}"]`)
+    if (!el) return
+    // preventScroll first: focus() alone jumps the page instantly and the smooth
+    // scroll below would then have nothing left to do.
+    el.querySelector('input')?.focus({ preventScroll: true })
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFocusKey(null)
+  }, [focusKey, ordered])
 
   // What the save has to write. A new row counts only once it has a name — an
   // empty row somebody added and thought better of is not a change.
@@ -493,6 +521,7 @@ export default function WifiServices() {
               return (
                 <div
                   key={r.key}
+                  data-row={r.key}
                   style={{
                     // start, not center: the date cell is taller than the rest
                     // whenever it carries a status pill, and centring lifted its
