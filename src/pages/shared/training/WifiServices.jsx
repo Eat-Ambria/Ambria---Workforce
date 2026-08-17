@@ -52,6 +52,11 @@ const thCell = {
   textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'left',
 }
 const tdCell = { padding: '9px 10px', minWidth: 0 }
+// One step of nesting. Wide enough for the rail and its elbow to be a shape
+// rather than a smudge.
+const INDENT = 20
+// Where a row of depth d draws the rail belonging to its parent.
+const railX = (depth) => 10 + (depth - 1) * INDENT + 6
 const cellInput = (C) => ({
   width: '100%', background: C.white, color: C.text,
   border: `1px solid ${C.border}`, borderRadius: 7,
@@ -133,8 +138,11 @@ export default function WifiServices() {
     })
     const out = []
     const walk = (key, depth) => {
-      (byParent.get(key) || []).forEach((r) => {
-        out.push({ ...r, depth })
+      const kids = byParent.get(key) || []
+      kids.forEach((r, idx) => {
+        // isLastChild decides whether the rail continues past this row or ends
+        // in an elbow — it is what makes the segments read as one line.
+        out.push({ ...r, depth, isLastChild: idx === kids.length - 1 })
         if (r.id) walk(String(r.id), depth + 1)
       })
     }
@@ -394,19 +402,44 @@ export default function WifiServices() {
                     // whenever it carries a status pill, and centring lifted its
                     // input above every other input in the row
                     display: 'grid', gridTemplateColumns: COLS, alignItems: 'start',
-                    borderBottom: i === ordered.length - 1 ? 'none' : `1px solid ${C.border}`,
-                    // an unsaved line is tinted, so it is obvious what Save will write
-                    background: isNew ? C.maroonSoft : 'transparent',
+                    // A strong rule where one family ends and the next line of
+                    // its own begins; a hairline inside a family. Without it a
+                    // parent and the row above it looked equally related.
+                    borderBottom: i === ordered.length - 1
+                      ? 'none'
+                      : `1px solid ${(ordered[i + 1]?.depth || 0) === 0 ? C.borderStrong : C.border}`,
+                    // an unsaved line is tinted, so it is obvious what Save will
+                    // write; otherwise a branch sits on a faint band so the whole
+                    // family reads as one block
+                    background: isNew ? C.maroonSoft : (r.depth > 0 ? C.cardAlt : 'transparent'),
                   }}
                 >
                   {/* In Hindi the cell edits the Hindi name, with the English
                       as the placeholder so the row is still recognisable before
                       a Hindi spelling exists. Saving fills the blank one. */}
-                  {/* Indented under whatever it hangs off, with an arrow, so a
-                      branch is not read as a fourth subscription. */}
-                  <span style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 10 + (r.depth || 0) * 14 }}>
+                  {/* Wired to its parent, not just indented. The rail runs the
+                      full height of the row unless this is the last child, where
+                      it stops at the field and turns — so the segments of a
+                      family stack into one line that ends where the family does.
+                      Absolutely positioned because a row is a grid child and
+                      cannot be wrapped in a container of its own. */}
+                  <span style={{
+                    ...tdCell, position: 'relative',
+                    display: 'flex', alignItems: 'center', gap: 0,
+                    paddingLeft: 10 + (r.depth || 0) * INDENT,
+                  }}>
                     {r.depth > 0 && (
-                      <span style={{ color: C.faint, fontSize: 12, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">↳</span>
+                      <>
+                        <span aria-hidden="true" style={{
+                          position: 'absolute', left: railX(r.depth), top: 0,
+                          width: 2, borderRadius: 1, background: C.borderStrong,
+                          height: r.isLastChild ? 25 : '100%',
+                        }} />
+                        <span aria-hidden="true" style={{
+                          position: 'absolute', left: railX(r.depth), top: 24,
+                          width: INDENT - 8, height: 2, borderRadius: 1, background: C.borderStrong,
+                        }} />
+                      </>
                     )}
                     <input
                       className="sheet-cell"
@@ -563,9 +596,13 @@ export default function WifiServices() {
                         onClick={() => addChild(r)}
                         title={hi ? 'इससे जुड़ा वाई-फ़ाई जोड़ें' : 'Add a wifi branching off this'}
                         aria-label={hi ? 'इससे जुड़ा वाई-फ़ाई जोड़ें' : 'Add a wifi branching off this'}
-                        style={{ background: 'transparent', padding: 3, lineHeight: 0, flexShrink: 0 }}
+                        style={{
+                          display: 'grid', placeItems: 'center', flexShrink: 0,
+                          width: 24, height: 24, borderRadius: 7,
+                          background: C.maroonSoft, lineHeight: 0,
+                        }}
                       >
-                        <Icon name="plus" size={15} color={C.tl} />
+                        <Icon name="plus" size={14} color={C.maroon} />
                       </button>
                     )}
                     <button
