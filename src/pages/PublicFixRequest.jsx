@@ -262,7 +262,7 @@ function RequestCard({ C, hi, r, isMine }) {
               {hi ? 'रसोई / किचन' : 'Kitchen'}
             </span>
           )}
-          <div style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>
+          <div style={{ fontWeight: 700, fontSize: 16.5, wordBreak: 'break-word' }}>
             {/* The row's own id. Quote it on the phone and an admin can find the
                 same request in one search. */}
             {/* Already 15px and 700 from the title's container — only the
