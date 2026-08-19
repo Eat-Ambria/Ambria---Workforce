@@ -265,7 +265,10 @@ function RequestCard({ C, hi, r, isMine }) {
           <div style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>
             {/* The row's own id. Quote it on the phone and an admin can find the
                 same request in one search. */}
-            <span style={{ color: C.faint, fontVariantNumeric: 'tabular-nums', marginRight: 6 }}>
+            {/* Already 15px and 700 from the title's container — only the
+                colour was keeping it quiet, and C.faint is the palest ink there
+                is. */}
+            <span style={{ color: C.text, fontVariantNumeric: 'tabular-nums', marginRight: 6 }}>
               #{r.id}
             </span>
             {hi && r.title_hi ? r.title_hi : r.title}
@@ -290,8 +293,8 @@ function RequestCard({ C, hi, r, isMine }) {
       </div>
 
       {r.assigned_to_name && (
-        <div style={{ fontSize: 12, color: C.tl, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Icon name="user" size={13} color={C.faint} />
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Icon name="user" size={13} color={C.tl} />
           {hi ? 'किसे सौंपा:' : 'Assigned to:'}{' '}
           {/* the label stays quiet; the name is what anyone is scanning for */}
           <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{r.assigned_to_name}</span>
