@@ -518,8 +518,11 @@ export default function TaskBoard() {
                         </Badge>
                       </div>
                     )}
+                    {/* How people refer to the request out loud — "check 211" —
+                        so it belongs with the title, not with the hints. It was
+                        the palest thing on the card. */}
                     <span style={{
-                      fontSize: 11.5, fontWeight: 700, color: C.faint,
+                      fontSize: 14, fontWeight: 800, color: C.tl,
                       fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
                     }}>
                       {ticketNo(r)}
