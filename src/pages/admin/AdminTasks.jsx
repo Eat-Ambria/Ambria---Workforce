@@ -478,7 +478,8 @@ export default function AdminTasks() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{task.title}</div>
                     <div style={{ fontSize: 13, color: C.tl, marginTop: 2 }}>
-                      {nameOf(task.assigned_to, task.assignee_name)}{task.area ? ` · ${task.area}` : ''}
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{nameOf(task.assigned_to, task.assignee_name)}</span>
+                      {task.area ? ` · ${task.area}` : ''}
                     </div>
                     {task.department && (
                       <div style={{ fontSize: 12, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>

@@ -485,7 +485,8 @@ export default function TaskBoard() {
                     </div>
                     {r.assigned_to_name && (
                       <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Icon name="user" size={12} /> {nameOf(r.assigned_to, r.assigned_to_name)}
+                        <Icon name="user" size={12} />
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{nameOf(r.assigned_to, r.assigned_to_name)}</span>
                       </div>
                     )}
                     {r.assigned_to_name && (
@@ -522,7 +523,7 @@ export default function TaskBoard() {
                         so it belongs with the title, not with the hints. It was
                         the palest thing on the card. */}
                     <span style={{
-                      fontSize: 14, fontWeight: 800, color: C.tl,
+                      fontSize: 14, fontWeight: 800, color: C.text,
                       fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
                     }}>
                       {ticketNo(r)}

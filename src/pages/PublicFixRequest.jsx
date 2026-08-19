@@ -292,7 +292,9 @@ function RequestCard({ C, hi, r, isMine }) {
       {r.assigned_to_name && (
         <div style={{ fontSize: 12, color: C.tl, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
           <Icon name="user" size={13} color={C.faint} />
-          {hi ? 'किसे सौंपा:' : 'Assigned to:'} {r.assigned_to_name}
+          {hi ? 'किसे सौंपा:' : 'Assigned to:'}{' '}
+          {/* the label stays quiet; the name is what anyone is scanning for */}
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{r.assigned_to_name}</span>
         </div>
       )}
 
