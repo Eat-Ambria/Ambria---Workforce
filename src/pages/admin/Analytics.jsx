@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 import { supabase } from '../../lib/supabase'
 import { todayISO, fmtDate } from '../../lib/time'
@@ -100,6 +101,9 @@ export default function Analytics() {
   const t = useT()
   const { lang } = useLang()
 
+  // Not "is this a phone" but "do six labels fit on one line" — they do from
+  // about 560px up.
+  const roomy = useMediaQuery('(min-width: 560px)')
   const [period, setPeriod] = useState('week')
   // custom range; `to` blank means a single day
   const [customFrom, setCustomFrom] = useState(todayISO())
@@ -366,7 +370,13 @@ export default function Analytics() {
     // roll up whatever the property/department filters left
     const staffIds = new Set(scopedStaff.map((s) => s.id))
     const comps = data.byAssignee.filter((c) => staffIds.has(c.assigned_to))
-    const openRows = data.open.filter((o) => inViewScope(o, viewScope))
+    // Scoped by the task's own venue and department, and by the chosen person —
+    // the same predicate TaskListModal queries with, so the tile and the list it
+    // opens can never disagree. It used to skip the person filter, which left
+    // "Overdue" showing the whole venue beside one person's numbers.
+    const openRows = data.open
+      .filter((o) => inViewScope(o, viewScope))
+      .filter((o) => personFilter === 'all' || o.assigned_to === personFilter)
     const repairRows = data.repairs.filter((r) => inViewScope(r, viewScope))
 
     const completed = sumBy(comps, 'completed')
@@ -418,13 +428,16 @@ export default function Analytics() {
     ? propName(viewScope.property, lang)
     : (lang === 'hi' ? 'सभी प्रॉपर्टी' : 'all properties')
 
+  // `short` is used below 560px. Each one drops only the word the bar already
+  // supplies: under a control that is plainly about time, "This" and "Days" say
+  // nothing that Week and 90d do not.
   const periods = [
-    { key: 'today', label: lang === 'hi' ? 'आज' : 'Today' },
-    { key: 'week', label: lang === 'hi' ? 'यह हफ़्ता' : 'This Week' },
-    { key: 'month', label: lang === 'hi' ? 'यह महीना' : 'This Month' },
-    { key: 'last_month', label: lang === 'hi' ? 'पिछला महीना' : 'Last Month' },
-    { key: 'quarter', label: lang === 'hi' ? '90 दिन' : 'Last 90 Days' },
-    { key: 'custom', label: lang === 'hi' ? 'तारीख़ चुनें' : 'Pick dates' },
+    { key: 'today', label: lang === 'hi' ? 'आज' : 'Today', short: lang === 'hi' ? 'आज' : 'Today' },
+    { key: 'week', label: lang === 'hi' ? 'यह हफ़्ता' : 'This Week', short: lang === 'hi' ? 'हफ़्ता' : 'Week' },
+    { key: 'month', label: lang === 'hi' ? 'यह महीना' : 'This Month', short: lang === 'hi' ? 'महीना' : 'Month' },
+    { key: 'last_month', label: lang === 'hi' ? 'पिछला महीना' : 'Last Month', short: lang === 'hi' ? 'पिछला' : 'Last mo' },
+    { key: 'quarter', label: lang === 'hi' ? '90 दिन' : 'Last 90 Days', short: lang === 'hi' ? '90 दिन' : '90d' },
+    { key: 'custom', label: lang === 'hi' ? 'तारीख़ चुनें' : 'Pick dates', short: lang === 'hi' ? 'तारीख़' : 'Dates' },
   ]
 
   return (
@@ -436,9 +449,11 @@ export default function Analytics() {
         {lang === 'hi' ? 'विश्लेषण' : 'Analytics'}
       </SectionTitle>
 
-      {/* One setting with five values, drawn as one object rather than five
-          pills stretched edge to edge. Scrolls sideways on a phone instead of
-          wrapping to two rows of uneven widths. */}
+      {/* One setting with six values, drawn as one object rather than six pills
+          stretched edge to edge. Made to fit rather than made to scroll: at full
+          size these come to about 590px against a 336px phone, and the three that
+          fell off the edge had a hidden scrollbar to announce them. overflow stays
+          as a backstop for a longer translation, with the bar hidden. */}
       <div className="no-bar" style={{
         display: 'flex', gap: 2, marginBottom: 16, padding: 3,
         background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12,
@@ -452,8 +467,9 @@ export default function Analytics() {
               onClick={() => setPeriod(p.key)}
               aria-pressed={on}
               style={{
-                flex: '1 0 auto', whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 9,
-                fontSize: 13.5, fontWeight: on ? 700 : 600,
+                flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
+                padding: roomy ? '8px 16px' : '7px 5px', borderRadius: 9,
+                fontSize: roomy ? 13.5 : 11.5, fontWeight: on ? 700 : 600,
                 background: on ? C.card : 'transparent',
                 color: on ? C.maroon : C.tl,
                 border: 'none',
@@ -461,7 +477,7 @@ export default function Analytics() {
                 cursor: 'pointer',
               }}
             >
-              {p.label}
+              {roomy ? p.label : p.short}
             </button>
           )
         })}
@@ -620,6 +636,8 @@ export default function Analytics() {
           {taskList && (
             <TaskListModal
               C={C} lang={lang} t={t} mode={taskList}
+              scope={viewScope}
+              person={personFilter}
               people={scopedStaff}
               onClose={() => setTaskList(null)}
             />
@@ -927,26 +945,30 @@ function PersonMissedModal({ C, lang, t, person, onClose }) {
 // Drill-down behind the "Overdue now" / "Open now" tiles. Those two are live
 // snapshots rather than period figures, so this fetches the actual rows on open
 // instead of reusing the aggregates.
-function TaskListModal({ C, lang, t, mode, people, onClose }) {
+function TaskListModal({ C, lang, t, mode, scope, person, people, onClose }) {
   const hi = lang === 'hi'
   const overdue = mode === 'overdue'
   const [rows, setRows] = useState(null)
   const [err, setErr] = useState('')
 
   useEffect(() => {
-    const ids = people.map((p) => p.id)
-    if (!ids.length) { setRows([]); return }
     const today = todayISO()
+    // By the task's venue and department, not by a list of people — see the note
+    // on openRows in the parent. Querying a person list dropped whatever was
+    // assigned to somebody that list leaves out, while the tile still counted it.
     let q = supabase
       .from('tasks')
       .select('id, title, title_hi, assigned_to, assignee_name, property, department, due_date, status, priority')
       .neq('status', TASK_STATUS.COMPLETED)
-      .in('assigned_to', ids)
+      .not('assigned_to', 'is', null)
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(200)
+    if (scope?.property) q = q.eq('property', scope.property)
+    if (scope?.department) q = q.eq('department', scope.department)
+    if (person && person !== 'all') q = q.eq('assigned_to', person)
     if (overdue) q = q.lt('due_date', today)
     q.then(({ data, error }) => { setErr(error?.message || ''); setRows(data || []) })
-  }, [people, overdue])
+  }, [scope?.property, scope?.department, person, overdue])
 
   // resolve the assignee's Hindi name from the people list we already hold
   const nameOf = (r) => {

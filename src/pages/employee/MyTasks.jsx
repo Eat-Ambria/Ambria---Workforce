@@ -169,6 +169,16 @@ export default function MyTasks() {
   // Nothing to show: say whether this category is genuinely empty or whether a
   // status filter is hiding rows that do exist in it.
   const dueToday = tasks.filter((x) => !notDueToday(x))
+  // What is still outstanding in each band, shown under its pill. Not narrowed by
+  // the status or issue filters: "how much is left in Weekly" does not change
+  // because you are looking at Completed — and if it did, every pill would read 0
+  // the moment you selected it.
+  const catCounts = useMemo(() => dueToday.reduce(
+    (acc, x) => (x.status === TASK_STATUS.PENDING
+      ? { ...acc, all: (acc.all || 0) + 1, [x.category]: (acc[x.category] || 0) + 1 }
+      : acc),
+    {},
+  ), [dueToday])
   const hiddenByFilter = (status !== 'all' || issueStatus !== 'all')
     && (cat === 'all' ? dueToday : dueToday.filter((x) => x.category === cat)).length > 0
   const emptyTitle = hiddenByFilter ? t.noTaskForFilter : (t[EMPTY_KEY[cat]] || t.noData)
@@ -259,14 +269,25 @@ export default function MyTasks() {
               aria-pressed={on}
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
-                padding: roomy ? '8px 16px' : '7px 6px', borderRadius: 9,
+                display: 'grid', justifyItems: 'center', gap: 1,
+                padding: roomy ? '6px 16px' : '5px 6px', borderRadius: 9,
                 fontSize: roomy ? 13.5 : 13, fontWeight: on ? 700 : 600,
                 background: on ? C.card : 'transparent',
                 color: on ? C.maroon : C.tl,
                 border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
               }}
             >
-              {c === 'all' ? t.all : (!roomy && c === 'alternate' ? t.alternateShort : t[c])}
+              <span>{c === 'all' ? t.all : (!roomy && c === 'alternate' ? t.alternateShort : t[c])}</span>
+              {/* A zero is drawn too: an empty band is an answer, and blanking it
+                  makes the row shift as the numbers arrive. */}
+              <span style={{
+                fontSize: roomy ? 11 : 10.5, fontWeight: 700, lineHeight: 1.1,
+                fontVariantNumeric: 'tabular-nums',
+                color: (catCounts[c] || 0) ? (on ? C.maroon : C.faint) : C.faint,
+                opacity: (catCounts[c] || 0) ? 1 : 0.55,
+              }}>
+                {catCounts[c] || 0}
+              </span>
             </button>
           )
         })}

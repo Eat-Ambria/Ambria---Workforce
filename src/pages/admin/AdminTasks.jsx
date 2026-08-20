@@ -48,6 +48,7 @@ export default function AdminTasks() {
   const [appHeaderH, setAppHeaderH] = useState(0)
   const [list, setList] = useState([])       // current page of rows for the active tab
   const [counts, setCounts] = useState({})   // per-tab totals (server counts)
+  const [catCounts, setCatCounts] = useState({})  // pending per frequency band
   const [loading, setLoading] = useState(true)       // first load
   const [listLoading, setListLoading] = useState(false) // subsequent refreshes
   const [page, setPage] = useState(0)
@@ -66,13 +67,16 @@ export default function AdminTasks() {
   const today = todayISO()
 
   // apply property / department / category / staff filters to any query
-  const applyFilters = useCallback((q) => {
+  // `skipCat` is for the per-band counts under the frequency pills: a count under
+  // "Weekly" has to ignore that "Daily" is selected, or every band but the chosen
+  // one reads zero.
+  const applyFilters = useCallback((q, { skipCat = false } = {}) => {
     const deptScope = scopedDepartment(user) // Sandeep → security only
     if (propFilter !== 'all') q = q.eq('property', propFilter)
     // a department-locked admin is pinned to theirs; everyone else may filter
     if (deptScope) q = q.eq('department', deptScope)
     else if (deptFilter !== 'all') q = q.eq('department', deptFilter)
-    if (catFilter !== 'all') q = q.eq('category', catFilter)
+    if (!skipCat && catFilter !== 'all') q = q.eq('category', catFilter)
     if (prioFilter !== 'all') q = q.eq('priority', prioFilter)
     if (memberFilter !== 'all') q = q.eq('assigned_to', memberFilter)
     return q
@@ -150,12 +154,18 @@ export default function AdminTasks() {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!user) return
     if (!silent) setListLoading(true)
-    const [countPairs, late] = await Promise.all([
+    const [countPairs, late, bands] = await Promise.all([
       Promise.all(TAB_KEYS.filter((k) => k !== 'overdue').map((k) =>
         withStatus(applyFilters(supabase.from('tasks').select('*', { count: 'exact', head: true })), k)
           .then(({ count }) => [k, count || 0])
       )),
       overdueRows(),
+      // One column, all five bands. Cheaper than five head counts on a page that
+      // refreshes itself in the background.
+      applyFilters(
+        supabase.from('tasks').select('category').eq('status', TASK_STATUS.PENDING),
+        { skipCat: true },
+      ).then(({ data }) => data || []),
     ])
     const from = page * PAGE_SIZE
     // the overdue tab paginates the rows it already has; the rest page in the
@@ -168,6 +178,10 @@ export default function AdminTasks() {
         ).range(from, from + PAGE_SIZE - 1)).data
 
     setCounts({ ...Object.fromEntries(countPairs), overdue: late.length })
+    setCatCounts(bands.reduce(
+      (acc, r) => ({ ...acc, all: (acc.all || 0) + 1, [r.category]: (acc[r.category] || 0) + 1 }),
+      {},
+    ))
     setList(data || [])
     setListLoading(false)
     setLoading(false)
@@ -380,14 +394,26 @@ export default function AdminTasks() {
               aria-pressed={on}
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
-                padding: roomy ? '8px 16px' : '7px 6px', borderRadius: 9,
+                display: 'grid', justifyItems: 'center', gap: 1,
+                padding: roomy ? '6px 16px' : '5px 6px', borderRadius: 9,
                 fontSize: roomy ? 13.5 : 13, fontWeight: on ? 700 : 600,
                 background: on ? C.card : 'transparent',
                 color: on ? C.maroon : C.tl,
                 border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
               }}
             >
-              {cat === 'all' ? t.all : (!roomy && cat === 'alternate' ? t.alternateShort : t[cat])}
+              <span>{cat === 'all' ? t.all : (!roomy && cat === 'alternate' ? t.alternateShort : t[cat])}</span>
+              {/* How much is still pending in this band. A zero is drawn too — an
+                  empty band is an answer, and leaving it blank makes the row jump
+                  as the counts land. */}
+              <span style={{
+                fontSize: roomy ? 11 : 10.5, fontWeight: 700, lineHeight: 1.1,
+                fontVariantNumeric: 'tabular-nums',
+                color: (catCounts[cat] || 0) ? (on ? C.maroon : C.faint) : C.faint,
+                opacity: (catCounts[cat] || 0) ? 1 : 0.55,
+              }}>
+                {catCounts[cat] || 0}
+              </span>
             </button>
           )
         })}
