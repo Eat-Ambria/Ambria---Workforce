@@ -8,6 +8,7 @@ import { useIsMobile } from '../../hooks/useMediaQuery'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import PoweredBy from '../common/PoweredBy'
+import Icon from '../common/Icon'
 
 // Almost every page here is a table, a board, or a grid of cards, and all three
 // use whatever width they are given. So width is the default and narrow is the
@@ -19,6 +20,12 @@ import PoweredBy from '../common/PoweredBy'
 // 1100px cap was written for, and the only one left.
 const NARROW_ROUTES = ['/account']
 
+// Pages that can usefully give up the navigation. Analytics is a report — two
+// tables of figures side by side — and the sidebar plus the width cap are the two
+// things between it and being readable. A list or a form gains nothing from losing
+// its navigation, so nothing else is offered it.
+const WIDE_MODE_ROUTES = ['/analytics']
+
 export default function AppLayout() {
   const C = useColors()
   const isMobile = useIsMobile()
@@ -26,6 +33,20 @@ export default function AppLayout() {
   const { user } = useAuth()
   const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Desktop only: on a phone the sidebar is already a drawer, so there is nothing
+  // to reclaim and the button would be a control that does nothing.
+  const canGoWide = !isMobile && WIDE_MODE_ROUTES.includes(location.pathname)
+  const [wideMode, setWideMode] = useState(false)
+  // Leaving the page must not leave the navigation hidden on the next one.
+  useEffect(() => { setWideMode(false) }, [location.pathname])
+  // A control that hides the navigation needs an exit that does not require
+  // finding that control again.
+  useEffect(() => {
+    if (!wideMode) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setWideMode(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [wideMode])
 
   // keep the user's language in the DB so server-sent push can be localized
   useEffect(() => {
@@ -37,17 +58,54 @@ export default function AppLayout() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
-      {!isMobile && <Sidebar />}
+      {!isMobile && !wideMode && <Sidebar />}
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <Header showBrand={isMobile} onMenu={isMobile ? () => setDrawerOpen(true) : undefined} />
+        <Header
+          showBrand={isMobile || wideMode}
+          onMenu={isMobile ? () => setDrawerOpen(true) : undefined}
+        />
+
+        {/* The switch sits with the navigation it collapses, not inside the page.
+            Sticky, because in wide mode it is the only way back other than Esc. */}
+        {canGoWide && (
+          <div style={{
+            position: 'sticky', top: 0, zIndex: 390,
+            display: 'flex', justifyContent: 'flex-end',
+            padding: '8px 16px 0', pointerEvents: 'none',
+          }}>
+            <button
+              type="button"
+              onClick={() => setWideMode((v) => !v)}
+              title={wideMode
+                ? (lang === 'hi' ? 'मेन्यू दिखाएँ (Esc)' : 'Show menu (Esc)')
+                : (lang === 'hi' ? 'पूरी चौड़ाई' : 'Full width')}
+              style={{
+                pointerEvents: 'auto',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 11px', borderRadius: 999,
+                background: C.card, border: `1px solid ${C.borderStrong}`,
+                color: C.tl, fontSize: 12.5, fontWeight: 600, boxShadow: C.shadow,
+              }}
+            >
+              <Icon name={wideMode ? 'minimize' : 'maximize'} size={14} color={C.tl} />
+              {wideMode
+                ? (lang === 'hi' ? 'मेन्यू दिखाएँ' : 'Show menu')
+                : (lang === 'hi' ? 'पूरी चौड़ाई' : 'Full width')}
+            </button>
+          </div>
+        )}
         <main
           className="no-scrollbar"
           style={{
             flex: 1,
             padding: 16,
             paddingBottom: isMobile ? 'calc(20px + env(safe-area-inset-bottom, 0px))' : 24,
-            maxWidth: NARROW_ROUTES.includes(location.pathname) ? 1100 : 1560,
+            // wide mode drops the cap entirely — the report is two tables of
+            // figures and uses every pixel it is given
+            maxWidth: wideMode
+              ? '100%'
+              : (NARROW_ROUTES.includes(location.pathname) ? 1100 : 1560),
             width: '100%',
             margin: '0 auto',
           }}

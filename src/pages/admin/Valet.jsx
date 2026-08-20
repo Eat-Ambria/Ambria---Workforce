@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { todayISO, nowISO, fmtTime, to24h } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
+import { esc } from '../../lib/printable'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
@@ -786,7 +787,9 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
 }
 
 /* --------------------- PDF export (next 7 booking days) --------------------- */
-const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+// Shared with the analytics export. Two copies of an HTML escaper is how one
+// of them quietly stops escaping quotes.
+const escapeHtml = esc
 
 // Build a printable page of the given date-grouped bookings and open the browser
 // print dialog (user picks "Save as PDF"). No external library needed.

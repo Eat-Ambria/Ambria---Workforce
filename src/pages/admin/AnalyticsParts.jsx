@@ -11,7 +11,6 @@ import { rateTone } from './analyticsUtils'
 export function DayReport({ C, lang, rows }) {
   const hi = lang === 'hi'
   if (!rows.length) return null
-  const worst = Math.max(...rows.map((r) => r.due || r.total || 0), 1)
   const fmtDay = (iso) => {
     const d = new Date(`${iso}T00:00:00`)
     return d.toLocaleDateString(hi ? 'hi-IN' : 'en-GB', { day: '2-digit', month: 'short', weekday: 'short' })
@@ -28,7 +27,7 @@ export function DayReport({ C, lang, rows }) {
         <span style={{ textAlign: 'right' }}>{hi ? 'आना था' : 'Due'}</span>
         <span style={{ textAlign: 'right' }}>{hi ? 'हुआ' : 'Done'}</span>
         <span style={{ textAlign: 'right' }}>{hi ? 'नहीं हुआ' : 'Not done'}</span>
-        <span>{hi ? 'कितना' : 'Share'}</span>
+        <span>{hi ? 'कितना हुआ' : '% done'}</span>
       </div>
 
       {rows.map((r) => {
@@ -59,7 +58,11 @@ export function DayReport({ C, lang, rows }) {
               <span style={{ flex: 1, height: 7, borderRadius: 999, background: C.cardAlt, overflow: 'hidden', minWidth: 0 }}>
                 <span style={{
                   display: 'block', height: '100%', borderRadius: 999, background: tone,
-                  width: `${Math.min(100, Math.round(((r.total || 0) / worst) * 100))}%`,
+                  // The same fraction as the figure beside it — done against what
+                  // THIS day owed. It used to divide by the busiest day's due, so a
+                  // quiet day that finished everything drew a short bar next to
+                  // "100%".
+                  width: `${share == null ? 0 : Math.min(100, share)}%`,
                 }} />
               </span>
               <span style={{ fontSize: 11, fontWeight: 700, color: tone, minWidth: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -183,11 +186,37 @@ export function AreaCard({ C, icon, tone, title, lead, leadNote, rows = [] }) {
   )
 }
 
+// A trend line, and nothing else — no axis, no labels, no hover. It answers
+// "rising or falling" beside a figure that already gives the level. Given fewer
+// than two points there is no shape to draw, so it draws nothing.
+function Spark({ values, tone, w = 78, h = 22 }) {
+  if (!values || values.length < 2) return null
+  const max = Math.max(...values, 1)
+  const min = Math.min(...values, 0)
+  const span = max - min || 1
+  const step = w / (values.length - 1)
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`)
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+      {/* the fill gives the line a body at this size; the stroke carries the shape */}
+      <polygon points={`0,${h} ${pts.join(' ')} ${w},${h}`} fill={tone} opacity="0.12" />
+      <polyline
+        points={pts.join(' ')}
+        fill="none"
+        stroke={tone}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 // --- the KPI row ------------------------------------------------------------
 // Five figures, each with the same shape: icon, number, name, and a note saying
 // whether it is a period figure or a live one. `delta` is only passed where a
 // previous period genuinely exists to compare against.
-function Kpi({ C, icon, tone, value, label, note, delta, onClick }) {
+function Kpi({ C, icon, tone, value, label, note, delta, series, onClick }) {
   const dim = value === 0 || value === '—'
   const inner = (
     <>
@@ -205,11 +234,15 @@ function Kpi({ C, icon, tone, value, label, note, delta, onClick }) {
           {label}
         </span>
       </div>
-      <div style={{
-        fontSize: 26, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em',
-        fontVariantNumeric: 'tabular-nums', color: dim ? C.faint : (tone || C.text),
-      }}>
-        {value}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{
+          fontSize: 26, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em',
+          fontVariantNumeric: 'tabular-nums', color: dim ? C.faint : (tone || C.text),
+        }}>
+          {value}
+        </div>
+        {/* only where a real daily series exists — see the note on Spark */}
+        <Spark values={series} tone={tone} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, color: C.faint, lineHeight: 1.4 }}>{note}</span>
@@ -234,11 +267,18 @@ function Kpi({ C, icon, tone, value, label, note, delta, onClick }) {
   )
 }
 
-export function KpiRow({ C, lang, totals, periodLabel, onOverdue, onOpen }) {
+export function KpiRow({ C, lang, totals, periodLabel, dayRows = [], onOverdue, onOpen }) {
   const hi = lang === 'hi'
   const scored = totals.completed
   const inPeriod = hi ? periodLabel : `in ${periodLabel.toLowerCase()}`
   const rightNow = hi ? 'अभी' : 'right now'
+
+  // Oldest first: a sparkline reads left to right, and dayRows is newest first
+  // for the table above it.
+  const byDay = [...dayRows].sort((a, b) => a.day.localeCompare(b.day))
+  // Only finished days carry a share — today has no verdict yet.
+  const shareSeries = byDay.filter((d) => !d.open && d.due).map((d) => Math.round((d.total / d.due) * 100))
+  const doneSeries = byDay.map((d) => d.total)
 
   const cards = [
     // Not on-time % — that is the hero above, and a second copy here is the
@@ -252,11 +292,12 @@ export function KpiRow({ C, lang, totals, periodLabel, onOverdue, onOpen }) {
       note: totals.due
         ? (hi ? `${totals.kept}/${totals.due} · ${inPeriod}` : `${totals.kept} of ${totals.due} · ${inPeriod}`)
         : (hi ? 'कुछ आना नहीं था' : 'nothing was due'),
-      delta: null },
+      delta: null, series: shareSeries },
     { key: 'done', icon: 'check', tone: C.blue, value: totals.completed,
       label: hi ? 'टास्क पूरे हुए' : 'Tasks completed',
       note: hi ? `${inPeriod}` : `${inPeriod}`,
-      delta: totals.prev ? totals.completed - (totals.prev.completed || 0) : null },
+      delta: totals.prev ? totals.completed - (totals.prev.completed || 0) : null,
+      series: doneSeries },
     { key: 'repairs', icon: 'taskBoard', tone: C.indigo, value: totals.repairs,
       label: hi ? 'मरम्मत पूरी हुई' : 'Repairs closed',
       note: hi ? `${inPeriod}` : `${inPeriod}`,
