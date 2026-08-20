@@ -208,20 +208,21 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
 // The three states, as three different WEIGHTS of chip — filled, tinted,
 // outlined — each with its own icon. Hue is the last of the three signals here,
 // not the only one: green and slate ink are near-identical to a colour-blind eye.
-const STATE = {
-  done:  { icon: 'check', bg: '#15803D', ink: '#FFFFFF', border: '#15803D' },
-  doing: { icon: 'clock', bg: '#FEF3C7', ink: '#B45309', border: '#F5D48A' },
-  todo:  { icon: 'inbox', bg: 'transparent', ink: '#475569', border: '#CBD5E1' },
-}
+const stateStyles = (C) => ({
+  done:  { icon: 'check', bg: C.successBg, ink: '#FFFFFF', border: C.successBg },
+  doing: { icon: 'clock', bg: C.yBg, ink: C.yellow, border: `${C.yellow}55` },
+  todo:  { icon: 'inbox', bg: 'transparent', ink: C.tl, border: C.borderStrong },
+})
 
 // One track, three states, in proportion. A person is behind or not behind at
 // a glance, before any number is read.
 function StackedBar({ C, done, doing, todo, total }) {
   const seg = (n, bg) => (n > 0 ? { flex: n, background: bg } : null)
   const parts = [
-    seg(done, STATE.done.bg),
-    seg(doing, '#D97706'),   // the chip's amber ink is for text; a fill needs this one
-    seg(todo, '#CBD5E1'),
+    seg(done, C.successBg),
+    // the chip's amber is an ink meant for text; a 9px band of it reads muddy
+    seg(doing, C.yellow),
+    seg(todo, C.borderStrong),
   ].filter(Boolean)
   if (!total) return null
   // Three hues cannot all clear 3:1 against each other in one light bar — the
@@ -238,19 +239,23 @@ function StackedBar({ C, done, doing, todo, total }) {
 // The legend under a person's bar. Deliberately NOT the pill used in the
 // summary — same information, different object, so the two never blur together.
 function Leg({ state, label, n }) {
-  const st = STATE[state]
+  const C = useColors()
+  const st = stateStyles(C)[state]
   const muted = n === 0
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: muted ? 0.45 : 1 }}>
+    // 0.5 rather than 0.45: a muted zero should still be readable, and the same
+    // fraction bites harder on light text over a dark ground than the other way.
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: muted ? 0.5 : 1 }}>
       <Icon name={st.icon} size={14} color={st.ink === '#FFFFFF' ? st.bg : st.ink} />
-      <b style={{ fontSize: 14.5, fontWeight: 800, color: '#0F172A', fontVariantNumeric: 'tabular-nums' }}>{n}</b>
-      <span style={{ fontSize: 12.5, color: '#475569' }}>{label}</span>
+      <b style={{ fontSize: 14.5, fontWeight: 800, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{n}</b>
+      <span style={{ fontSize: 12.5, color: C.tl }}>{label}</span>
     </span>
   )
 }
 
 function Tally({ state, label, n, size = 'md' }) {
-  const st = STATE[state]
+  const C = useColors()
+  const st = stateStyles(C)[state]
   const big = size === 'lg'
   return (
     <span
@@ -301,7 +306,7 @@ function groupByBand(tasks) {
 function TaskLine({ C, t, lang, task, onOpen }) {
   const done = task.status === TASK_STATUS.COMPLETED
   const doing = task.status === TASK_STATUS.IN_PROGRESS
-  const tone = done ? C.green : doing ? C.yellow : '#475569'
+  const tone = done ? C.green : doing ? C.yellow : C.tl
   return (
     <div
       role={onOpen ? 'button' : undefined}

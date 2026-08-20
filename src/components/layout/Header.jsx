@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useColors } from '../../context/ThemeContext'
+import { useColors, useTheme } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import { PROPERTY_MAP, propName, personName } from '../../constants/org'
@@ -13,6 +13,7 @@ function initials(name = '') {
 
 export default function Header({ showBrand, onMenu }) {
   const C = useColors()
+  const { theme, toggle } = useTheme()
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
@@ -30,7 +31,7 @@ export default function Header({ showBrand, onMenu }) {
         position: 'sticky',
         top: 0,
         zIndex: 400,
-        background: 'rgba(255,255,255,0.85)',
+        background: C.headerBg,
         backdropFilter: 'saturate(180%) blur(8px)',
         WebkitBackdropFilter: 'saturate(180%) blur(8px)',
         borderBottom: `1px solid ${C.border}`,
@@ -57,12 +58,22 @@ export default function Header({ showBrand, onMenu }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Shows what pressing it gives you, not what you are already in — a moon
+            means "go dark". The other way round reads as a status light. */}
+        <button
+          onClick={toggle}
+          title={theme === 'dark' ? t.themeLight : t.themeDark}
+          aria-label={theme === 'dark' ? t.themeLight : t.themeDark}
+          style={{ ...iconBtn(C), cursor: 'pointer' }}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} color={C.tl} />
+        </button>
         <NotificationBell />
         <button
           onClick={toggleAccount}
           title={t.myAccount || 'My Account'}
           aria-label={t.myAccount || 'My Account'}
-          style={{ ...avatar(C), cursor: 'pointer', ...(onAccount ? { background: C.maroon, color: '#fff' } : {}) }}
+          style={{ ...avatar(C), cursor: 'pointer', ...(onAccount ? { background: C.brandBg, color: '#fff' } : {}) }}
         >{initials(user?.name)}</button>
       </div>
     </header>

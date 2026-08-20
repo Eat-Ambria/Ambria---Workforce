@@ -64,7 +64,7 @@ export default function Sidebar({ mobile = false, onNavigate }) {
                 <Icon name={item.icon} size={20} />
                 {t[item.key] || item.key}
                 {item.path === '/task-board' && fixCount > 0 && (
-                  <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: C.maroon, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                  <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: C.brandBg, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
                     {fixCount > 99 ? '99+' : fixCount}
                   </span>
                 )}

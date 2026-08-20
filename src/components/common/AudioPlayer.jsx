@@ -82,7 +82,7 @@ export default function AudioPlayer({ src, label }) {
         type="button"
         onClick={toggle}
         aria-label={playing ? 'Pause' : 'Play'}
-        style={{ width: 34, height: 34, borderRadius: '50%', background: C.maroon, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+        style={{ width: 34, height: 34, borderRadius: '50%', background: C.brandBg, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
       >
         <Icon name={playing ? 'pause' : 'play'} size={16} color="#fff" fill="#fff" />
       </button>

@@ -734,7 +734,7 @@ const card = (C) => ({
 })
 
 const addBtn = (C) => ({
-  width: '100%', background: C.maroon, color: '#fff', border: 'none', borderRadius: 12,
+  width: '100%', background: C.brandBg, color: '#fff', border: 'none', borderRadius: 12,
   padding: '13px', fontSize: 15.5, fontWeight: 700, boxShadow: C.shadow, cursor: 'pointer',
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6,
 })

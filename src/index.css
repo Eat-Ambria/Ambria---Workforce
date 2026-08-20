@@ -147,3 +147,38 @@ h1, h2, h3 { letter-spacing: -0.01em; }
    Still scrollable by wheel, trackpad, touch and keyboard; only the bar goes. */
 .no-bar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-bar::-webkit-scrollbar { display: none; }
+
+/* ===== Dark theme =====================================================
+   ThemeProvider stamps data-theme on <html> and sets color-scheme, which is
+   what makes the OS paint <input type="date"> and <select> dark — this app has
+   a lot of both, and without it they stay bright white on a dark page.
+
+   Only the rules above that carry a literal colour need repeating here. Anything
+   drawn from useColors() has already switched palette by itself. */
+:root[data-theme='dark'] {
+  --maroon: #E4718A;
+  --border: #232E3C;
+  --ring: rgba(228, 113, 138, 0.22);
+}
+
+:root[data-theme='dark'] body {
+  color: #E8EDF4;
+  background: #0B1017;
+}
+
+/* The page scrollbar. The light one is a pale thumb on a paler track; inverted,
+   both have to come up off the background rather than down into it. */
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #2C3846;
+  border-color: #0B1017;
+}
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb:hover { background: #3B4A5C; }
+
+:root[data-theme='dark'] .modal-scroll { scrollbar-color: #3B4A5C transparent; }
+:root[data-theme='dark'] .modal-scroll::-webkit-scrollbar-thumb { background: #3B4A5C; }
+:root[data-theme='dark'] .modal-scroll::-webkit-scrollbar-thumb:hover { background: #4B5B6E; }
+
+/* Selection and the card hover shadow: black at 10% does nothing on #0B1017. */
+:root[data-theme='dark'] ::selection { background: rgba(228, 113, 138, 0.22); }
+:root[data-theme='dark'] .hoverable:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+:root[data-theme='dark'] .video-card:hover { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55) !important; }

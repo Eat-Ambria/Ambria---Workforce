@@ -101,7 +101,7 @@ export default function Login() {
           type="submit"
           disabled={!canSubmit}
           style={{
-            width: '100%', background: C.maroon, color: '#fff', border: 'none', borderRadius: 12,
+            width: '100%', background: C.brandBg, color: '#fff', border: 'none', borderRadius: 12,
             padding: '13px', fontSize: 15.5, fontWeight: 700, boxShadow: C.shadow,
             opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,

@@ -54,7 +54,7 @@ export default function BottomTabBar() {
               <span style={{ position: 'relative', padding: '4px 12px', borderRadius: 999, background: isActive ? C.maroonSoft : 'transparent', display: 'grid', placeItems: 'center' }}>
                 <Icon name={item.icon} size={21} />
                 {item.path === '/task-board' && fixCount > 0 && (
-                  <span style={{ position: 'absolute', top: -1, right: 8, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: C.maroon, color: '#fff', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, border: `1.5px solid ${C.card}` }}>
+                  <span style={{ position: 'absolute', top: -1, right: 8, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: C.brandBg, color: '#fff', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, border: `1.5px solid ${C.card}` }}>
                     {fixCount > 99 ? '99+' : fixCount}
                   </span>
                 )}

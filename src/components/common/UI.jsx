@@ -54,9 +54,11 @@ export function Card({ children, style, onClick, className }) {
 export function Button({ children, variant = 'primary', full, disabled, style, ...rest }) {
   const C = useColors()
   const variants = {
-    primary: { bg: C.maroon, fg: '#fff', border: C.maroon },
-    success: { bg: C.green, fg: '#fff', border: C.green },
-    danger: { bg: C.red, fg: '#fff', border: C.red },
+    // *Bg tokens, not the text tones: white sits on these, and in dark the
+    // text tones are light enough that white on them is unreadable.
+    primary: { bg: C.brandBg, fg: '#fff', border: C.brandBg },
+    success: { bg: C.successBg, fg: '#fff', border: C.successBg },
+    danger: { bg: C.dangerBg, fg: '#fff', border: C.dangerBg },
     ghost: { bg: 'transparent', fg: C.text, border: C.border },
     soft: { bg: C.maroonSoft, fg: C.maroon, border: C.maroonSoft },
   }

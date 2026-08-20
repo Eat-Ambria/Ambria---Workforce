@@ -280,7 +280,7 @@ export default function Valet() {
                     >
                       <span style={{ fontSize: 14, fontWeight: isToday ? 800 : 600, color: isToday ? C.maroon : C.text }}>{d}</span>
                       {list.length > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: C.maroon, borderRadius: 999, padding: '1px 6px', lineHeight: 1.5 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: C.brandBg, borderRadius: 999, padding: '1px 6px', lineHeight: 1.5 }}>
                           {list.length}
                         </span>
                       )}

@@ -676,7 +676,7 @@ function MineChip({ C, label, value, onClick }) {
       }}
     >
       {label}
-      <span style={{ background: C.maroon, color: '#fff', borderRadius: 999, padding: '1px 8px', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ background: C.brandBg, color: '#fff', borderRadius: 999, padding: '1px 8px', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
       <Icon name="chevronRight" size={14} color={C.faint} />
     </button>
   )
