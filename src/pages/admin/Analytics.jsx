@@ -15,7 +15,7 @@ import { Card, Loader, EmptyState, Button, SectionTitle, inputStyle, filterStyle
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { pct, avgOf, sumBy, rateTone } from './analyticsUtils'
-import { Headline, MetricGuide } from './AnalyticsParts'
+import { AreaCard, DayReport, Headline, KpiRow, MetricGuide, PersonDayGrid } from './AnalyticsParts'
 import MissedWork from './MissedWork'
 
 // Missed work's own colour, matching the overdue accent the dashboard and the
@@ -36,6 +36,11 @@ const jobKey = (r) => [r.property, r.department, r.category, (r.title || '').tri
 // --- period windows ----------------------------------------------------------
 // All windows are half-open [from, to) in local time, converted to ISO for the
 // query. "Week" starts Monday, matching how the weekly task reset works.
+// The calendar day an instant falls on HERE. toISOString() answers that in UTC,
+// and IST is far enough ahead that midnight local is the previous day there — which
+// is exactly how every period on this page came to start a day early.
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 function periodRange(key, custom) {
   const now = new Date()
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -117,18 +122,32 @@ export default function Analytics() {
   const [err, setErr] = useState('')
   const [data, setData] = useState(null)
   const [taskList, setTaskList] = useState(null)  // 'overdue' | 'open' — drill-down modal
+  // Every figure here is read once, on load. Until this was shown, nothing on
+  // the page admitted that what you are reading might be an hour old.
+  const [loadedAt, setLoadedAt] = useState(null)
+  // The chart and the staff table only sit side by side where the table's seven
+  // columns still fit beside it.
+  const wideCols = useMediaQuery('(min-width: 1100px)')
 
   const load = useCallback(async () => {
     setLoading(true)
     setErr('')
     const { from, to } = periodRange(period, { from: customFrom, to: customTo })
     const args = { p_from: from, p_to: to }
+    // analytics_by_day and analytics_person_day take `date`, not `timestamptz`,
+    // and BETWEEN is inclusive at both ends — so the last day is `to` minus one,
+    // `to` being exclusive here. Passing the timestamps let Postgres cast them,
+    // which shifted both ends back a day.
+    const lastDay = new Date(to)
+    lastDay.setDate(lastDay.getDate() - 1)
+    const dayArgs = { p_from: ymd(new Date(from)), p_to: ymd(lastDay) }
     const prev = previousRange({ from, to })
     const prevArgs = { p_from: prev.from, p_to: prev.to }
     try {
       // every figure is aggregated server-side; these responses are one row per
       // person (or per property+department), never one row per task
-      const [users, byAssignee, repairs, open, prevAssignee, prevRepairs, byDay, personDay, allTasks, comps] = await Promise.all([
+      const [users, byAssignee, repairs, open, prevAssignee, prevRepairs, byDay, personDay, allTasks, comps,
+             videos, trainDone, fire, wifi, chem] = await Promise.all([
         supabase.from('users')
           .select('id, name, name_hi, role, property, department, designation')
           .eq('is_active', true).order('name'),
@@ -137,8 +156,8 @@ export default function Analytics() {
         supabase.rpc('analytics_open'),
         supabase.rpc('analytics_by_assignee', prevArgs),
         supabase.rpc('analytics_repairs', prevArgs),
-        supabase.rpc('analytics_by_day', args),
-        supabase.rpc('analytics_person_day', args),
+        supabase.rpc('analytics_by_day', dayArgs),
+        supabase.rpc('analytics_person_day', dayArgs),
         // recurring work and the completions it earned — everything else on this
         // page comes from completions alone, which cannot show an absence
         supabase.from('tasks')
@@ -148,9 +167,21 @@ export default function Analytics() {
           // the job's own identity, so a completion is still findable after the
           // row that produced it has been deleted and rewritten
           .select('task_id, task_date, title, property, department, category')
-          .gte('task_date', from.slice(0, 10))
-          .lte('task_date', to.slice(0, 10))
+          // the same correction: task_date is a date, and slicing the UTC string
+          // was reading the day before
+          .gte('task_date', dayArgs.p_from)
+          .lte('task_date', dayArgs.p_to)
           .limit(20000),
+        // The rest of the app. Narrow reads: only what gets counted.
+        supabase.from('training_videos').select('id, department').eq('is_active', true),
+        supabase.from('training_progress').select('video_key, completed'),
+        // Not period-filtered: an extinguisher that expired in March is expired
+        // today. Its state now is the only useful question.
+        supabase.from('fire_extinguishers').select('id, property, expiry_date'),
+        supabase.from('wifi_services').select('id, property, due_date'),
+        supabase.from('chemical_usage').select('id, property, usage_date')
+          .gte('usage_date', dayArgs.p_from)
+          .lte('usage_date', dayArgs.p_to),
       ])
       const firstError = [users, byAssignee, repairs, open].find((r) => r.error)
       if (firstError) throw firstError.error
@@ -167,8 +198,18 @@ export default function Analytics() {
         personDay: personDay.error ? [] : (personDay.data || []),
         allTasks: allTasks.error ? [] : (allTasks.data || []),
         comps: comps.error ? [] : (comps.data || []),
+        // Additive, like byDay above: an install missing one of these tables gets
+        // every other figure instead of an error page.
+        videos: videos.error ? [] : (videos.data || []),
+        trainDone: trainDone.error ? [] : (trainDone.data || []),
+        fire: fire.error ? [] : (fire.data || []),
+        wifi: wifi.error ? [] : (wifi.data || []),
+        chem: chem.error ? [] : (chem.data || []),
         range: { from, to },
       })
+      // Here rather than in the finally below: that runs on failure too, and a
+      // load that threw would still have claimed a fresh reading.
+      setLoadedAt(new Date())
     } catch (e) {
       // these are created by SUPABASE-MIGRATION-TASK-HISTORY.sql
       const msg = e?.message || ''
@@ -191,6 +232,26 @@ export default function Analytics() {
   // One row per day: how much of each kind of work was closed, and how much of
   // it on time. Filtered here rather than in the query, so changing venue or
   // department costs no round trip.
+  // What was OWED on each day of the range, job by job. expectedOccurrences
+  // walks a range a day at a time, so a range of one day answers "was this owed
+  // then" — which is the only way to get a per-day denominator out of recurring
+  // schedules. Roughly 170 tasks across 31 days, once per load.
+  const dueByDay = useMemo(() => {
+    if (!data?.range) return new Map()
+    const out = new Map()
+    const end = new Date(data.range.to)
+    end.setDate(end.getDate() - 1)   // `to` is exclusive, as in missedRows
+    const tasks = (data.allTasks || []).filter((task) => inViewScope(task, viewScope)
+      && (personFilter === 'all' || task.assigned_to === personFilter))
+    for (const d = new Date(data.range.from); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      let n = 0
+      tasks.forEach((task) => { n += expectedOccurrences(task, d, d) })
+      out.set(key, n)
+    }
+    return out
+  }, [data, viewScope, personFilter])
+
   const dayRows = useMemo(() => {
     const src = (data?.byDay || []).filter((r) => inViewScope(r, viewScope))
     const by = new Map()
@@ -204,8 +265,24 @@ export default function Analytics() {
       d.total += r.done
       d.onTime += r.on_time
     })
+    // A day with work owed and nothing recorded has to appear, or the report only
+    // ever shows the days somebody turned up.
+    dueByDay.forEach((n, day) => {
+      if (n > 0 && !by.has(day)) {
+        by.set(day, { day, total: 0, onTime: 0, daily: 0, alternate: 0, weekly: 0, monthly: 0 })
+      }
+    })
+    const today = todayISO()
+    by.forEach((d) => {
+      d.due = dueByDay.get(d.day) || 0
+      // Today is not over. Its shortfall would read 109 at breakfast and 4 at
+      // closing time — a number that is wrong all day and right at midnight.
+      // missedRows already refuses to judge the last day; this now agrees.
+      d.open = d.day >= today
+      d.missed = d.open ? null : Math.max(0, d.due - d.total)
+    })
     return [...by.values()].sort((a, b) => b.day.localeCompare(a.day))
-  }, [data, viewScope])
+  }, [data, viewScope, dueByDay])
 
   // Owed vs credited, per recurring job. Anything with a shortfall is a miss —
   // and a job with zero completions and a real expectation is the loudest kind.
@@ -213,9 +290,17 @@ export default function Analytics() {
     if (!data?.range) return []
     const from = new Date(data.range.from)
     const to = new Date(data.range.to)
-    // `to` is exclusive in periodRange; step back a day so the last day is not
-    // counted as owed when it has not happened yet
+    // Two separate corrections, and only the first was here before:
+    //   1. `to` is exclusive in periodRange, so step back onto the last day;
+    //   2. a day can only be scored once it is over, so never go past yesterday.
+    // Without (2) every job due today counted as missed the moment the page was
+    // opened — "29 missed of 29 due" at eleven in the morning.
     to.setDate(to.getDate() - 1)
+    const yesterday = new Date()
+    yesterday.setHours(0, 0, 0, 0)
+    yesterday.setDate(yesterday.getDate() - 1)
+    if (to > yesterday) to.setTime(yesterday.getTime())
+    if (to < from) return []
 
     // Keyed on the job, not the row. A task row that was deleted and rewritten
     // — three hundred of them were, cleaning up duplicates — takes its id with
@@ -239,6 +324,8 @@ export default function Analytics() {
         return { task, expected, done, missed: expected - done }
       })
       .filter((r) => r.expected > 0)
+      // Most missed first, then least done — the order the page is read in. It was
+      // alphabetical, which put "nothing recorded" above the person who missed 44.
       .sort((a, b) => b.missed - a.missed
         || (a.task.title || '').localeCompare(b.task.title || ''))
   }, [data, viewScope, personFilter])
@@ -320,7 +407,23 @@ export default function Analytics() {
     return by
   }, [missedRows])
 
+  // Every job with a real expectation, per person — misses AND completions.
+  // missedByPerson above drops anything with missed <= 0, which is right for the
+  // "what keeps slipping" list and useless for "what did he actually do".
+  const jobsByPerson = useMemo(() => {
+    const by = new Map()
+    missedRows.forEach((r) => {
+      const id = r.task.assigned_to
+      if (!id) return
+      if (!by.has(id)) by.set(id, [])
+      by.get(id).push(r)
+    })
+    return by
+  }, [missedRows])
+
   // ---- per-staff roll-up -----------------------------------------------------
+  // Sorted by what the page is opened for — most missed first, then least done.
+  // Alphabetical put "Akash, nothing recorded" above the person who missed 44.
   const staffRows = useMemo(() => {
     if (!data) return []
     return scopedStaff
@@ -336,11 +439,12 @@ export default function Analytics() {
           openNow: sumBy(open, 'open_n'),
           overdueNow: sumBy(open, 'overdue_n'),
           missed: miss?.total || 0,
+          jobs: jobsByPerson.get(s.id) || [],
           missedRows: miss?.rows || [],
         }
       })
       .sort((a, b) => b.completed - a.completed)
-  }, [data, scopedStaff, missedByPerson])
+  }, [data, scopedStaff, missedByPerson, jobsByPerson])
 
   // ---- the head filter narrows the whole page, KPIs included -----------------
   // Heads offered in the picker. With no department chosen: everyone who covers
@@ -409,6 +513,83 @@ export default function Analytics() {
     }
   }, [data, scopedStaff, viewScope, missedRows])
 
+  // analytics_person_day, finally drawn. Only people who did something: on a
+  // venue with 32 accounts, five of them named test1..test5, listing everyone puts
+  // twenty empty rows above the four that matter.
+  const personGrid = useMemo(() => {
+    if (!data) return { days: [], people: [] }
+    const days = [...new Set((data.byDay || [])
+      .filter((r) => inViewScope(r, viewScope))
+      .map((r) => r.day))].sort()
+    dueByDay.forEach((n, day) => { if (n > 0 && !days.includes(day)) days.push(day) })
+    days.sort()
+
+    const byPerson = new Map()
+    ;(data.personDay || [])
+      .filter((r) => inViewScope(r, viewScope)
+        && (personFilter === 'all' || r.assigned_to === personFilter))
+      .forEach((r) => {
+        if (!byPerson.has(r.assigned_to)) {
+          const u = data.users.find((x) => x.id === r.assigned_to)
+          byPerson.set(r.assigned_to, {
+            id: r.assigned_to,
+            name: (u && personName(u, lang)) || r.assignee_name || '—',
+            byDay: {}, total: 0,
+          })
+        }
+        const p = byPerson.get(r.assigned_to)
+        p.byDay[r.day] = (p.byDay[r.day] || 0) + r.done
+        p.total += r.done
+      })
+
+    return {
+      days,
+      people: [...byPerson.values()].filter((x) => x.total > 0).sort((a, b) => b.total - a.total),
+    }
+  }, [data, viewScope, personFilter, lang, dueByDay])
+
+  // Who has nothing on them at all this period. "Did nothing" is a finding, so
+  // they are kept — just not as the first twenty of twenty-five rows.
+  const [showQuiet, setShowQuiet] = useState(false)
+  const busyStaff = useMemo(
+    () => staffRows.filter((r) => r.completed || r.missed || r.openNow || r.overdueNow),
+    [staffRows],
+  )
+  const quietCount = staffRows.length - busyStaff.length
+
+  // The four areas of the app that had no figures on this page at all. All live
+  // state except the chemical log, which is a count of entries in the period.
+  const appWide = useMemo(() => {
+    if (!data) return null
+    const today = todayISO()
+    const soon = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+    const inScope = (r) => !viewScope.property || r.property === viewScope.property
+
+    const fire = (data.fire || []).filter(inScope)
+    const wifi = (data.wifi || []).filter(inScope)
+    const dated = (rows) => rows.filter((r) => r.due_date || r.expiry_date)
+    const dateOf = (r) => r.expiry_date || r.due_date
+
+    const expired = dated(fire).filter((r) => dateOf(r) < today).length
+    const expiring = dated(fire).filter((r) => dateOf(r) >= today && dateOf(r) <= soon).length
+
+    const wifiOver = dated(wifi).filter((r) => dateOf(r) < today).length
+    const wifiSoon = dated(wifi).filter((r) => dateOf(r) >= today && dateOf(r) <= soon).length
+
+    return {
+      videos: (data.videos || []).length,
+      trainDone: (data.trainDone || []).filter((r) => r.completed).length,
+      fireTotal: fire.length,
+      fireOk: fire.length - expired - expiring,
+      fireExpiring: expiring,
+      fireExpired: expired,
+      wifiTotal: wifi.length,
+      wifiSoon,
+      wifiOver,
+      chem: (data.chem || []).filter(inScope).length,
+    }
+  }, [data, viewScope])
+
   // Every period needs an entry here. The Headline reads this straight into a
   // sentence, so a missing key is not a missing label — it is undefined, and
   // .toLowerCase() on it takes the page down. The fallback makes the next one
@@ -444,7 +625,15 @@ export default function Analytics() {
     <div>
       {/* the subtitle makes it obvious the figures below are scoped to one head */}
       <SectionTitle
-        subtitle={lang === 'hi' ? 'स्टाफ़ का प्रदर्शन' : 'Staff performance'}
+        subtitle={lang === 'hi'
+          ? `स्टाफ़ का प्रदर्शन · ${staffInScope.length} लोग · ${PROPERTIES.length} प्रॉपर्टी`
+          : `Staff performance · ${staffInScope.length} people · ${PROPERTIES.length} venues`}
+        right={(
+          <Button variant="ghost" onClick={() => load()} disabled={loading} style={{ padding: '8px 13px', fontSize: 13 }}>
+            <Icon name="refresh" size={15} color={C.tl} style={{ marginRight: 5 }} />
+            {lang === 'hi' ? 'ताज़ा करें' : 'Refresh'}
+          </Button>
+        )}
       >
         {lang === 'hi' ? 'विश्लेषण' : 'Analytics'}
       </SectionTitle>
@@ -591,46 +780,119 @@ export default function Analytics() {
         <Loader label={t.loading} />
       ) : (
         <>
-          <Headline
-            C={C} lang={lang} totals={totals}
-            periodLabel={periodLabel} scopeLabel={scopeLabel}
+          <KpiRow
+            C={C} lang={lang} totals={totals} periodLabel={periodLabel}
             onOverdue={totals.overdueNow ? () => setTaskList('overdue') : undefined}
             onOpen={totals.openNow ? () => setTaskList('open') : undefined}
           />
 
-          {/* The shape of the period, drawn. A table of counts per day makes you
-              read fourteen numbers to see it. */}
-          <Trend C={C} lang={lang} rows={dayRows} />
+          <Headline
+            C={C} lang={lang} totals={totals}
+            periodLabel={periodLabel} scopeLabel={scopeLabel}
+          />
 
-          {/* Two questions, each with its name on it. This was four tabs the
-              reader had to open to find out which one held the answer. */}
-          <Section C={C} title={lang === 'hi' ? 'कौन पीछे है' : 'Who is behind'}
-                   count={staffRows.length}>
-            {staffRows.length === 0 ? <EmptyState icon={null} title={t.noData} /> : (
-              <div>
-                <StaffHeader C={C} lang={lang} />
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {staffRows.map((sr) => (
-                    <StaffRow key={sr.id} C={C} lang={lang} s={sr} onOpenMissed={setMissedFor} />
-                  ))}
+          {/* The shape of the period beside the people who made that shape: one
+              question, answered by the pair. Stacked full width you had to scroll
+              past one to reach the other.
+              5fr / 7fr rather than half and half — the chart is a shape and reads
+              small, the table is seven columns of figures and does not. */}
+          <div style={{
+            display: 'grid', gap: 14, alignItems: 'start',
+            gridTemplateColumns: wideCols ? 'minmax(0, 5fr) minmax(0, 7fr)' : '1fr',
+          }}>
+            {/* Owed, done and not done for every day in the range. `done` alone
+                could not say whether twelve was a good day. */}
+            <Section
+              C={C}
+              title={lang === 'hi' ? 'दिन-ब-दिन' : 'Day by day'}
+              count={dayRows.length}
+            >
+              {dayRows.length === 0
+                ? <EmptyState icon={null} title={t.noData} />
+                : <DayReport C={C} lang={lang} rows={dayRows} />}
+            </Section>
+
+            {/* Named for what it holds. "Who is behind" described the sort order,
+                and in English reads as "who is behind this" — responsible for it. */}
+            <Section C={C} title={lang === 'hi' ? 'हर व्यक्ति का काम' : "Each person's work"}
+                     count={staffRows.length}>
+              {staffRows.length === 0 ? <EmptyState icon={null} title={t.noData} /> : (
+                <div>
+                  {/* The order is a fact about the table, so it is stated rather
+                      than left in the title where it displaced the subject. */}
+                  <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8, lineHeight: 1.5 }}>
+                    {lang === 'hi'
+                      ? 'सबसे ज़्यादा छूटे काम पहले · Open और Overdue इस वक़्त के हैं, अवधि के नहीं'
+                      : 'Most missed first · Open and Overdue are live figures, not period ones'}
+                  </div>
+                  <StaffHeader C={C} lang={lang} />
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {(showQuiet ? staffRows : busyStaff).map((sr) => (
+                      <StaffRow
+                        key={sr.id} C={C} lang={lang} s={sr}
+                        onOpenMissed={setMissedFor}
+                        onOpen={() => setMissedFor(sr)}
+                      />
+                    ))}
+                  </div>
+                  {/* Folded away, not dropped: the count says they exist. */}
+                  {quietCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowQuiet((v) => !v)}
+                      style={{
+                        marginTop: 10, background: 'transparent', color: C.maroon,
+                        fontSize: 12.5, fontWeight: 700, padding: '4px 2px',
+                      }}
+                    >
+                      {showQuiet
+                        ? (lang === 'hi' ? 'खाली पंक्तियाँ छिपाएँ' : 'Hide the quiet ones')
+                        : (lang === 'hi'
+                          ? `${quietCount} और — इस अवधि में कुछ नहीं`
+                          : `${quietCount} more with nothing recorded`)}
+                    </button>
+                  )}
                 </div>
-              </div>
-            )}
-          </Section>
+              )}
+            </Section>
+          </div>
+
+          {/* People down, days across. The one view that answers "who worked on
+              which day" without opening anything. */}
+          {personGrid.people.length > 0 && (
+            <Section
+              C={C}
+              title={lang === 'hi' ? 'किसने किस दिन काम किया' : 'Who worked on which day'}
+              count={personGrid.people.length}
+            >
+              <PersonDayGrid C={C} lang={lang} days={personGrid.days} people={personGrid.people} />
+            </Section>
+          )}
 
           <Section C={C} title={lang === 'hi' ? 'कौन-सा काम छूट रहा है' : 'What keeps slipping'}
                    count={missedCount}>
             {missedCount === 0
-              ? <EmptyState icon={null} title={lang === 'hi' ? 'सब कुछ समय पर हुआ' : 'Nothing was missed'}
-                  hint={lang === 'hi'
-                    ? 'इस अवधि में हर दोहराने वाला काम अपनी बार पूरा हुआ।'
-                    : 'Every recurring job was completed as often as it was due in this period.'} />
+              ? (missedRows.length === 0
+                ? <EmptyState icon={null}
+                    title={lang === 'hi' ? 'अभी आँकने के लिए कुछ नहीं' : 'Nothing to judge yet'}
+                    hint={lang === 'hi'
+                      ? 'किसी दिन का हिसाब उसके ख़त्म होने पर ही लगता है — इस अवधि में अभी कोई पूरा दिन नहीं बीता।'
+                      : 'A day can only be scored once it is over, and this period has not completed one yet. Pick a longer range.'} />
+                : <EmptyState icon={null} title={lang === 'hi' ? 'सब कुछ समय पर हुआ' : 'Nothing was missed'}
+                    hint={lang === 'hi'
+                      ? 'इस अवधि में हर दोहराने वाला काम अपनी बार पूरा हुआ।'
+                      : 'Every recurring job was completed as often as it was due in this period.'} />)
               : <MissedWork lang={lang} t={t} rows={missedRows} periodLabel={periodLabel} />}
           </Section>
 
           {missedFor && (
-            <PersonMissedModal C={C} lang={lang} t={t} person={missedFor}
-                               onClose={() => setMissedFor(null)} />
+            <PersonMissedModal
+              C={C} lang={lang} t={t} person={missedFor}
+              range={data?.range}
+              doneByDay={(personGrid.people.find((x) => x.id === missedFor.id) || {}).byDay || {}}
+              days={personGrid.days}
+              onClose={() => setMissedFor(null)}
+            />
           )}
 
           {taskList && (
@@ -641,6 +903,74 @@ export default function Analytics() {
               people={scopedStaff}
               onClose={() => setTaskList(null)}
             />
+          )}
+
+          {/* The areas of the app the page never reported on. Live state, not
+              period figures — said so in the header rather than left to be
+              inferred, because everything above it IS a period figure. */}
+          {appWide && (
+            <Section
+              C={C}
+              title={lang === 'hi' ? 'बाकी ऐप — इस वक़्त' : 'Rest of the app — right now'}
+            >
+              <div style={{
+                display: 'grid', gap: 10,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+              }}>
+                <AreaCard
+                  C={C} icon="fire" tone={appWide.fireExpired ? C.red : C.green}
+                  title={lang === 'hi' ? 'अग्नि सुरक्षा' : 'Fire safety'}
+                  lead={`${appWide.fireOk}/${appWide.fireTotal}`}
+                  leadNote={lang === 'hi' ? 'सिलेंडर चालू हालत में' : 'extinguishers in date'}
+                  rows={[
+                    { label: lang === 'hi' ? '30 दिन में ख़त्म' : 'expiring in 30 days',
+                      value: appWide.fireExpiring, tone: appWide.fireExpiring ? C.yellow : undefined },
+                    { label: lang === 'hi' ? 'ख़त्म हो चुके' : 'already expired',
+                      value: appWide.fireExpired, tone: appWide.fireExpired ? C.red : undefined },
+                  ]}
+                />
+                <AreaCard
+                  C={C} icon="globe" tone={appWide.wifiOver ? C.red : C.blue}
+                  title={lang === 'hi' ? 'वाई-फ़ाई' : 'WiFi'}
+                  lead={String(appWide.wifiTotal)}
+                  leadNote={lang === 'hi' ? 'कनेक्शन दर्ज' : 'connections on record'}
+                  rows={[
+                    { label: lang === 'hi' ? '30 दिन में देय' : 'renewal due in 30 days',
+                      value: appWide.wifiSoon, tone: appWide.wifiSoon ? C.yellow : undefined },
+                    { label: lang === 'hi' ? 'तारीख़ निकल गई' : 'past its date',
+                      value: appWide.wifiOver, tone: appWide.wifiOver ? C.red : undefined },
+                  ]}
+                />
+                <AreaCard
+                  C={C} icon="training" tone={C.indigo}
+                  title={lang === 'hi' ? 'ट्रेनिंग' : 'Training'}
+                  lead={String(appWide.videos)}
+                  leadNote={lang === 'hi' ? 'वीडियो चालू' : 'videos active'}
+                  rows={[
+                    { label: lang === 'hi' ? 'स्टाफ़ ने पूरे किए' : 'completions by staff',
+                      value: appWide.trainDone },
+                  ]}
+                />
+                <AreaCard
+                  C={C} icon="flask" tone={C.cyan}
+                  title={lang === 'hi' ? 'केमिकल' : 'Chemicals'}
+                  lead={String(appWide.chem)}
+                  leadNote={lang === 'hi' ? `${periodLabel} में दर्ज` : `logged ${periodLabel.toLowerCase()}`}
+                  rows={[]}
+                />
+              </div>
+            </Section>
+          )}
+
+          {/* When these figures were read. They do not refresh themselves. */}
+          {loadedAt && (
+            <div style={{
+              display: 'flex', justifyContent: 'flex-end',
+              fontSize: 11.5, color: C.faint, marginBottom: 10,
+            }}>
+              {lang === 'hi' ? 'आँकड़े पढ़े गए: ' : 'Figures read at '}
+              {loadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
           )}
 
           <MetricGuide C={C} lang={lang} />
@@ -680,102 +1010,6 @@ function Section({ C, title, count, children }) {
   )
 }
 
-// Completions per day, drawn. Bars because the question is "which days were
-// quiet", and a column of fourteen numbers answers that only after you have read
-// all fourteen and held them in your head.
-//
-// THE AXIS STOPS AT THE 90th PERCENTILE. Scaled to the peak instead, this
-// period put nine of fourteen bars under 12px and one at full height: 10 Aug has
-// 70 completions against a median of 8. Everything quiet looked identical, which
-// is exactly what the chart is for telling apart. A bar past the ceiling is drawn
-// full height with a caret and its count, so the outlier is marked rather than
-// allowed to set the scale.
-const BAR_H = 84
-
-function Trend({ C, lang, rows }) {
-  const hi = lang === 'hi'
-  if (!rows.length) return null
-  const days = [...rows].sort((a, b) => a.day.localeCompare(b.day))
-  const totals = days.map((d) => d.total).sort((a, b) => a - b)
-  const at = (q) => totals[Math.min(totals.length - 1, Math.floor(totals.length * q))]
-  // the ceiling: high enough that a normal busy day still reaches the top, low
-  // enough that a freak day does not own the axis
-  const cap = Math.max(1, at(0.9))
-  const total = days.reduce((n, d) => n + d.total, 0)
-  const busiest = Math.max(...days.map((d) => d.total))
-  // Past a dozen bars the dates stop being readable, so every other one is
-  // labelled — the shape is what is left, which is the point anyway.
-  const step = days.length > 12 ? 2 : 1
-
-  return (
-    <Card style={{ padding: 16, marginTop: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
-          {hi ? 'हर दिन कितना दर्ज हुआ' : 'Recorded per day'}
-        </span>
-        <span style={{ fontSize: 12, color: C.faint }}>
-          {hi
-            ? `${days.length} दिन · कुल ${total} · सबसे ज़्यादा ${busiest}`
-            : `${days.length} days · ${total} in all · busiest ${busiest}`}
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: BAR_H + 22 }}>
-        {days.map((d) => {
-          const over = d.total > cap
-          const h = d.total === 0 ? 3
-            : over ? BAR_H
-            : Math.max(6, Math.round((d.total / cap) * BAR_H))
-          const onTime = d.total ? Math.round((d.onTime / d.total) * 100) : 0
-          return (
-            <div key={d.day} style={{ flex: 1, minWidth: 0, display: 'flex',
-                                      flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              {/* the count, printed only where it adds something: the days that
-                  clip the axis, and the quiet days worth noticing */}
-              <span style={{
-                fontSize: 10.5, fontWeight: 700, lineHeight: 1,
-                color: over ? C.text : 'transparent',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {d.total}
-              </span>
-              <div
-                title={`${d.day} · ${d.total} ${hi ? 'दर्ज' : 'recorded'} · ${onTime}% ${hi ? 'समय पर' : 'on time'}`}
-                style={{
-                  width: '100%', height: h, borderRadius: 4,
-                  background: d.total ? rateTone(onTime, C, d.total) : C.border,
-                  // a clipped bar is squared off at the top and carries a caret,
-                  // so it never reads as simply "the tallest"
-                  borderTopLeftRadius: over ? 1 : 4,
-                  borderTopRightRadius: over ? 1 : 4,
-                  boxShadow: over ? `inset 0 3px 0 0 ${C.text}` : 'none',
-                }}
-              />
-            </div>
-          )
-        })}
-      </div>
-
-      <div style={{ display: 'flex', gap: 5, marginTop: 7 }}>
-        {days.map((d, i) => (
-          <span key={d.day} style={{
-            flex: 1, minWidth: 0, textAlign: 'center', fontSize: 10,
-            color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden',
-          }}>
-            {i % step === 0 ? `${d.day.slice(8)}/${d.day.slice(5, 7)}` : ''}
-          </span>
-        ))}
-      </div>
-
-      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.55 }}>
-        {hi
-          ? `पट्टी की लंबाई = उस दिन दर्ज हुआ काम, रंग = कितना समय पर। पैमाना ${cap} पर रुकता है; उससे ऊपर वाले दिन पर ऊपर एक लकीर और उसका आंकड़ा है।`
-          : `Bar length is the work recorded that day, colour is how much of it was on time. The scale stops at ${cap}; a day above it is capped, ruled at the top and labelled.`}
-      </div>
-    </Card>
-  )
-}
-
 // The columns, named once. Kept beside the row that fills them so the two
 // cannot drift — a header that says "Open" above a column of Overdue is worse
 // than no header.
@@ -811,7 +1045,7 @@ export function StaffHeader({ C, lang }) {
   )
 }
 
-function StaffRow({ C, lang, s, compact, onOpenMissed }) {
+function StaffRow({ C, lang, s, compact, onOpenMissed, onOpen }) {
   const hi = lang === 'hi'
   const roomy = useMediaQuery('(min-width: 560px)')
   // Grey unless there is something to judge — a person with nothing recorded is
@@ -874,9 +1108,11 @@ function StaffRow({ C, lang, s, compact, onOpenMissed }) {
       </div>
     </div>
   )
+  // The whole row opens the person. The "Not done" figure was the only way in,
+  // which left the other four columns looking like dead text.
   return compact
     ? <div style={{ padding: '6px 2px' }}>{body}</div>
-    : <Card style={{ padding: 14 }}>{body}</Card>
+    : <Card onClick={onOpen} style={{ padding: 14, cursor: onOpen ? 'pointer' : 'default' }}>{body}</Card>
 }
 
 // One figure in the staff table. Right-aligned and tabular so the column reads
@@ -909,70 +1145,234 @@ function Num({ C, value, tone, muted, onClick }) {
 // What one person was owed and did not deliver. The rows are already computed —
 // this only has to say them plainly: the job, how often it came round, and how
 // much of it is outstanding.
-function PersonMissedModal({ C, lang, t, person, onClose }) {
+function PersonMissedModal({ C, lang, t, person, range, days = [], doneByDay = {}, onClose }) {
   const hi = lang === 'hi'
+  const jobs = person.jobs || person.missedRows || []
+
+  // Owed per day, for this person only: expectedOccurrences one day at a time over
+  // their own jobs. Same arithmetic as dueByDay, narrowed — and done here because
+  // it is only ever wanted for the row that was clicked.
+  const perDay = useMemo(() => {
+    if (!range) return []
+    const end = new Date(range.to)
+    end.setDate(end.getDate() - 1)          // `to` is exclusive
+    const today = todayISO()
+    const out = []
+    for (const d = new Date(range.from); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      let due = 0
+      jobs.forEach(({ task }) => { due += expectedOccurrences(task, d, d) })
+      out.push({ day: key, due, done: doneByDay[key] || 0, open: key >= today })
+    }
+    return out.reverse()                    // newest first, like the day report
+  }, [range, jobs, doneByDay])
+
+  // Grouped under their band, each with the band's own totals — "which daily ones
+  // did he do" should not be a scan of a list sorted by miss count.
+  const bands = useMemo(() => {
+    const by = new Map()
+    jobs.forEach((r) => {
+      const fk = taskFrequency(r.task)
+      if (!by.has(fk)) by.set(fk, { fk, rows: [], due: 0, done: 0 })
+      const b = by.get(fk)
+      b.rows.push(r)
+      b.due += r.expected
+      b.done += r.done
+    })
+    by.forEach((b) => b.rows.sort((a, z) => z.missed - a.missed))
+    return [...by.values()].sort((a, z) => z.due - a.due)
+  }, [jobs])
+
+  const totalDue = jobs.reduce((n, r) => n + r.expected, 0)
+  const totalDone = jobs.reduce((n, r) => n + r.done, 0)
+  const fmtDay = (iso) => new Date(`${iso}T00:00:00`)
+    .toLocaleDateString(hi ? 'hi-IN' : 'en-GB', { day: '2-digit', month: 'short', weekday: 'short' })
+
   return (
     <Modal
       open
       onClose={onClose}
-      maxWidth={560}
-      title={`${personName(person, lang)} — ${hi ? 'नहीं हुआ' : 'Not done'} (${person.missed})`}
+      maxWidth={640}
+      title={personName(person, lang)}
       footer={<Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>}
     >
-      <div style={{ fontSize: 13, color: C.tl, lineHeight: 1.55, marginBottom: 12 }}>
-        {hi
-          ? 'हर काम कितनी बार आना था और कितनी बार दर्ज हुआ — फ़र्क़ ही "नहीं हुआ" है।'
-          : 'How many times each job came due against how many were recorded. The difference is what is outstanding.'}
-      </div>
-      <div style={{ display: 'grid', gap: 8 }}>
-        {person.missedRows.map(({ task, expected, done, missed }) => (
-          <div key={task.id} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 10,
+      {/* Two groups, because the row that opened this has both kinds of column
+          and nothing was saying which was which. */}
+      {[
+        {
+          key: 'period',
+          head: hi ? 'इस अवधि में' : 'In this period',
+          cards: [
+            { k: 'jobs', v: jobs.length, l: hi ? 'काम सौंपे' : 'jobs assigned' },
+            { k: 'due', v: totalDue, l: hi ? 'होने चाहिए थे' : 'should have happened' },
+            { k: 'done', v: totalDone, l: hi ? 'हुए' : 'actually done', tone: C.green },
+            { k: 'missed', v: Math.max(0, totalDue - totalDone), l: hi ? 'नहीं हुए' : 'not done',
+              tone: totalDue - totalDone > 0 ? C.red : undefined },
+          ],
+        },
+        {
+          key: 'live',
+          head: hi ? 'इस वक़्त' : 'Right now',
+          // The two columns the modal never explained. OPEN counts rows sitting
+          // incomplete whatever their schedule, so a monthly job not due till the
+          // 22nd is open today — which is why it does not match "not done".
+          note: hi
+            ? 'शेड्यूल चाहे जो हो, अभी अधूरे पड़े काम — इसलिए यह "नहीं हुए" से मेल नहीं खाता।'
+            : 'Rows sitting incomplete whatever their schedule — which is why this does not match "not done".',
+          cards: [
+            { k: 'open', v: person.openNow || 0, l: hi ? 'खुले पड़े' : 'open' },
+            { k: 'overdue', v: person.overdueNow || 0, l: hi ? 'तारीख़ निकल गई' : 'overdue',
+              tone: person.overdueNow > 0 ? C.red : undefined },
+          ],
+        },
+      ].map((g) => (
+        <div key={g.key} style={{ marginBottom: 14 }}>
+          <div style={{
+            fontSize: 10.5, fontWeight: 800, letterSpacing: '0.05em',
+            textTransform: 'uppercase', color: C.faint, marginBottom: 6,
           }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
-                {hi && task.title_hi ? task.title_hi : task.title}
+            {g.head}
+          </div>
+          <div style={{
+            display: 'grid', gap: 8,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
+          }}>
+            {g.cards.map((x) => (
+              <div key={x.k} style={{ background: C.cardAlt, borderRadius: 10, padding: '9px 11px' }}>
+                <div style={{
+                  fontSize: 19, fontWeight: 800, lineHeight: 1.1,
+                  fontVariantNumeric: 'tabular-nums', color: x.v ? (x.tone || C.text) : C.faint,
+                }}>
+                  {x.v}
+                </div>
+                <div style={{ fontSize: 10.5, color: C.tl, marginTop: 2 }}>{x.l}</div>
               </div>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap',
-                fontSize: 11.5, color: C.faint, marginTop: 4,
-              }}>
-                {/* The band gets its own colour. Buried in the grey run-on, the
-                    one word that changes how you read the row looked like the
-                    two that do not — and the list is sorted by count, so the
-                    bands interleave with nothing to group them by eye. */}
-                {(() => {
-                  const fk = taskFrequency(task)
-                  const f = FREQUENCY_MAP[fk] || {}
-                  return (
-                    <span style={{
-                      fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em',
-                      textTransform: 'uppercase', whiteSpace: 'nowrap',
-                      color: f.ink || C.tl, background: f.tint || C.cardAlt,
-                      borderRadius: 999, padding: '2px 8px',
-                    }}>
-                      {frequencyLabel(fk, lang)}
-                    </span>
-                  )
-                })()}
-                <span>
-                  {propName(task.property, lang)}
-                  {task.department ? ` · ${deptName(task.department, lang)}` : ''}
-                </span>
-              </div>
+            ))}
+          </div>
+          {g.note && (
+            <div style={{ fontSize: 11, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>{g.note}</div>
+          )}
+        </div>
+      ))}
+
+      {/* Their own days: how many jobs came due on each, and how many landed. */}
+      {perDay.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{
+            fontSize: 10.5, fontWeight: 800, letterSpacing: '0.05em',
+            textTransform: 'uppercase', color: C.faint, marginBottom: 6,
+          }}>
+            {hi ? 'दिन के हिसाब से' : 'By day'}
+          </div>
+          {perDay.map((d) => (
+            <div key={d.day} style={{
+              display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 52px 52px 56px',
+              gap: 8, alignItems: 'center', padding: '5px 2px', borderTop: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{fmtDay(d.day)}</span>
+              <span style={{ fontSize: 12.5, textAlign: 'right', color: d.due ? C.tl : C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                {d.due || '—'}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 800, textAlign: 'right', color: d.done ? C.green : C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                {d.done}
+              </span>
+              {/* An unfinished day gets no verdict, same rule as the day report */}
+              <span
+                title={d.open ? (hi ? 'दिन बाकी है' : 'the day is not over') : undefined}
+                style={{ fontSize: 11.5, fontWeight: 700, textAlign: 'right', color: C.faint }}
+              >
+                {d.open ? '—' : (d.due ? `${Math.max(0, d.due - d.done)} ${hi ? 'बचा' : 'left'}` : '')}
+              </span>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: TR_ORANGE, fontVariantNumeric: 'tabular-nums' }}>
-                {missed}
-              </div>
-              <div style={{ fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
-                {done}/{expected} {hi ? 'हुआ' : 'done'}
-              </div>
+          ))}
+          <div style={{ fontSize: 10.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>
+            {hi
+              ? 'होने चाहिए थे · हुए · बचे'
+              : 'should have happened · actually done · left'}
+          </div>
+        </div>
+      )}
+
+      {/* The convention, stated once. "3/4" is unreadable unless you already know
+          it, and the reader of this page did not write it. */}
+      {bands.length > 0 && (
+        <div style={{
+          fontSize: 11.5, color: C.tl, lineHeight: 1.6, marginBottom: 10,
+          padding: '8px 11px', background: C.cardAlt, borderRadius: 9,
+        }}>
+          {hi
+            ? 'हर काम पर "हुआ / आना था" — इस अवधि में कितनी बार आना था और कितनी बार हुआ।'
+            : 'Each job shows times done / times it came due in this period.'}
+          <span style={{ display: 'block', marginTop: 3, color: C.faint }}>
+            {hi
+              ? '✕ एक बार भी नहीं · ◔ कुछ बार · ✓ हर बार'
+              : '✕ not once · ◔ some of the time · ✓ every time'}
+          </span>
+        </div>
+      )}
+
+      {/* Every job under its band, with the band's own score on the header. */}
+      {bands.map((b) => {
+        const f = FREQUENCY_MAP[b.fk] || {}
+        return (
+          <div key={b.fk} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em',
+                textTransform: 'uppercase', whiteSpace: 'nowrap',
+                color: f.ink || C.tl, background: f.tint || C.cardAlt,
+                borderRadius: 999, padding: '2px 8px',
+              }}>
+                {frequencyLabel(b.fk, lang)}
+              </span>
+              <span style={{ fontSize: 12, color: C.tl }}>
+                {b.done}/{b.due} {hi ? 'बार हुआ' : 'done of due'} · {b.rows.length} {hi ? 'काम' : 'jobs'}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gap: 6 }}>
+              {b.rows.map(({ task, expected, done, missed }) => (
+                <div key={task.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 11px', borderRadius: 9,
+                  border: `1px solid ${missed > 0 ? `${C.red}33` : C.border}`,
+                  background: missed > 0 ? undefined : C.cardAlt,
+                }}>
+                  {/* done / partly / not at all, before the numbers */}
+                  <Icon
+                    name={missed === 0 ? 'check' : done > 0 ? 'clock' : 'close'}
+                    size={14}
+                    color={missed === 0 ? C.green : done > 0 ? C.yellow : C.red}
+                  />
+                  <span style={{ minWidth: 0, flex: 1, fontSize: 13, fontWeight: 600, color: C.text }}>
+                    {hi && task.title_hi ? task.title_hi : task.title}
+                    <span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 2 }}>
+                      {propName(task.property, lang)}
+                      {task.department ? ` · ${deptName(task.department, lang)}` : ''}
+                    </span>
+                  </span>
+                  <span
+                    title={hi
+                      ? `${expected} बार आना था, ${done} बार हुआ`
+                      : `came due ${expected} time${expected === 1 ? '' : 's'}, done ${done}`}
+                    style={{
+                      fontSize: 12.5, fontWeight: 800, flexShrink: 0,
+                      fontVariantNumeric: 'tabular-nums',
+                      color: missed > 0 ? C.red : C.green,
+                    }}
+                  >
+                    {done}/{expected}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        )
+      })}
+
+      {jobs.length === 0 && (
+        <EmptyState icon={null} title={hi ? 'इस अवधि में कुछ आना नहीं था' : 'Nothing came due in this period'} />
+      )}
     </Modal>
   )
 }

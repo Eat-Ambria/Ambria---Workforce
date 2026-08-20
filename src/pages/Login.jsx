@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useColors } from '../context/ThemeContext'
+import { useColors, useTheme } from '../context/ThemeContext'
 import { useLang, useT } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useMediaQuery'
@@ -12,6 +12,7 @@ export default function Login() {
   const C = useColors()
   const t = useT()
   const { lang, toggle: toggleLang } = useLang()
+  const { theme, toggle: toggleTheme } = useTheme()
   const { login } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -54,6 +55,24 @@ export default function Login() {
       }}
     >
       {hi ? 'English' : 'हिंदी'}
+    </button>
+  )
+
+  // Icon only, in the same translucent treatment: the band is the brand gradient
+  // in both themes, so nothing here needs a theme-aware colour of its own.
+  const themeToggle = () => (
+    <button
+      onClick={toggleTheme}
+      title={theme === 'dark' ? (hi ? 'लाइट थीम' : 'Light theme') : (hi ? 'डार्क थीम' : 'Dark theme')}
+      aria-label={theme === 'dark' ? (hi ? 'लाइट थीम' : 'Light theme') : (hi ? 'डार्क थीम' : 'Dark theme')}
+      style={{
+        background: 'rgba(255,255,255,0.16)',
+        border: '1px solid rgba(255,255,255,0.3)',
+        borderRadius: 10, padding: '8px 10px', backdropFilter: 'blur(4px)',
+        display: 'grid', placeItems: 'center', lineHeight: 0,
+      }}
+    >
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} color="#fff" />
     </button>
   )
 
@@ -126,7 +145,13 @@ export default function Login() {
         {/* subtle decorative glow */}
         <div style={{ position: 'absolute', top: -110, right: -60, width: 260, height: 260, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
         <div style={{ position: 'absolute', bottom: -140, left: -40, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-        <div style={{ position: 'absolute', top: isMobile ? 16 : 22, right: isMobile ? 16 : 26 }}>{langToggle()}</div>
+        <div style={{
+          position: 'absolute', top: isMobile ? 16 : 22, right: isMobile ? 16 : 26,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {themeToggle()}
+          {langToggle()}
+        </div>
         {/* the wordmark with "Admin" centred beneath it, as one lockup */}
         <div style={{ position: 'relative', width: isMobile ? 156 : 196, margin: '0 auto' }}>
           <img src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`} alt="Ambria"

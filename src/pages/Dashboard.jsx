@@ -278,8 +278,11 @@ function AdminDashboard({ user }) {
             {d.mine.tasks > 0 && (
               <MineChip C={C} label={t.myTasks} value={d.mine.tasks} onClick={() => navigate('/my-tasks', { state: { status: 'all' } })} />
             )}
+            {/* straight to the tab that holds them, not the full board with
+                twenty-six rows and no clue which one was meant */}
             {d.mine.fixes > 0 && (
-              <MineChip C={C} label={t.taskBoard} value={d.mine.fixes} onClick={() => navigate('/task-board')} />
+              <MineChip C={C} label={t.taskBoard} value={d.mine.fixes}
+                        onClick={() => navigate('/task-board', { state: { tab: 'mine' } })} />
             )}
           </div>
         </div>

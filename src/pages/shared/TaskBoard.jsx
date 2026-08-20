@@ -291,6 +291,9 @@ export default function TaskBoard() {
       open: requestRows.filter((r) => ['open', 'assigned'].includes(r.status)),
       in_progress: requestRows.filter((r) => r.status === 'in_progress'),
       review: requestRows.filter((r) => r.status === 'approval_requested'),
+      // Unfinished work that is on me. A completed repair is not on anyone's
+      // plate, and including it would make this a list you filter in your head.
+      mine: requestRows.filter((r) => r.assigned_to === user.id && !isDone(r)),
       completed: showAllDone ? doneAll : doneRecent,
       logged: showAllDone ? loggedRows : loggedRecent,
     }
@@ -328,6 +331,9 @@ export default function TaskBoard() {
     { key: 'in_progress', label: `${t.inProgress} (${groups.in_progress.length})` },
     { key: 'review', label: `${t.reviewQueue} (${groups.review.length})` },
     { key: 'completed', label: `${t.completed} (${groups.completed.length})` },
+    // Next to Completed, and only when it has something in it — an empty tab is a
+    // question nobody asked, which is the rule the logged tab below follows too.
+    ...(groups.mine.length ? [{ key: 'mine', label: `${t.assignedToMe} (${groups.mine.length})` }] : []),
     // shown only once there is something in it — an empty tab is a question
     // nobody asked
     ...(groups.logged.length ? [{ key: 'logged', label: `${t.logWorkTab} (${groups.logged.length})` }] : []),

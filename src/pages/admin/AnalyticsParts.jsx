@@ -5,10 +5,290 @@ import Icon from '../../components/common/Icon'
 import { personName } from '../../constants/org'
 import { rateTone } from './analyticsUtils'
 
+// --- the day-wise report ------------------------------------------------------
+// One row per day: owed, done, not done, and the share. `done` on its own could
+// never say whether twelve was a good day — the denominator is the point.
+export function DayReport({ C, lang, rows }) {
+  const hi = lang === 'hi'
+  if (!rows.length) return null
+  const worst = Math.max(...rows.map((r) => r.due || r.total || 0), 1)
+  const fmtDay = (iso) => {
+    const d = new Date(`${iso}T00:00:00`)
+    return d.toLocaleDateString(hi ? 'hi-IN' : 'en-GB', { day: '2-digit', month: 'short', weekday: 'short' })
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 2 }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'minmax(96px, 1.4fr) 52px 52px 68px minmax(70px, 1fr)',
+        gap: 8, padding: '0 2px 6px',
+        fontSize: 10, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.faint,
+      }}>
+        <span>{hi ? 'दिन' : 'Day'}</span>
+        <span style={{ textAlign: 'right' }}>{hi ? 'आना था' : 'Due'}</span>
+        <span style={{ textAlign: 'right' }}>{hi ? 'हुआ' : 'Done'}</span>
+        <span style={{ textAlign: 'right' }}>{hi ? 'नहीं हुआ' : 'Not done'}</span>
+        <span>{hi ? 'कितना' : 'Share'}</span>
+      </div>
+
+      {rows.map((r) => {
+        // An unfinished day gets no verdict: no shortfall, no share.
+        const share = r.open || !r.due ? null : Math.round((r.total / r.due) * 100)
+        const tone = share == null ? C.faint : share >= 90 ? C.green : share >= 60 ? C.yellow : C.red
+        return (
+          <div key={r.day} style={{
+            display: 'grid', gridTemplateColumns: 'minmax(96px, 1.4fr) 52px 52px 68px minmax(70px, 1fr)',
+            gap: 8, alignItems: 'center', padding: '5px 2px',
+            borderTop: `1px solid ${C.border}`,
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{fmtDay(r.day)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, textAlign: 'right', color: r.due ? C.tl : C.faint, fontVariantNumeric: 'tabular-nums' }}>
+              {r.due || '—'}
+            </span>
+            <span style={{ fontSize: 13.5, fontWeight: 800, textAlign: 'right', color: r.total ? C.text : C.faint, fontVariantNumeric: 'tabular-nums' }}>
+              {r.total}
+            </span>
+            <span
+              title={r.open ? (hi ? 'दिन बाकी है' : 'the day is not over') : undefined}
+              style={{ fontSize: 13.5, fontWeight: 800, textAlign: 'right', color: r.missed ? C.red : C.faint, fontVariantNumeric: 'tabular-nums' }}
+            >
+              {r.open ? '—' : (r.missed || 0)}
+            </span>
+            {/* the bar is the whole day owed; the fill is what happened */}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <span style={{ flex: 1, height: 7, borderRadius: 999, background: C.cardAlt, overflow: 'hidden', minWidth: 0 }}>
+                <span style={{
+                  display: 'block', height: '100%', borderRadius: 999, background: tone,
+                  width: `${Math.min(100, Math.round(((r.total || 0) / worst) * 100))}%`,
+                }} />
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: tone, minWidth: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {share == null ? '' : `${share}%`}
+              </span>
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- who did what, on which day ----------------------------------------------
+// People down, days across, work done in the cell. Every figure here was already
+// being fetched by analytics_person_day and discarded — the page has loaded that
+// RPC all along and never drawn it.
+export function PersonDayGrid({ C, lang, days, people }) {
+  const hi = lang === 'hi'
+  if (!days.length || !people.length) return null
+  const peak = Math.max(1, ...people.flatMap((p) => days.map((d) => p.byDay[d] || 0)))
+  const label = (iso) => {
+    const d = new Date(`${iso}T00:00:00`)
+    return { d: d.toLocaleDateString(hi ? 'hi-IN' : 'en-GB', { day: '2-digit' }),
+             m: d.toLocaleDateString(hi ? 'hi-IN' : 'en-GB', { weekday: 'narrow' }) }
+  }
+  const cols = `minmax(120px, 1.6fr) repeat(${days.length}, minmax(24px, 1fr)) 46px`
+
+  return (
+    <div style={{ overflowX: 'auto' }} className="no-bar">
+      <div style={{ minWidth: 120 + days.length * 26 + 46 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 2, alignItems: 'end', paddingBottom: 6 }}>
+          <span />
+          {days.map((d) => {
+            const l = label(d)
+            return (
+              <span key={d} style={{ textAlign: 'center', fontSize: 9, fontWeight: 700, color: C.faint, lineHeight: 1.15 }}>
+                {l.m}<br />{l.d}
+              </span>
+            )
+          })}
+          <span style={{ textAlign: 'right', fontSize: 9, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.faint }}>
+            {hi ? 'कुल' : 'Total'}
+          </span>
+        </div>
+
+        {people.map((p) => (
+          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: cols, gap: 2, alignItems: 'center', padding: '3px 0', borderTop: `1px solid ${C.border}` }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.name}
+            </span>
+            {days.map((d) => {
+              const n = p.byDay[d] || 0
+              // Empty stays empty: a printed 0 in every cell makes a quiet row
+              // look as busy as a working one.
+              return (
+                <span key={d} title={n ? `${p.name} · ${d} · ${n}` : undefined} style={{
+                  height: 22, borderRadius: 4, display: 'grid', placeItems: 'center',
+                  fontSize: 10.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+                  background: n ? `${C.green}${Math.max(2, Math.round((n / peak) * 9))}0` : C.cardAlt,
+                  color: n ? C.text : 'transparent',
+                }}>
+                  {n || 0}
+                </span>
+              )
+            })}
+            <span style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 800, color: p.total ? C.text : C.faint, fontVariantNumeric: 'tabular-nums' }}>
+              {p.total}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- one area of the app -----------------------------------------------------
+// Icon, a headline figure with a sentence saying what it counts, then the
+// exceptions worth acting on. The sentence is the point: a bare "12" is what the
+// page was being criticised for.
+export function AreaCard({ C, icon, tone, title, lead, leadNote, rows = [] }) {
+  return (
+    <Card style={{ padding: 14, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+        <span style={{
+          width: 30, height: 30, borderRadius: 9, flexShrink: 0,
+          background: `${tone}1F`, display: 'grid', placeItems: 'center',
+        }}>
+          <Icon name={icon} size={16} color={tone} />
+        </span>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: C.text }}>{title}</span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: 24, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em',
+          fontVariantNumeric: 'tabular-nums', color: C.text,
+        }}>
+          {lead}
+        </span>
+        <span style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.4 }}>{leadNote}</span>
+      </div>
+
+      {rows.length > 0 && (
+        <div style={{ display: 'grid', gap: 5, marginTop: 11, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+          {rows.map((r) => (
+            <div key={r.label} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <span style={{ fontSize: 11.5, color: C.tl, lineHeight: 1.4 }}>{r.label}</span>
+              <span style={{
+                fontSize: 14, fontWeight: 800, flexShrink: 0,
+                fontVariantNumeric: 'tabular-nums',
+                color: r.value ? (r.tone || C.text) : C.faint,
+              }}>
+                {r.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// --- the KPI row ------------------------------------------------------------
+// Five figures, each with the same shape: icon, number, name, and a note saying
+// whether it is a period figure or a live one. `delta` is only passed where a
+// previous period genuinely exists to compare against.
+function Kpi({ C, icon, tone, value, label, note, delta, onClick }) {
+  const dim = value === 0 || value === '—'
+  const inner = (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+        <span style={{
+          width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+          background: `${tone}1F`, display: 'grid', placeItems: 'center',
+        }}>
+          <Icon name={icon} size={17} color={tone} />
+        </span>
+        <span style={{
+          fontSize: 10.5, fontWeight: 800, letterSpacing: '0.05em',
+          textTransform: 'uppercase', color: C.faint, lineHeight: 1.2,
+        }}>
+          {label}
+        </span>
+      </div>
+      <div style={{
+        fontSize: 26, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums', color: dim ? C.faint : (tone || C.text),
+      }}>
+        {value}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: C.faint, lineHeight: 1.4 }}>{note}</span>
+        {delta != null && delta !== 0 && (
+          <span style={{
+            fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap',
+            color: delta > 0 ? C.green : C.red,
+          }}>
+            {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}
+          </span>
+        )}
+      </div>
+    </>
+  )
+  return (
+    <Card
+      onClick={onClick}
+      style={{ padding: 14, cursor: onClick ? 'pointer' : 'default', minWidth: 0 }}
+    >
+      {inner}
+    </Card>
+  )
+}
+
+export function KpiRow({ C, lang, totals, periodLabel, onOverdue, onOpen }) {
+  const hi = lang === 'hi'
+  const scored = totals.completed
+  const inPeriod = hi ? periodLabel : `in ${periodLabel.toLowerCase()}`
+  const rightNow = hi ? 'अभी' : 'right now'
+
+  const cards = [
+    // Not on-time % — that is the hero above, and a second copy here is the
+    // same duplication one card smaller. This is the figure that was buried in
+    // a tile as "Recorded / due": of the work that was actually DUE, how much
+    // happened. That is the question the page is opened with; on-time rate
+    // answers a later one.
+    { key: 'donerate', icon: 'tasks', tone: C.green,
+      value: totals.due ? `${totals.doneRate}%` : '—',
+      label: hi ? 'जो आना था, हुआ' : 'Of work that was due',
+      note: totals.due
+        ? (hi ? `${totals.kept}/${totals.due} · ${inPeriod}` : `${totals.kept} of ${totals.due} · ${inPeriod}`)
+        : (hi ? 'कुछ आना नहीं था' : 'nothing was due'),
+      delta: null },
+    { key: 'done', icon: 'check', tone: C.blue, value: totals.completed,
+      label: hi ? 'टास्क पूरे हुए' : 'Tasks completed',
+      note: hi ? `${inPeriod}` : `${inPeriod}`,
+      delta: totals.prev ? totals.completed - (totals.prev.completed || 0) : null },
+    { key: 'repairs', icon: 'taskBoard', tone: C.indigo, value: totals.repairs,
+      label: hi ? 'मरम्मत पूरी हुई' : 'Repairs closed',
+      note: hi ? `${inPeriod}` : `${inPeriod}`,
+      delta: totals.prev ? totals.repairs - (totals.prev.repairs || 0) : null },
+    { key: 'open', icon: 'inbox', tone: C.yellow, value: totals.openNow,
+      label: hi ? 'टास्क बाकी हैं' : 'Tasks still open',
+      note: hi ? `${rightNow} · तारीख़ से नहीं बदलता` : `${rightNow} · not tied to the date range`,
+      onClick: totals.openNow ? onOpen : undefined },
+    { key: 'overdue', icon: 'warning', tone: totals.overdueNow ? C.red : C.tl,
+      value: totals.overdueNow,
+      label: hi ? 'टास्क देरी से' : 'Tasks overdue',
+      note: hi ? `${rightNow} · तारीख़ से नहीं बदलता` : `${rightNow} · not tied to the date range`,
+      onClick: totals.overdueNow ? onOverdue : undefined },
+  ]
+
+  return (
+    <div style={{
+      display: 'grid', gap: 10, marginBottom: 14,
+      // auto-fit rather than five fixed columns: five 26px figures side by side
+      // on a phone is unreadable, and this lands on two or three without a
+      // breakpoint to maintain.
+      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+    }}>
+      {cards.map((c) => <Kpi key={c.key} C={C} {...c} />)}
+    </div>
+  )
+}
+
 // --- plain-language headline -------------------------------------------------
 // The one hero figure of the view: same sans as everything else, and
 // proportional figures — tabular digits make a big number look loose.
-export function Headline({ C, lang, totals, periodLabel, scopeLabel, onOverdue, onOpen }) {
+export function Headline({ C, lang, totals, periodLabel, scopeLabel }) {
   const hi = lang === 'hi'
   // Nothing recorded, nothing to score. pct(0, 0) is 0 and rateTone(0) is red,
   // so an untouched day used to render as a failed one.
@@ -20,24 +300,6 @@ export function Headline({ C, lang, totals, periodLabel, scopeLabel, onOverdue, 
   // that "5% better" is the kind of arithmetic nobody can check at a glance.
   const prevScored = totals.prev?.completed || 0
   const shift = scored && prevScored ? totals.onTimeRate - totals.prev.onTimeRate : null
-
-  // Over the period, then true right now. Two different kinds of number, and
-  // mixing them in one row was half of why the old grid read as noise.
-  const period = [
-    { key: 'done', value: totals.completed, label: hi ? 'पूरे हुए' : 'Completed' },
-    {
-      key: 'due',
-      value: totals.due ? `${totals.kept}/${totals.due}` : '—',
-      label: hi ? 'दर्ज / आना था' : 'Recorded / due',
-      hint: hi ? 'बाकी "नहीं हुआ" में' : 'rest are in Not done',
-    },
-    { key: 'repairs', value: totals.repairs, label: hi ? 'मरम्मत' : 'Repairs' },
-  ]
-  const live = [
-    { key: 'overdue', value: totals.overdueNow, label: hi ? 'ओवरड्यू' : 'Overdue',
-      tone: totals.overdueNow ? C.red : null, onClick: onOverdue },
-    { key: 'open', value: totals.openNow, label: hi ? 'बाकी' : 'Open', onClick: onOpen },
-  ]
 
   return (
     <Card style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
@@ -74,60 +336,10 @@ export function Headline({ C, lang, totals, periodLabel, scopeLabel, onOverdue, 
         </div>
       </div>
 
-      {/* the numbers behind it. Period figures, then a divider, then the two
-          that describe this moment rather than the period — an admin reading
-          "Overdue 3" needs to know it is not a count of things that went wrong
-          last month. */}
-      <div style={{
-        display: 'flex', flexWrap: 'wrap', gap: 0,
-        borderTop: `1px solid ${C.border}`, background: C.cardAlt,
-      }}>
-        {period.map((m) => (
-          <Figure key={m.key} C={C} {...m} />
-        ))}
-        <div style={{ flex: '1 1 100%', height: 1, background: C.border }} />
-        <div style={{
-          flex: '1 1 100%', padding: '7px 18px 0', fontSize: 10.5, fontWeight: 800,
-          letterSpacing: '0.05em', textTransform: 'uppercase', color: C.faint,
-        }}>
-          {hi ? 'इस वक़्त' : 'Right now'}
-        </div>
-        {live.map((m) => (
-          <Figure key={m.key} C={C} {...m} />
-        ))}
-      </div>
     </Card>
   )
 }
 
-// One supporting number. Grey at zero, so a row of them stops shouting on a
-// quiet day; underlined only when it opens something.
-function Figure({ C, value, label, hint, tone, onClick }) {
-  const empty = !value || value === '—'
-  const inner = (
-    <>
-      <div style={{
-        fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em',
-        fontVariantNumeric: 'tabular-nums',
-        color: empty ? C.faint : (tone || C.text),
-        textDecoration: onClick ? 'underline' : 'none',
-        textUnderlineOffset: 3,
-      }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 11.5, color: C.tl, fontWeight: 600, marginTop: 2 }}>{label}</div>
-      {hint && <div style={{ fontSize: 10.5, color: C.faint, marginTop: 1 }}>{hint}</div>}
-    </>
-  )
-  const style = {
-    flex: '1 1 130px', minWidth: 0, padding: '12px 18px 14px',
-    textAlign: 'left', background: 'transparent', border: 'none',
-    cursor: onClick ? 'pointer' : 'default',
-  }
-  return onClick
-    ? <button type="button" onClick={onClick} style={style}>{inner}</button>
-    : <div style={style}>{inner}</div>
-}
 
 export function StatusChip({ C, lang, rate }) {
   const hi = lang === 'hi'
