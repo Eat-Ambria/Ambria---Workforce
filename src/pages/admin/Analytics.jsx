@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 import { supabase } from '../../lib/supabase'
@@ -789,6 +789,10 @@ export const STAFF_COLS = (hi) => [
 const STAFF_GRID = 'minmax(0, 1fr) repeat(5, 68px)'
 
 export function StaffHeader({ C, lang }) {
+  // Below 560px the rows carry their own captions, so this would be the same
+  // words a second time — and it could not line up with them anyway.
+  const roomy = useMediaQuery('(min-width: 560px)')
+  if (!roomy) return null
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: STAFF_GRID, gap: 10,
@@ -809,11 +813,23 @@ export function StaffHeader({ C, lang }) {
 
 function StaffRow({ C, lang, s, compact, onOpenMissed }) {
   const hi = lang === 'hi'
+  const roomy = useMediaQuery('(min-width: 560px)')
   // Grey unless there is something to judge — a person with nothing recorded is
   // not a person scoring zero.
   const tone = rateTone(s.onTimeRate, C, s.completed)
-  const body = (
-    <div style={{ display: 'grid', gridTemplateColumns: STAFF_GRID, gap: 10, alignItems: 'center' }}>
+  const figures = [
+    { key: 'completed', label: hi ? 'पूरे' : 'Done', el: <Num C={C} value={s.completed} /> },
+    { key: 'onTimeRate', label: hi ? 'समय पर' : 'On time',
+      el: <Num C={C} value={s.completed ? `${s.onTimeRate}%` : '—'} tone={tone} muted={!s.completed} /> },
+    { key: 'openNow', label: hi ? 'बाकी' : 'Open', el: <Num C={C} value={s.openNow} /> },
+    { key: 'overdueNow', label: hi ? 'ओवरड्यू' : 'Overdue',
+      el: <Num C={C} value={s.overdueNow} tone={s.overdueNow > 0 ? C.red : undefined} /> },
+    { key: 'missed', label: hi ? 'नहीं हुआ' : 'Not done',
+      el: <Num C={C} value={s.missed} tone={s.missed > 0 ? TR_ORANGE : undefined}
+               onClick={s.missed > 0 && onOpenMissed ? () => onOpenMissed(s) : undefined} /> },
+  ]
+
+  const nameBlock = (
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>{personName(s, lang)}</span>
@@ -829,14 +845,33 @@ function StaffRow({ C, lang, s, compact, onOpenMissed }) {
           {s.department ? ` · ${deptName(s.department, lang)}` : ''}
         </div>
       </div>
-      {/* "Avg" is gone with the tile it matched — it averaged the gap between
-          tapping Start and Complete, half of which are under a minute. */}
-      <Num C={C} value={s.completed} />
-      <Num C={C} value={s.completed ? `${s.onTimeRate}%` : '—'} tone={tone} muted={!s.completed} />
-      <Num C={C} value={s.openNow} />
-      <Num C={C} value={s.overdueNow} tone={s.overdueNow > 0 ? C.red : undefined} />
-      <Num C={C} value={s.missed} tone={s.missed > 0 ? TR_ORANGE : undefined}
-           onClick={s.missed > 0 && onOpenMissed ? () => onOpenMissed(s) : undefined} />
+  )
+
+  // "Avg" is gone with the tile it matched — it averaged the gap between tapping
+  // Start and Complete, half of which are under a minute.
+  const body = roomy ? (
+    <div style={{ display: 'grid', gridTemplateColumns: STAFF_GRID, gap: 10, alignItems: 'center' }}>
+      {nameBlock}
+      {figures.map((f) => <Fragment key={f.key}>{f.el}</Fragment>)}
+    </div>
+  ) : (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {nameBlock}
+      {/* Each figure captioned in place. Five to a row still fits a 336px screen
+          once the caption is 9.5px and the columns share the width evenly. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4 }}>
+        {figures.map((f) => (
+          <div key={f.key} style={{ display: 'grid', gap: 1, justifyItems: 'center' }}>
+            <span style={{
+              fontSize: 9.5, fontWeight: 800, letterSpacing: '0.03em',
+              textTransform: 'uppercase', color: C.faint, textAlign: 'center', lineHeight: 1.15,
+            }}>
+              {f.label}
+            </span>
+            {f.el}
+          </div>
+        ))}
+      </div>
     </div>
   )
   return compact
