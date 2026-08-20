@@ -87,17 +87,13 @@ const FIX_CAT_TONE = { other: 'blue', kitchen: 'accent' }
 // The exception is a team nobody is in yet: a picker with no names simply blocks
 // the assignment. Then everyone is offered and the hint says why, rather than
 // leaving the admin stuck at a blank list.
-// `exclude` drops the signed-in admin from their own list — see the two call
-// sites. Applied before the trade filter, so a kitchen request whose only
-// kitchen member is that admin falls back to everyone rather than to nobody.
-function assignableFor(category, members, exclude) {
-  const pool = exclude ? members.filter((m) => m.id !== exclude) : members
+function assignableFor(category, members) {
   const dept = catDept(category)
-  if (!dept) return { people: pool, restricted: false }
-  const team = pool.filter((m) => m.department === dept)
+  if (!dept) return { people: members, restricted: false }
+  const team = members.filter((m) => m.department === dept)
   return team.length
     ? { people: team, restricted: true }
-    : { people: pool, restricted: false }
+    : { people: members, restricted: false }
 }
 
 // What the request says, in the reader's language. Written English and
@@ -801,10 +797,8 @@ function PostModal({ user, members = [], onClose, onSaved }) {
     setFieldErr((fe) => (fe[k] ? { ...fe, [k]: undefined } : fe))
   }
 
-  // A kitchen request narrows the names the moment the kind is chosen — and the
-  // admin raising it is not among them. They have "Close it myself" for their own
-  // work; assigning it to themselves only routed it into an approval queue.
-  const { people: atProperty, restricted: teamOnly } = assignableFor(form.category, members, user?.id)
+  // A kitchen request narrows the names the moment the kind is chosen.
+  const { people: atProperty, restricted: teamOnly } = assignableFor(form.category, members)
   const teamHint = teamOnly
     ? t.tradeStaffOnly.replace('{d}', deptName(catDept(form.category), lang))
     : t.assigneeAnyVenueHint
@@ -967,14 +961,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   const posterName = personName(members.find((m) => m.id === row.posted_by) || {}, lang)
     || row.posted_by_name || row.posted_by
   const [assignTo, setAssignTo] = useState(row.assigned_to || '')
-  // Kitchen requests only offer the kitchen team — unless nobody is in it yet.
-  // The signed-in admin is left out, unless the request is already theirs: a
-  // picker opening on a name it does not list reads as empty.
-  const assignPool = assignableFor(
-    row.category,
-    members,
-    row.assigned_to === user.id ? null : user.id,
-  )
+  // kitchen requests only offer the kitchen team — unless nobody is in it yet
+  const assignPool = assignableFor(row.category, members)
   const [propFilter, setPropFilter] = useState(row.property || 'pp') // property to assign within (super admin)
   const [dueDate, setDueDate] = useState(row.due_date || '') // deadline set at assign time
   const [note, setNote] = useState(row.resolution_note || '')
@@ -1301,7 +1289,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // would be a queue with no one able to clear it. Straight to completed, signed
   // off in their own name — the same two fields approve() and completeNow() write,
   // because it answers the same question: which admin stands behind this.
-  const selfApproves = admin && ownWork
+  const selfApproves = admin && isAssignee
 
   function submitForApproval() {
     if (resPhotos.length === 0) { setErr(t.photoRequired || 'Add a photo of the completed work'); return }
@@ -1354,7 +1342,11 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   }
 
   // close it without waiting for the assignee — available on any unfinished repair
-  const canCloseNow = admin && !ownWork && ['open', 'assigned', 'in_progress'].includes(s)
+  // Not on your own assignment: this button closes work out on somebody else's
+  // behalf, and there is nobody else here. isAssignee rather than ownWork —
+  // ownWork exempts super admins by design, and that exemption is about keeping
+  // their approve/reassign/delete powers, not about this.
+  const canCloseNow = admin && !ownWork && !isAssignee && ['open', 'assigned', 'in_progress'].includes(s)
   // (delete is handled by the always-available button in the footer below)
 
   if (backMode) {
