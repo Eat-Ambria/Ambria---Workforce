@@ -530,7 +530,7 @@ function StaffBreakdown({ C, result }) {
               position: 'relative', overflow: 'hidden', background: C.card, border: `1px solid ${C.border}`,
               borderRadius: 12, padding: '15px 10px 12px', textAlign: 'center',
             }}>
-              <span style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: C.maroon, opacity: on ? 1 : 0.15 }} />
+              <span style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: C.brandBg, opacity: on ? 1 : 0.15 }} />
               <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em', color: on ? C.text : C.faint, fontVariantNumeric: 'tabular-nums' }}>{b.count}</div>
               <div style={{ fontSize: 12.5, color: C.tl, fontWeight: 600, marginTop: 7 }}>{b.role}</div>
             </div>

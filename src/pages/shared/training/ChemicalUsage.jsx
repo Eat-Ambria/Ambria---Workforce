@@ -78,7 +78,7 @@ export default function ChemicalUsage() {
             style={{
               padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
               fontSize: 13.5, fontWeight: 700,
-              background: mode === m.id ? C.maroon : 'transparent',
+              background: mode === m.id ? C.brandBg : 'transparent',
               color: mode === m.id ? '#fff' : C.maroon,
             }}
           >
@@ -197,7 +197,7 @@ function Chip({ children, active, onClick, C }) {
   return (
     <button onClick={onClick} style={{
       padding: '7px 11px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, lineHeight: 1.3,
-      background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl, border: `1px solid ${active ? C.maroon : C.border}`,
+      background: active ? C.brandBg : C.card, color: active ? '#fff' : C.tl, border: `1px solid ${active ? C.brandBg : C.border}`,
     }}>{children}</button>
   )
 }

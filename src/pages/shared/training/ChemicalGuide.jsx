@@ -385,7 +385,7 @@ export default function ChemicalGuide({ visibleProps }) {
             style={{
               padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
               fontSize: 13.5, fontWeight: 700,
-              background: view === tb.id ? C.maroon : 'transparent',
+              background: view === tb.id ? C.brandBg : 'transparent',
               color: view === tb.id ? '#fff' : C.maroon,
             }}
           >

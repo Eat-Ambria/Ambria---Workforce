@@ -178,7 +178,7 @@ export default function QuizManager({ video, onClose }) {
                   title={m.hint}
                   style={{
                     padding: '7px 12px', borderRadius: 8, border: 'none', fontSize: 12.5, fontWeight: 700,
-                    background: mode === m.id ? C.maroon : 'transparent',
+                    background: mode === m.id ? C.brandBg : 'transparent',
                     color: mode === m.id ? '#fff' : C.tl,
                   }}
                 >

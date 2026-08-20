@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/time'
-import { useColors } from '../context/ThemeContext'
+import { useColors, useTheme } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
 import { PROPERTIES, PROPERTY_MAP, propName, deptName, personName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
@@ -45,6 +45,7 @@ function addMine(id) {
 export default function PublicFixRequest() {
   const C = useColors()
   const { lang, toggle: toggleLang } = useLang()
+  const { theme, toggle: toggleTheme } = useTheme()
   const hi = lang === 'hi'
 
   const [rows, setRows] = useState([])
@@ -113,7 +114,7 @@ export default function PublicFixRequest() {
     completed: shownRows.filter((r) => ['completed', 'approved'].includes(r.status)),
   }), [shownRows])
 
-  const gradient = `linear-gradient(150deg, ${C.maroon} 0%, ${C.maroonDark} 100%)`
+  const gradient = `linear-gradient(150deg, ${C.brandBg} 0%, ${C.maroonDark} 100%)`
 
   const langToggle = (
     <button
@@ -128,11 +129,33 @@ export default function PublicFixRequest() {
     </button>
   )
 
+  // Same translucent treatment as the language pill. Icon only: a label would
+  // double the width of a band that already carries a wordmark, a heading and a
+  // line of explanation — the title and aria-label say it in words.
+  const themeToggle = (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      title={theme === 'dark' ? (hi ? 'लाइट थीम' : 'Light theme') : (hi ? 'डार्क थीम' : 'Dark theme')}
+      aria-label={theme === 'dark' ? (hi ? 'लाइट थीम' : 'Light theme') : (hi ? 'डार्क थीम' : 'Dark theme')}
+      style={{
+        background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff',
+        borderRadius: 10, padding: '8px 10px', backdropFilter: 'blur(4px)',
+        display: 'grid', placeItems: 'center', lineHeight: 0,
+      }}
+    >
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} color="#fff" />
+    </button>
+  )
+
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* brand header band */}
       <div style={{ width: '100%', background: gradient, color: '#fff', padding: '30px 20px 26px', position: 'relative', textAlign: 'center' }}>
-        <div style={{ position: 'absolute', top: 16, right: 16 }}>{langToggle}</div>
+        <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {themeToggle}
+          {langToggle}
+        </div>
         {/* the wordmark sits straight on the gradient (transparent PNG) */}
         <img
           src={`${import.meta.env.BASE_URL}icons/logo-wordmark.png`}

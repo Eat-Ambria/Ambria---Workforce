@@ -127,7 +127,7 @@ export default function AssignModal({ video, user, onClose, onSaved }) {
                       background: on ? C.maroonSoft : C.card,
                     }}
                   >
-                    <span style={{ width: 22, height: 22, borderRadius: 6, display: 'grid', placeItems: 'center', background: on ? C.maroon : C.card, border: `1px solid ${on ? C.maroon : C.borderStrong}` }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 6, display: 'grid', placeItems: 'center', background: on ? C.brandBg : C.card, border: `1px solid ${on ? C.brandBg : C.borderStrong}` }}>
                       {on && <Icon name="check" size={14} color="#fff" />}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>

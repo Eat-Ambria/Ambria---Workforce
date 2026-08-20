@@ -119,7 +119,7 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
             onClick={() => { setView(k); setOpenKey(null) }}
             style={{
               padding: '7px 14px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
-              background: view === k ? C.maroon : C.card,
+              background: view === k ? C.brandBg : C.card,
               color: view === k ? '#fff' : C.tl,
               border: '1px solid ' + (view === k ? C.maroon : C.border),
             }}

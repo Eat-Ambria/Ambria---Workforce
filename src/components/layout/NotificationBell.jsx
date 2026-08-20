@@ -209,7 +209,7 @@ export default function NotificationBell() {
                       </div>
                       {m.body && <div style={{ fontSize: 12.5, color: C.tl, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.body}</div>}
                     </div>
-                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.maroon, flexShrink: 0, marginTop: 6 }} />}
+                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.brandBg, flexShrink: 0, marginTop: 6 }} />}
                   </button>
                 )
               })

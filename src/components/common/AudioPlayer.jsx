@@ -89,7 +89,7 @@ export default function AudioPlayer({ src, label }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         {label && <div style={{ fontSize: 12.5, color: C.tl, marginBottom: 4 }}>{label}</div>}
         <div onClick={seek} style={{ height: 6, borderRadius: 3, background: C.border, cursor: 'pointer', position: 'relative' }}>
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: C.maroon, borderRadius: 3 }} />
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: C.brandBg, borderRadius: 3 }} />
         </div>
       </div>
       <span style={{ fontSize: 12, color: C.tl, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>

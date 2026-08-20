@@ -87,7 +87,7 @@ export default function Vendors() {
               aria-pressed={on}
               style={{
                 padding: '8px 15px', borderRadius: 999, fontSize: 13.5, fontWeight: 700,
-                background: on ? C.maroon : C.card,
+                background: on ? C.brandBg : C.card,
                 color: on ? '#fff' : C.tl,
                 border: `1px solid ${on ? C.maroon : C.border}`,
                 cursor: 'pointer',
@@ -114,7 +114,7 @@ export default function Vendors() {
               }}
             >
               {vendorType(v) === 'fixed' && (
-                <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: C.maroon }} />
+                <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: C.brandBg }} />
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -203,7 +203,7 @@ function TypeBadge({ C, t, type }) {
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '2px 9px', borderRadius: 999,
         fontSize: 11.5, fontWeight: 800, letterSpacing: '0.03em',
-        background: fixed ? C.maroon : 'transparent',
+        background: fixed ? C.brandBg : 'transparent',
         color: fixed ? '#fff' : C.tl,
         border: `1px solid ${fixed ? C.maroon : C.borderStrong}`,
       }}
@@ -357,7 +357,7 @@ function VendorModal({ user, record, onClose, onSaved }) {
                   style={{
                     width: 17, height: 17, borderRadius: '50%', flexShrink: 0, marginTop: 1,
                     border: `2px solid ${on ? C.maroon : C.borderStrong}`,
-                    background: on ? C.maroon : 'transparent',
+                    background: on ? C.brandBg : 'transparent',
                     display: 'grid', placeItems: 'center',
                   }}
                 >

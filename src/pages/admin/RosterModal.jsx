@@ -1733,7 +1733,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
               padding: '8px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700,
-              background: picking ? C.maroon : C.card,
+              background: picking ? C.brandBg : C.card,
               color: picking ? '#fff' : C.tl,
               border: `1px solid ${picking ? C.maroon : C.borderStrong}`,
               cursor: 'pointer',
@@ -1758,7 +1758,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
                 padding: '8px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700,
-                background: allShownPicked ? C.maroon : C.card,
+                background: allShownPicked ? C.brandBg : C.card,
                 color: allShownPicked ? '#fff' : C.maroon,
                 border: `1px solid ${allShownPicked ? C.maroon : C.borderStrong}`,
                 cursor: 'pointer',
@@ -2408,7 +2408,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 padding: '5px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
                 border: `1.5px solid ${on ? C.maroon : C.border}`,
-                background: on ? C.maroon : C.card,
+                background: on ? C.brandBg : C.card,
                 color: on ? '#fff' : C.tl,
                 // a floor, so the name is never the thing that gives way: the
                 // controls beside it wrap to a second line instead
@@ -2485,7 +2485,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
                         aria-pressed={active}
                         style={{
                           border: 'none', padding: '4px 8px', fontSize: 11, fontWeight: 800,
-                          background: active ? C.maroon : 'transparent',
+                          background: active ? C.brandBg : 'transparent',
                           color: active ? '#fff' : C.faint, cursor: 'pointer',
                         }}
                       >
@@ -2520,7 +2520,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
                           flexShrink: 0, border: `1.5px solid ${lit ? C.maroon : C.border}`,
                           borderRadius: 999, padding: '3px 9px', fontSize: 11,
                           fontWeight: 700, cursor: 'pointer', lineHeight: 1.45,
-                          background: lit ? C.maroon : 'transparent',
+                          background: lit ? C.brandBg : 'transparent',
                           color: lit ? '#fff' : C.tl,
                         }}
                       >

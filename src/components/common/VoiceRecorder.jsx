@@ -135,7 +135,7 @@ export default function VoiceRecorder({ folder = 'audio', value = '', onChange }
           {t.stopRecording || 'Stop'} · <span style={{ fontVariantNumeric: 'tabular-nums' }}>{mmss} / {fmtT(MAX_SECONDS)}</span>
         </button>
       ) : (
-        <button type="button" onClick={start} disabled={busy} style={btn(C, C.maroon, '#fff')}>
+        <button type="button" onClick={start} disabled={busy} style={btn(C, C.brandBg, '#fff')}>
           {busy ? <Spinner size={16} color="#fff" /> : <Icon name="mic" size={18} color="#fff" />}
           {busy ? (t.uploading || 'Uploading…') : (t.recordVoice || 'Record voice note')}
         </button>

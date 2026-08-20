@@ -1831,7 +1831,7 @@ function ScopeChip({ children, active, onClick, C, full }) {
       onClick={onClick}
       style={{
         padding: '8px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, lineHeight: 1.3,
-        background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
+        background: active ? C.brandBg : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
         flex: full ? 1 : undefined, // full: share the row evenly (segmented control)
       }}
@@ -1906,7 +1906,7 @@ const PersonPicker = forwardRef(function PersonPicker({ C, t, lang, people, valu
             >
               <span style={{
                 width: 17, height: 17, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
-                border: `1.5px solid ${on ? C.maroon : C.borderStrong || C.border}`, background: on ? C.maroon : 'transparent',
+                border: `1.5px solid ${on ? C.brandBg : C.borderStrong || C.border}`, background: on ? C.brandBg : 'transparent',
               }}>
                 {on && <Icon name="check" size={11} color="#fff" />}
               </span>

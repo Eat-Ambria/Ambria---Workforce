@@ -572,7 +572,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
                   fontSize: 14, fontWeight: 600, cursor: fixed ? 'default' : 'pointer', opacity: fixed ? 0.75 : 1,
                 }}
               >
-                <span style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${on ? C.maroon : C.border}`, background: on ? C.maroon : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <span style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${on ? C.brandBg : C.border}`, background: on ? C.brandBg : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                   {on && <Icon name="check" size={13} color="#fff" />}
                 </span>
                 <Icon name={item.icon} size={17} />

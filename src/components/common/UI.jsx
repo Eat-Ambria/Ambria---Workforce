@@ -176,7 +176,7 @@ export function ProgressBar({ value = 0, tone, height = 10 }) {
   const pct = Math.max(0, Math.min(100, Math.round(value)))
   return (
     <div style={{ background: C.border, borderRadius: 999, height, overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: tone || C.maroon, borderRadius: 999, transition: 'width .3s ease' }} />
+      <div style={{ width: `${pct}%`, height: '100%', background: tone || C.brandBg, borderRadius: 999, transition: 'width .3s ease' }} />
     </div>
   )
 }
@@ -208,7 +208,7 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
               style={{
                 padding: '7px 10px', borderRadius: 999, lineHeight: 1.3,
                 fontSize: 13.5, fontWeight: on ? 700 : 600,
-                background: on ? C.maroon : C.cardAlt,
+                background: on ? C.brandBg : C.cardAlt,
                 color: on ? '#fff' : C.tl,
                 border: `1px solid ${on ? C.maroon : C.border}`,
               }}
@@ -314,7 +314,7 @@ export function FilterChip({ children, active, onClick, dot, dotRing, check }) {
         display: 'inline-flex', alignItems: 'center', gap: 7,
         padding: '9px 16px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap',
         border: `1.5px solid ${active ? C.maroon : C.border}`,
-        background: active ? C.maroon : C.card,
+        background: active ? C.brandBg : C.card,
         color: active ? '#fff' : C.tl,
       }}
     >

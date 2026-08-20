@@ -64,7 +64,10 @@ export const light = {
 export const dark = {
   // brand
   maroon: '#E4718A',        // brand as text and icons
-  maroonDark: '#C9506A',
+  // Only ever the far end of the brand banner gradient — the Login hero and
+  // the public page's header band, its two callers in the app. So it is a deep
+  // tone here rather than a rose one: those banners carry white text.
+  maroonDark: '#6E1E2E',
   maroonSoft: '#3A1A24',    // the tinted surface behind maroon text
   accent: '#D98324',
   brandBg: '#9E2C42',       // white on it: 7.26

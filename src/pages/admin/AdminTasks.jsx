@@ -276,7 +276,7 @@ export default function AdminTasks() {
                   whiteSpace: 'nowrap', flexShrink: 0,
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
-                  background: tab === 'review' ? C.maroon : C.cardAlt,
+                  background: tab === 'review' ? C.brandBg : C.cardAlt,
                   color: tab === 'review' ? '#fff' : C.tl,
                   border: `1px solid ${tab === 'review' ? C.maroon : C.border}`,
                 }}
@@ -588,7 +588,7 @@ function PropChip({ children, active, onClick, C, full }) {
       onClick={onClick}
       style={{
         whiteSpace: 'nowrap', padding: '8px 14px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
-        background: active ? C.maroon : C.card, color: active ? '#fff' : C.tl,
+        background: active ? C.brandBg : C.card, color: active ? '#fff' : C.tl,
         border: `1px solid ${active ? C.maroon : C.border}`,
         // grow to share a wide row, but keep a readable minimum and wrap to the
         // next line instead of squeezing the label away on a phone

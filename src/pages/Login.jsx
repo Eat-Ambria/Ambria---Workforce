@@ -24,7 +24,7 @@ export default function Login() {
   const [error, setError] = useState('')
 
   const canSubmit = !!username && !!password && !busy
-  const gradient = `linear-gradient(150deg, ${C.maroon} 0%, ${C.maroonDark} 100%)`
+  const gradient = `linear-gradient(150deg, ${C.brandBg} 0%, ${C.maroonDark} 100%)`
 
   async function onSubmit(e) {
     e.preventDefault()

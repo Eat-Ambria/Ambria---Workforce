@@ -219,9 +219,9 @@ export default function YTPlayer({ videoId, resumeKey, onProgress, unlocked = fa
           {/* watched / seekable region */}
           <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${maxFrac}%`, background: C.maroonSoft, borderRadius: 999 }} />
           {/* played fill */}
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${curFrac}%`, background: C.maroon, borderRadius: 999 }} />
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${curFrac}%`, background: C.brandBg, borderRadius: 999 }} />
           {/* handle */}
-          <span style={{ position: 'absolute', left: `calc(${curFrac}% - 6px)`, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, borderRadius: '50%', background: C.maroon, boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+          <span style={{ position: 'absolute', left: `calc(${curFrac}% - 6px)`, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, borderRadius: '50%', background: C.brandBg, boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
         </div>
 
         <select

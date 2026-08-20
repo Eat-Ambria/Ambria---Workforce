@@ -89,7 +89,7 @@ export default function MultiSelect({ C, placeholder, options, selected, onChang
                   onClick={() => toggle(o.value)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: on ? C.maroonSoft : 'transparent', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}
                 >
-                  <span style={{ width: 18, height: 18, borderRadius: single ? '50%' : 5, border: `1.5px solid ${on ? C.maroon : C.border}`, background: on ? C.maroon : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <span style={{ width: 18, height: 18, borderRadius: single ? '50%' : 5, border: `1.5px solid ${on ? C.brandBg : C.border}`, background: on ? C.brandBg : 'transparent', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                     {on && <Icon name="check" size={12} color="#fff" />}
                   </span>
                   <span style={{ fontSize: 14, color: C.text }}>{o.label}{o.sub ? <span style={{ color: C.faint, fontSize: 12 }}> {o.sub}</span> : null}</span>

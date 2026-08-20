@@ -80,7 +80,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
           type="button"
           onClick={() => camRef.current?.click()}
           disabled={busy}
-          style={btn(C, C.maroon, '#fff')}
+          style={btn(C, C.brandBg, '#fff')}
         >
           {busy ? <Spinner size={16} color="#fff" /> : <Icon name="camera" size={18} color="#fff" />} {t.takePhoto}
         </button>

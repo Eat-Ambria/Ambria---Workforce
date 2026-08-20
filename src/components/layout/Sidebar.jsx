@@ -60,7 +60,7 @@ export default function Sidebar({ mobile = false, onNavigate }) {
           >
             {({ isActive }) => (
               <>
-                {isActive && <span style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', width: 4, height: 22, borderRadius: 4, background: C.maroon }} />}
+                {isActive && <span style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', width: 4, height: 22, borderRadius: 4, background: C.brandBg }} />}
                 <Icon name={item.icon} size={20} />
                 {t[item.key] || item.key}
                 {item.path === '/task-board' && fixCount > 0 && (
@@ -96,7 +96,7 @@ export default function Sidebar({ mobile = false, onNavigate }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
               <span style={{
                 width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                background: DEPARTMENT_MAP[user.department]?.color || C.maroon,
+                background: DEPARTMENT_MAP[user.department]?.color || C.brandBg,
               }} />
               <span style={{ fontSize: 11.5, fontWeight: 700, color: C.tl }}>
                 {deptName(user.department, lang)}
