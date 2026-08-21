@@ -213,6 +213,15 @@ export default function MyTasks() {
   // its group — and after that, by time, with untimed jobs last rather than
   // first, where a blank would push a 9 AM round below them.
   const BANDS = ['daily', 'dailyMS', 'alternate', 'alternateMS', 'weekly', 'sunday', 'monthly']
+  // The same job at several venues is one job. Keyed on the fields that make two
+  // rows the same work — title, how often, which slot — and deliberately NOT on
+  // property, since that is what is being collapsed.
+  const groupOf = (task) => [
+    (task.title || '').trim().toLowerCase(),
+    taskFrequency(task),
+    (task.time_block || '').trim().toLowerCase(),
+  ].join('|')
+
   const bands = useMemo(() => {
     const by = new Map()
     for (const task of sorted) {
@@ -314,10 +323,26 @@ export default function MyTasks() {
                   <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
                 </div>
               )}
-              {tasks.map((task) => (
-                <TaskRow key={task.id} task={task} C={C} t={t} today={today} hi={lang === 'hi'}
-                  showVenue={showVenue} onOpen={() => setActive(task)} />
-              ))}
+              {(() => {
+                // Preserve the order the band already sorted into: a group takes
+                // the position of its first member.
+                const groups = []
+                const seen = new Map()
+                tasks.forEach((task) => {
+                  const k = groupOf(task)
+                  if (!seen.has(k)) { seen.set(k, []); groups.push({ key: k, rows: seen.get(k) }) }
+                  seen.get(k).push(task)
+                })
+                return groups.map(({ key, rows }) => (
+                  rows.length === 1
+                    // A grouped card for a single job would be a heading and one
+                    // row where a card already says it.
+                    ? <TaskRow key={rows[0].id} task={rows[0]} C={C} t={t} today={today} hi={lang === 'hi'}
+                        showVenue={showVenue} onOpen={() => setActive(rows[0])} />
+                    : <TaskGroup key={key} rows={rows} C={C} t={t} today={today} hi={lang === 'hi'}
+                        onOpen={setActive} />
+                ))
+              })()}
             </div>
           ))}
         </div>
@@ -337,6 +362,103 @@ export default function MyTasks() {
 
 // show the Hindi task title when the app is in Hindi and one exists
 const taskTitle = (task, hi) => (hi && task.title_hi ? task.title_hi : task.title)
+
+// One job, several venues. The shared fields are stated once at the top and each
+// venue gets a line with its own state and its own way in.
+function TaskGroup({ rows, C, t, today, onOpen, hi }) {
+  const first = rows[0]
+  const fk = taskFrequency(first)
+  const freq = FREQUENCY_MAP[fk] || FREQUENCY_MAP.daily
+  const sched = scheduleText(first, hi ? 'hi' : 'en')
+  const done = rows.filter((r) => r.status === TASK_STATUS.COMPLETED).length
+  const late = rows.some((r) => isTaskOverdue(r, today))
+
+  return (
+    <Card style={{ borderLeft: `4px solid ${late ? TR_ORANGE : (done === rows.length ? C.green : C.borderStrong)}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{taskTitle(first, hi)}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.02em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 999, background: freq.tint, color: freq.ink }}>
+              {frequencyLabel(fk, hi ? 'hi' : 'en')}
+            </span>
+            {sched && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.tl }}>{sched}</span>}
+            {first.time_block && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.tl }}>
+                <Icon name="clock" size={12} color={C.tl} /> {first.time_block}
+              </span>
+            )}
+          </div>
+        </div>
+        {/* how far through the set you are, before reading the venues */}
+        <span style={{
+          fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0,
+          color: done === rows.length ? C.green : C.tl,
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {done}/{rows.length} {hi ? 'जगह' : 'venues'}
+        </span>
+      </div>
+
+      {/* One line of chips. Five full-width rows for five one-word venue names
+          was the same waste as five separate cards, one level down. The hollow
+          circle already says "not done", so the status word and the chevron go —
+          the whole chip is the target. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 10 }}>
+        {rows.map((task) => {
+          const isDone = task.status === TASK_STATUS.COMPLETED
+          const od = isTaskOverdue(task, today)
+          const edge = isDone ? C.green : od ? TR_ORANGE : C.borderStrong
+          return (
+            <button
+              key={task.id}
+              type="button"
+              onClick={() => onOpen(task)}
+              title={`${propName(task.property, hi ? 'hi' : 'en')} · ${t[statusColors(task.status, C).key]}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '5px 12px 5px 7px', borderRadius: 999,
+                background: isDone ? `${C.green}14` : 'transparent',
+                border: `1.5px solid ${isDone ? C.green : od ? `${TR_ORANGE}88` : C.border}`,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{
+                width: 17, height: 17, borderRadius: '50%', flexShrink: 0,
+                display: 'grid', placeItems: 'center',
+                background: isDone ? C.green : 'transparent',
+                border: `2px solid ${edge}`,
+              }}>
+                {isDone && <Icon name="check" size={10} color="#fff" />}
+              </span>
+              <span style={{
+                fontSize: 12.5, fontWeight: 700,
+                color: isDone ? C.green : od ? TR_ORANGE : C.text,
+              }}>
+                {propName(task.property, hi ? 'hi' : 'en')}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {/* What the chips are for. They look like filter pills, and nothing said
+          they are a checklist you work through venue by venue.
+          Only while something is left — at 5/5 the row of green ticks says it
+          better than a sentence would. */}
+      {done < rows.length && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.5,
+        }}>
+          <Icon name="info" size={13} color={C.faint} style={{ flexShrink: 0 }} />
+          {hi
+            ? 'जिस प्रॉपर्टी का काम हो जाए, उसे टिक करते रहें — टैप करके फ़ोटो लगाएँ और पूरा करें।'
+            : 'Tick each venue as its work is done — tap it to add the photo and finish.'}
+        </div>
+      )}
+    </Card>
+  )
+}
 
 function TaskRow({ task, C, t, today, onOpen, hi, showVenue }) {
   const sc = statusColors(task.status, C)
