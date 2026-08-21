@@ -13,7 +13,7 @@ import {
   WEEK_DAYS, dayName, dayShort, staffingLabel, monthlyDate, taskDays,
   SHIFTS, shiftLabel,
 } from '../../constants/org'
-import { Button, Loader, Field, inputStyle } from '../../components/common/UI'
+import { Button, Loader, Field, inputStyle, filterStyle } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Toast from '../../components/common/Toast'
 import MultiSelect from '../../components/common/MultiSelect'
@@ -514,6 +514,7 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     [canSeeAllProps, defaultProperty, user.property]
   )
   const [freqFilter, setFreqFilter] = useState('all')  // which frequency band is shown
+  const [nameQuery, setNameQuery] = useState('')       // show only rows this person is on
   const [rows, setRows] = useState([])        // every task row for these venues
   // Where each job runs across ALL five venues, not just the loaded ones:
   // { 'dept||title': ['pp', 'ex', ...] }. The PROPERTIES ticks read from this.
@@ -920,6 +921,18 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   // does. With a frequency filter on, ticking a day changed the category and
   // the row failed its own filter mid-edit and vanished from under the cursor.
   // The filter re-applies on the next load, once the change has been saved.
+  // Both spellings, so a search typed in Hindi finds the row whose Hindi name
+  // matches and the same search typed in English finds it too.
+  const matchesName = useCallback((g) => {
+    const q = nameQuery.trim().toLowerCase()
+    if (!q) return true
+    return (g.people || []).some((id) => {
+      const m = staffById.get(id)
+      if (!m) return false
+      return `${m.name || ''} ${m.name_hi || ''}`.toLowerCase().includes(q)
+    })
+  }, [nameQuery, staffById])
+
   const shownGroups = useMemo(
     () => groups.filter((g) => {
       const r = g.rows[0] || {}
@@ -927,8 +940,11 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       const fk = r.category ? freqOf(r) : freqOf(g)
       return (deptTab === 'all' || dept === deptTab)
         && (freqFilter === 'all' || filterBucket(fk) === freqFilter)
+        // On g.people — the ids already on the group — so an assignment made a
+        // moment ago is searchable before it has been saved.
+        && matchesName(g)
     }),
-    [groups, deptTab, freqFilter]
+    [groups, deptTab, freqFilter, matchesName]
   )
 
   // The sheet's own shape: department band, then a block per frequency inside it,
@@ -1781,6 +1797,40 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
               selected={[freqFilter]}
               onChange={([v]) => setFreqFilter(v || 'all')}
             />
+          </div>
+
+          {/* Narrows by WHO is on the work, where the two selects narrow by what
+              the work is. On a 121-row sheet "what does Sonu do" otherwise means
+              reading every row's ASSIGNED cell. */}
+          <div style={{ flex: wide ? '1 1 170px' : '1 1 100%', minWidth: 0, position: 'relative' }}>
+            <Icon
+              name="search"
+              size={14}
+              color={C.faint}
+              style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+            />
+            <input
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              placeholder={lang === 'hi' ? 'नाम से खोजें' : 'Search a name'}
+              aria-label={lang === 'hi' ? 'नाम से खोजें' : 'Search a name'}
+              style={{ ...filterStyle(C), paddingLeft: 31, paddingRight: nameQuery ? 28 : 12 }}
+            />
+            {/* A search that has hidden most of the sheet needs an obvious way out */}
+            {nameQuery && (
+              <button
+                type="button"
+                onClick={() => setNameQuery('')}
+                title={t.clearFilters}
+                aria-label={t.clearFilters}
+                style={{
+                  position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', padding: 2, lineHeight: 0,
+                }}
+              >
+                <Icon name="close" size={13} color={C.tl} />
+              </button>
+            )}
           </div>
 
           {/* The summary above narrows by department in one tap; this is where the
