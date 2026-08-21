@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   TASK_STATUS, TASK_CATEGORIES, isTaskOverdue,
   taskFrequency, frequencyLabel, FREQUENCY_MAP, notDueToday, scheduleText, staffingLabel,
-  propName,
+  propName, PROPERTIES,
 } from '../../constants/org'
 import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
@@ -77,6 +77,9 @@ function Notice({ C, tone, bg, icon, title, sub }) {
 export default function MyTasks() {
   const C = useColors()
   const roomy = useMediaQuery('(min-width: 560px)')
+  // Five filter labels with their counts want about 700px on one line; 900 leaves
+  // room for the page's own padding without the labels truncating.
+  const oneRow = useMediaQuery('(min-width: 900px)')
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
@@ -173,23 +176,35 @@ export default function MyTasks() {
   // the status or issue filters: "how much is left in Weekly" does not change
   // because you are looking at Completed — and if it did, every pill would read 0
   // the moment you selected it.
+  // One count per status button. From dueToday, the same list the frequency pills
+  // count from, so the two rows can never disagree — and like those, not narrowed
+  // by the other filters: a count is a fact about the work, not about what else
+  // you have selected.
+  const statusCounts = useMemo(() => ({
+    all: dueToday.length,
+    overdue: dueToday.filter((x) => isTaskOverdue(x, today)).length,
+    [TASK_STATUS.PENDING]: dueToday.filter((x) => x.status === TASK_STATUS.PENDING).length,
+    [TASK_STATUS.IN_PROGRESS]: dueToday.filter((x) => x.status === TASK_STATUS.IN_PROGRESS).length,
+    [TASK_STATUS.COMPLETED]: dueToday.filter((x) => x.status === TASK_STATUS.COMPLETED).length,
+  }), [dueToday, today])
+
   const catCounts = useMemo(() => dueToday.reduce(
     (acc, x) => (x.status === TASK_STATUS.PENDING
       ? { ...acc, all: (acc.all || 0) + 1, [x.category]: (acc[x.category] || 0) + 1 }
       : acc),
     {},
   ), [dueToday])
-  const hiddenByFilter = (status !== 'all' || issueStatus !== 'all')
-    && (cat === 'all' ? dueToday : dueToday.filter((x) => x.category === cat)).length > 0
-  const emptyTitle = hiddenByFilter ? t.noTaskForFilter : (t[EMPTY_KEY[cat]] || t.noData)
 
-  // normal task-lifecycle statuses (left dropdown)
+  // Normal task-lifecycle statuses (left dropdown). No "awaiting approval":
+  // tasks have had no approval step since markForCompletion started writing
+  // COMPLETED directly, so on a task that option could only return an empty list.
+  // The queue belongs to repair requests, where an assignee submits and an admin
+  // approves. Checked before removing it: zero task rows carry that status.
   const statusChips = [
     { key: 'all', label: t.all },
     { key: 'overdue', label: t.overdue },
     { key: TASK_STATUS.PENDING, label: t.pending },
     { key: TASK_STATUS.IN_PROGRESS, label: t.inProgress },
-    { key: TASK_STATUS.COMPLETION_REQUESTED, label: t.completionRequested },
     { key: TASK_STATUS.COMPLETED, label: t.completed },
   ]
   // issue-tracking statuses (separate "Issue Status" dropdown)
@@ -199,6 +214,39 @@ export default function MyTasks() {
     { key: TASK_STATUS.ISSUE_WORKING, label: t.issueWorking },
     { key: TASK_STATUS.ISSUE_RESOLVED, label: t.issueResolved },
   ]
+
+  // Read back whichever filters are actually set, in their own words — the same
+  // labels as the buttons above. "No task matches these filters" is true and
+  // useless: there are three of them and it names none, so clearing it is guesswork.
+  const emptyState = useMemo(() => {
+    const hi = lang === 'hi'
+    const labelOf = (list, key) => (list.find((x) => x.key === key) || {}).label
+    const parts = []
+    if (status !== 'all') parts.push(labelOf(statusChips, status))
+    if (cat !== 'all') parts.push(frequencyLabel(cat, hi ? 'hi' : 'en'))
+
+    // Nothing set at all: this band genuinely has no work today, which is a
+    // different sentence from "your filters hid it".
+    if (!parts.length && issueStatus === 'all') {
+      return { title: t[EMPTY_KEY[cat]] || t.noData, hint: undefined }
+    }
+
+    const what = parts.filter(Boolean).join(' · ')
+    const issueBit = issueStatus === 'all'
+      ? ''
+      : ` ${hi ? '·' : '·'} ${labelOf(issueChips, issueStatus)}`
+
+    return {
+      title: what
+        ? (hi ? `${what}${issueBit} — कुछ नहीं मिला` : `Nothing under ${what}${issueBit}`)
+        : (hi ? `${labelOf(issueChips, issueStatus)} — कुछ नहीं मिला` : `Nothing with ${labelOf(issueChips, issueStatus)}`),
+      // Clear exactly what is set, and say which. Telling somebody to "set the
+      // filters back to All" when one of three is on makes them check all three.
+      hint: hi
+        ? `${[status !== 'all' && 'स्टेटस', cat !== 'all' && 'कितनी बार', issueStatus !== 'all' && 'समस्या'].filter(Boolean).join(' / ')} फ़िल्टर हटाकर देखें`
+        : `Clear the ${[status !== 'all' && 'status', cat !== 'all' && 'frequency', issueStatus !== 'all' && 'issue'].filter(Boolean).join(' / ')} filter to see the rest`,
+    }
+  }, [status, cat, issueStatus, statusChips, issueChips, lang, t])
   // group by lifecycle status for a clean read: active first
   const order = [
     TASK_STATUS.IN_PROGRESS,
@@ -207,6 +255,14 @@ export default function MyTasks() {
     TASK_STATUS.COMPLETED,
   ]
   const sorted = [...filtered].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))
+
+  // Where each row sits BEFORE the status sort. A grouped card takes its position
+  // from this, so completing a venue cannot move the card: the status sort shuffles
+  // rows, and anything derived from the shuffled order shifts underneath you.
+  const stableRank = useMemo(
+    () => new Map(filtered.map((task, i) => [task.id, i])),
+    [filtered],
+  )
 
   // Split by how often each job runs, in the order the day runs them. Status
   // still leads inside a band — something already started belongs at the top of
@@ -241,20 +297,27 @@ export default function MyTasks() {
     <div>
       <SectionTitle>{t.myTasks}</SectionTitle>
 
-      {/* two filters: normal task status + a separate issue status (share one filter) */}
+      {/* A row each. Side by side the status grid got half the width and its
+          labels truncated to "Over... 0" — a button you have to guess at. They are
+          two different questions, so reading them one under the other costs
+          nothing. */}
       <div style={{
-        display: 'grid', gap: 8, marginBottom: 10,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+        display: 'grid', gap: 10, marginBottom: 10,
+        gridTemplateColumns: 'minmax(0, 1fr)',
       }}>
         <FilterField label={t.taskStatus}>
-          <select style={filterStyle(C)} value={status} onChange={(e) => setStatus(e.target.value)}>
-            {statusChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
-          </select>
+          <StatusPills
+            options={statusChips} value={status} onChange={setStatus}
+            counts={statusCounts} wide={oneRow} C={C} hi={lang === 'hi'}
+          />
         </FilterField>
         <FilterField label={t.issueStatus}>
-          <select style={filterStyle(C)} value={issueStatus} onChange={(e) => setIssueStatus(e.target.value)}>
-            {issueChips.map((sc) => <option key={sc.key} value={sc.key}>{sc.label}</option>)}
-          </select>
+          {/* No counts here: these read zero on most days, and a row of zeros is
+              noise rather than information. */}
+          <StatusPills
+            options={issueChips} value={issueStatus} onChange={setIssueStatus}
+            wide={oneRow} C={C} hi={lang === 'hi'}
+          />
         </FilterField>
       </div>
 
@@ -305,7 +368,7 @@ export default function MyTasks() {
       {loading ? (
         <Loader label={t.loading} />
       ) : sorted.length === 0 ? (
-        <EmptyState icon={null} title={emptyTitle} hint={hiddenByFilter ? t.tryClearFilters : undefined} />
+        <EmptyState icon={null} title={emptyState.title} hint={emptyState.hint} />
       ) : (
         <div style={{ display: 'grid', gap: 18 }}>
           {bands.map(({ band, tasks }) => (
@@ -333,6 +396,33 @@ export default function MyTasks() {
                   if (!seen.has(k)) { seen.set(k, []); groups.push({ key: k, rows: seen.get(k) }) }
                   seen.get(k).push(task)
                 })
+                // Venue order, not status order. The band sorts by status, which
+                // is right for separate cards and wrong inside a group: ticking a
+                // venue moved it, so the chip you were aiming at was no longer
+                // where you left it. PROPERTIES order is the same on every card
+                // and every visit, which is what makes five taps learnable.
+                const venueRank = (task) => {
+                  const i = PROPERTIES.findIndex((x) => x.code === task.property)
+                  return i === -1 ? PROPERTIES.length : i
+                }
+                groups.forEach((g) => g.rows.sort((a, b) => venueRank(a) - venueRank(b)))
+
+                // A card must not move while you are working through it. Its place
+                // used to come from whichever row sorted first by status, so two
+                // ticks changed that row and the card slid down the list.
+                //
+                // Only one thing moves a group now: finishing it. Unfinished cards
+                // hold the order they arrived in; a finished one drops to the
+                // bottom of the band, which is the move that helps.
+                groups.forEach((g) => {
+                  // The earliest place any of its rows holds in the pre-sort list.
+                  // Taking it from the sorted list is what let two ticks move the
+                  // card: those rows went to the back and the "first" row changed.
+                  g.base = Math.min(...g.rows.map((r) => stableRank.get(r.id) ?? Number.MAX_SAFE_INTEGER))
+                  g.allDone = g.rows.every((r) => r.status === TASK_STATUS.COMPLETED)
+                })
+                groups.sort((a, b) => (a.allDone === b.allDone ? a.base - b.base : (a.allDone ? 1 : -1)))
+
                 return groups.map(({ key, rows }) => (
                   rows.length === 1
                     // A grouped card for a single job would be a heading and one
@@ -361,7 +451,63 @@ export default function MyTasks() {
 }
 
 // show the Hindi task title when the app is in Hindi and one exists
-const taskTitle = (task, hi) => (hi && task.title_hi ? task.title_hi : task.title)
+const taskTitle = (task, hi) => (hi && task.title_lang === 'hi' ? task.title_hi : task.title)
+
+// A row of filter pills, used by both Task Status and Issue Status. One
+// component rather than two copies of a button block — the second copy is how the
+// two quietly stop matching.
+//
+// `wide` puts every option on one line. Five labels with their counts need roughly
+// 700px, which is why the caller decides at 900 rather than this guessing.
+// `counts` is optional: Task Status has a figure worth showing on each option,
+// Issue Status mostly reads zero and a row of zeros is noise.
+function StatusPills({ options, value, onChange, counts, wide, C, hi }) {
+  return (
+    <div style={{
+      display: 'grid', gap: 6,
+      gridTemplateColumns: wide
+        ? `repeat(${options.length}, minmax(0, 1fr))`
+        : 'repeat(2, minmax(0, 1fr))',
+    }}>
+      {options.map((o) => {
+        const on = value === o.key
+        const n = counts ? (counts[o.key] || 0) : null
+        return (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => onChange(on && o.key !== 'all' ? 'all' : o.key)}
+            aria-pressed={on}
+            title={on && o.key !== 'all' ? (hi ? 'फ़िल्टर हटाएँ' : 'clear this filter') : o.label}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+              padding: '7px 11px', borderRadius: 999, minWidth: 0,
+              // On one line every option is a peer. Stacked, All spans the row —
+              // it is not another subset, it is the set the others divide up.
+              gridColumn: !wide && o.key === 'all' ? '1 / -1' : undefined,
+              background: on ? C.maroonSoft : 'transparent',
+              border: `1px solid ${on ? C.maroon : C.border}`,
+              color: on ? C.maroon : C.tl,
+              fontSize: 12.5, fontWeight: on ? 800 : 600, cursor: 'pointer',
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {o.label}
+            </span>
+            {n != null && (
+              <span style={{
+                flexShrink: 0, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+                color: on ? C.maroon : (n ? C.text : C.faint),
+              }}>
+                {n}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 // One job, several venues. The shared fields are stated once at the top and each
 // venue gets a line with its own state and its own way in.

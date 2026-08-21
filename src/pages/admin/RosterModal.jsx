@@ -1799,6 +1799,21 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             />
           </div>
 
+          {/* The summary above narrows by department in one tap; this is where the
+              active one stays visible once the summary has scrolled away — which
+              is exactly when you need to know what is filtered. */}
+          <div style={{ flex: wide ? '1 1 150px' : '1 1 calc(50% - 4px)', minWidth: 0 }}>
+            <MultiSelect
+              single
+              minWidth={wide ? 150 : 0}
+              C={C}
+              placeholder={t.allDepts}
+              options={[{ value: 'all', label: t.allDepts }, ...DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) }))]}
+              selected={[deptTab]}
+              onChange={([v]) => pickDept(v || 'all')}
+            />
+          </div>
+
           {/* Narrows by WHO is on the work, where the two selects narrow by what
               the work is. On a 121-row sheet "what does Sonu do" otherwise means
               reading every row's ASSIGNED cell. */}
@@ -1831,21 +1846,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                 <Icon name="close" size={13} color={C.tl} />
               </button>
             )}
-          </div>
-
-          {/* The summary above narrows by department in one tap; this is where the
-              active one stays visible once the summary has scrolled away — which
-              is exactly when you need to know what is filtered. */}
-          <div style={{ flex: wide ? '1 1 150px' : '1 1 calc(50% - 4px)', minWidth: 0 }}>
-            <MultiSelect
-              single
-              minWidth={wide ? 150 : 0}
-              C={C}
-              placeholder={t.allDepts}
-              options={[{ value: 'all', label: t.allDepts }, ...DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) }))]}
-              selected={[deptTab]}
-              onChange={([v]) => pickDept(v || 'all')}
-            />
           </div>
         </div>
       </div>
