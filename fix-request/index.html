@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      A second entry point, and the reason it exists: two installable apps on one
+      origin need two manifests, and a browser decides which app a page IS from
+      the manifest present in the HTML it received. Swapping the link from
+      JavaScript after React mounts is too late — Chrome has already made up its
+      mind, so "Add to home screen" on the public link was installing the admin
+      app.
+
+      This file ships the public manifest in the head from the start. It loads
+      the same bundle as index.html; React Router sees /fix-request and renders
+      the public page.
+    -->
+    <link rel="manifest" href="/Ambria---Workforce/fix-request.webmanifest" />
+
+    <link rel="icon" type="image/svg+xml" href="/Ambria---Workforce/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/Ambria---Workforce/icons/pwa-192x192.png" />
+    <link rel="apple-touch-icon" href="/Ambria---Workforce/icons/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#8A2438" />
+    <meta name="description" content="Report something that needs fixing at an Ambria venue, and follow it until it is done." />
+
+    <!-- iOS never reads the manifest; the home-screen name comes from here -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Repair Request" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Same entry script as the app, so the self-hosted @font-face in
+         src/index.css is already on this page. -->
+    <title>Ambria Repair Request</title>
+    <script type="module" crossorigin src="/Ambria---Workforce/assets/main-DGf_UIjL.js"></script>
+    <link rel="stylesheet" crossorigin href="/Ambria---Workforce/assets/main-BX3Slqsl.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

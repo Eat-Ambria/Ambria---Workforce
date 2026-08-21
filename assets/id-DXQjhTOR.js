@@ -1,0 +1,1 @@
+function o(n=""){let t;return typeof crypto<"u"&&typeof crypto.randomUUID=="function"?t=crypto.randomUUID():t=`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,n?`${n}${t}`:t}export{o as n};

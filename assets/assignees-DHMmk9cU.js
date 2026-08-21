@@ -1,0 +1,1 @@
+import{s as t,ag as s}from"./main-DGf_UIjL.js";function n({propScope:r,deptScope:a}={}){let e=t.from("users").select("id, name, name_hi, role, department, property, designation, shift").eq("is_active",!0).in("role",s).order("name");return r&&(e=e.or(`property.eq.${r},property.eq.all`)),a&&(e=e.eq("department",a)),e}export{n as a};
