@@ -605,7 +605,11 @@ function HourBars({ C, hi, rows }) {
   if (!rows.length) return <EmptyState icon={null} title={hi ? 'कोई गाड़ी नहीं' : 'No cars'} />
   const peak = Math.max(1, ...rows.map((r) => r.cars))
   const top = [...rows].sort((a, b) => b.cars - a.cars).slice(0, 3).filter((r) => r.cars)
-  const hh = (h) => `${String(h).padStart(2, '0')}:00`
+  // 12-hour, because that is how every other time in this app is written —
+  // fmtTime() renders task and booking times as AM/PM, and a chart on 24-hour
+  // made the reader convert. ":00" is dropped: these are whole hours, so it was
+  // the same two characters on every label.
+  const hh = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`
 
   return (
     <div>
@@ -624,8 +628,10 @@ function HourBars({ C, hi, rows }) {
           </div>
         ))}
       </div>
+      {/* Through the same formatter as the tooltip and the peak line, so the
+          axis cannot end up written differently from what it labels. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.faint, marginTop: 5 }}>
-        <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+        {[0, 6, 12, 18, 23].map((h) => <span key={h}>{hh(h)}</span>)}
       </div>
       {top.length > 0 && (
         <div style={{ fontSize: 12, color: C.tl, marginTop: 8 }}>
