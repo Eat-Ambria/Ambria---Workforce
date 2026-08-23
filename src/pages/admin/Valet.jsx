@@ -14,6 +14,7 @@ import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE, LMS_ALL_VENUES, VENUE_COLORS, VENUE_DOT_RING } from '../../lib/lms'
+import ValetAnalytics from './ValetAnalytics'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const WEEKDAYS_HI = ['र', 'सो', 'मं', 'बु', 'गु', 'शु', 'श']
@@ -158,12 +159,21 @@ export default function Valet() {
       <SectionTitle>{t.valet}</SectionTitle>
 
       <Tabs
-        tabs={[{ key: 'calendar', label: t.calendar }, { key: 'bookings', label: t.bookings }, { key: 'calculator', label: t.calculator }]}
+        tabs={[
+          { key: 'calendar', label: t.calendar },
+          { key: 'bookings', label: t.bookings },
+          { key: 'calculator', label: t.calculator },
+          // Reads the LIVE valet parking system — a different Supabase project.
+          // Everything above this tab is our own bookings table.
+          { key: 'analytics', label: t.analytics },
+        ]}
         active={view}
         onChange={setView}
       />
 
-      {view === 'calculator' ? (
+      {view === 'analytics' ? (
+        <ValetAnalytics visibleProps={visibleProps} scopeAll={scopeAll} />
+      ) : view === 'calculator' ? (
         <Calculator C={C} t={t} lang={lang} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix} canEdit={scopeAll} onMatrixSaved={loadMatrix} />
       ) : view === 'bookings' ? (
         <BookingsList C={C} t={t} lang={lang} user={user} scopeAll={scopeAll} reloadSignal={bump} onEdit={openEdit} />

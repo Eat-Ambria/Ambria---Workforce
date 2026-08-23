@@ -191,11 +191,19 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
   // the first row's underlines hanging away from the border — so it scrolled
   // instead, and a tab you have to scroll to find is a tab you do not know is
   // there. Pills wrap, so every tab stays on the screen.
+  //
+  // Four or fewer go on ONE row, however narrow that makes them. Three columns
+  // was right while every row that used this had five or six tabs, but at
+  // exactly four it leaves one pill alone on a second row — and a lone pill
+  // reads as a different control rather than the fourth of a set. Valet's
+  // Analytics tab looked like a button somebody had added underneath the tabs.
+  // Beyond four, three columns again: five across a phone is unreadable.
+  const cols = tabs.length <= 4 ? Math.max(1, tabs.length) : 3
   if (!roomy) {
     return (
       <div style={{
         display: 'grid', gap: 6, marginBottom: noMargin ? 0 : 14,
-        gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, tabs.length))}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         gridAutoRows: '1fr',
       }}>
         {tabs.map((tab) => {
@@ -206,8 +214,16 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
               onClick={() => onChange(tab.key)}
               aria-pressed={on}
               style={{
-                padding: '7px 10px', borderRadius: 999, lineHeight: 1.3,
-                fontSize: 13.5, fontWeight: on ? 700 : 600,
+                // Four across a 360px phone leaves about 78px a pill, and
+                // "Staffing Calculator" does not fit that at the three-column
+                // size — so the padding and type tighten rather than the word
+                // being clipped. overflowWrap is the backstop for a longer
+                // translation of a label nobody has written yet.
+                padding: cols === 4 ? '7px 4px' : '7px 10px',
+                borderRadius: 999, lineHeight: 1.3,
+                fontSize: cols === 4 ? 12.5 : 13.5,
+                fontWeight: on ? 700 : 600,
+                overflowWrap: 'anywhere',
                 background: on ? C.brandBg : C.cardAlt,
                 color: on ? '#fff' : C.tl,
                 border: `1px solid ${on ? C.maroon : C.border}`,
