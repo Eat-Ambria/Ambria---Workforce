@@ -19,6 +19,7 @@ export const T = {
     userManagement: 'User Management',
     analytics: 'Analytics',
     // valet bookings
+    records: 'Records',
     bookings: 'Bookings',
     calendar: 'Calendar',
     calculator: 'Staffing Calculator',
@@ -587,6 +588,7 @@ export const T = {
     userManagement: 'यूज़र प्रबंधन',
     analytics: 'विश्लेषण',
     // valet bookings
+    records: 'रिकॉर्ड',
     bookings: 'बुकिंग',
     calendar: 'कैलेंडर',
     calculator: 'स्टाफ कैलकुलेटर',

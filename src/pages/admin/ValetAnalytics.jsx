@@ -20,50 +20,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useColors } from '../../context/ThemeContext'
 import { useLang } from '../../context/LangContext'
-import { PROPERTIES } from '../../constants/org'
-import { Card, Button, Loader, EmptyState, inputStyle } from '../../components/common/UI'
+import { Card, Button, Loader, EmptyState } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { valetReport, allValetRecords, EXPORT_CAP } from '../../lib/valetReport'
 import { downloadCsv } from '../../lib/csv'
 import { openPrintable, esc } from '../../lib/printable'
-
-/* ------------------------------------------------------------------ dates -- */
-
-// The calendar day HERE. toISOString() answers that in UTC, and IST is far
-// enough ahead that midnight local is the previous day there — which is how
-// every period on the task analytics page once came to start a day early.
-const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-// Inclusive of both ends, because that is what the valet API takes. The task
-// analytics page uses half-open windows; do not copy that convention across.
-function periodDates(key, custom) {
-  const now = new Date()
-  const today = ymd(now)
-  const back = (n) => { const d = new Date(now); d.setDate(d.getDate() - n); return ymd(d) }
-
-  if (key === 'today') return { from: today, to: today }
-  if (key === 'week') return { from: back((now.getDay() + 6) % 7), to: today } // back to Monday
-  if (key === 'month') return { from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: today }
-  if (key === 'last_month') {
-    return {
-      from: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
-      to: ymd(new Date(now.getFullYear(), now.getMonth(), 0)), // day 0 = last day of the previous month
-    }
-  }
-  if (key === 'custom') {
-    const from = custom?.from || today
-    // Leaving "to" empty means that single day, the same as on task analytics.
-    return { from, to: custom?.to || from }
-  }
-  return { from: back(89), to: today } // 'quarter'
-}
-
-const fmtDay = (iso, hi) => {
-  if (!iso) return ''
-  const d = new Date(`${iso}T00:00:00`)
-  return d.toLocaleDateString(hi ? 'hi-IN' : 'en-GB', { day: '2-digit', month: 'short' })
-}
+import {
+  useValetScope, useMyVenues, PeriodBar, VenuePicker, ValetError, fmtDay, rangeLabel,
+  useAutoRefresh, LiveStamp,
+} from './valetScope'
 
 /* ------------------------------------------------------------- formatting -- */
 
@@ -78,64 +44,27 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
   const C = useColors()
   const { lang } = useLang()
   const hi = lang === 'hi'
-  const roomy = useMediaQuery('(min-width: 560px)')
   const wide = useMediaQuery('(min-width: 1000px)')
 
-  const [period, setPeriod] = useState('month')
-  const [customFrom, setCustomFrom] = useState(ymd(new Date()))
-  const [customTo, setCustomTo] = useState('')
+  const scope = useValetScope()
+  const { period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo,
+    propId, setPropId, props, range } = scope
+  const { myProps, nameOf } = useMyVenues({ props, scopeAll, visibleProps, propId, setPropId })
 
-  const [props, setProps] = useState(null)   // valet-side property list
-  const [propId, setPropId] = useState('')   // '' = every property combined
   const [data, setData] = useState(null)     // { summary, operators, byProperty }
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)       // ValetReportError
   const [busy, setBusy] = useState('')       // '' | 'csv' | 'pdf'
   const [note, setNote] = useState('')
-
-  const range = useMemo(
-    () => periodDates(period, { from: customFrom, to: customTo }),
-    [period, customFrom, customTo],
-  )
-
-  /* --- the valet property list, once ------------------------------------- */
-  // Their uuids differ between the valet team's dev and live projects, so they
-  // are fetched rather than hardcoded.
-  useEffect(() => {
-    let alive = true
-    valetReport('properties')
-      .then((r) => { if (alive) setProps(r.properties || []) })
-      .catch((e) => { if (alive) { setProps([]); setErr(e) } })
-    return () => { alive = false }
-  }, [])
-
-  // Valet names its venues "Ambria Pushpanjali"; ours are "Pushpanjali". Matched
-  // by name because the two projects share no ids at all.
-  const codeOf = useCallback((name) => {
-    const n = String(name || '').toLowerCase()
-    return PROPERTIES.find((p) => n.includes(p.name.toLowerCase()))?.code || null
-  }, [])
-
-  // An admin posted to one venue sees that venue. Not "all, defaulted to theirs"
-  // — the list itself is cut, so there is no combined figure to land on.
-  const myProps = useMemo(() => {
-    if (!props) return []
-    if (scopeAll) return props
-    const mine = new Set((visibleProps || []).map((p) => p.code))
-    return props.filter((p) => mine.has(codeOf(p.name)))
-  }, [props, scopeAll, visibleProps, codeOf])
-
-  // A scoped admin must never sit on the combined figure, so their first venue
-  // is selected for them as soon as the list arrives.
-  useEffect(() => {
-    if (scopeAll || !myProps.length) return
-    setPropId((cur) => (myProps.some((p) => p.id === cur) ? cur : myProps[0].id))
-  }, [scopeAll, myProps])
+  const [at, setAt] = useState(null)         // when the figures on screen were read
+  const [staleErr, setStaleErr] = useState(null)
 
   /* --- the figures -------------------------------------------------------- */
-  const load = useCallback(async () => {
-    setLoading(true)
-    setErr(null)
+  // `quiet` is the auto-refresh: same request, but it must not raise the loading
+  // flag. At a five-second interval a full-page spinner would have the screen
+  // blank more often than it is readable.
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) { setLoading(true); setErr(null) }
     try {
       const scope = { from: range.from, to: range.to, ...(propId ? { property_id: propId } : {}) }
 
@@ -159,27 +88,30 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
       }
 
       setData({ summary: s.summary || null, operators: o.operators || [], byProperty })
+      setAt(new Date())
+      setErr(null)
+      setStaleErr(null)
     } catch (e) {
-      setErr(e)
-      setData(null)
+      // A background tick that fails keeps the last good figures on screen and
+      // says so. Replacing a working page with an error card every few seconds
+      // because one round trip timed out would be worse than the staleness.
+      if (quiet) setStaleErr(e)
+      else { setErr(e); setData(null) }
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [range.from, range.to, propId])
 
   useEffect(() => { load() }, [load])
+  useAutoRefresh(() => load({ quiet: true }))
 
   const summary = data?.summary
   // Read the window back from the RESPONSE. A span over 730 days is clamped
   // rather than refused, and nothing announces it except this — echoing what we
   // sent would put a date on the report that no figure in it covers.
   const shown = summary ? { from: summary.from, to: summary.to } : range
-  const periodLabel = shown.from === shown.to
-    ? fmtDay(shown.from, hi)
-    : `${fmtDay(shown.from, hi)} – ${fmtDay(shown.to, hi)}`
-  const scopeLabel = propId
-    ? (props?.find((p) => p.id === propId)?.name || '')
-    : (hi ? 'सभी प्रॉपर्टी' : 'All properties')
+  const periodLabel = rangeLabel(shown.from, shown.to, hi)
+  const scopeLabel = propId ? nameOf(propId) : (hi ? 'सभी प्रॉपर्टी' : 'All properties')
 
   const clamped = summary && summary.from !== range.from
 
@@ -252,14 +184,6 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
 
   /* --- render ------------------------------------------------------------- */
 
-  const periods = [
-    { key: 'today', label: hi ? 'आज' : 'Today', short: hi ? 'आज' : 'Today' },
-    { key: 'week', label: hi ? 'यह हफ़्ता' : 'This Week', short: hi ? 'हफ़्ता' : 'Week' },
-    { key: 'month', label: hi ? 'यह महीना' : 'This Month', short: hi ? 'महीना' : 'Month' },
-    { key: 'last_month', label: hi ? 'पिछला महीना' : 'Last Month', short: hi ? 'पिछला' : 'Last mo' },
-    { key: 'quarter', label: hi ? '90 दिन' : 'Last 90 Days', short: hi ? '90 दिन' : '90d' },
-    { key: 'custom', label: hi ? 'तारीख़ चुनें' : 'Pick dates', short: hi ? 'तारीख़' : 'Dates' },
-  ]
 
   // A scoped admin whose venue valet does not run at all. Better said plainly
   // than left as an empty page that looks broken.
@@ -274,77 +198,16 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
 
   return (
     <div>
-      {/* period ------------------------------------------------------------ */}
-      <div className="no-bar" style={{
-        display: 'flex', gap: 2, marginBottom: 12, padding: 3,
-        background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12,
-        overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-      }}>
-        {periods.map((p) => {
-          const on = period === p.key
-          return (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              aria-pressed={on}
-              style={{
-                flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
-                padding: roomy ? '8px 16px' : '7px 5px', borderRadius: 9,
-                fontSize: roomy ? 13.5 : 11.5, fontWeight: on ? 700 : 600,
-                background: on ? C.card : 'transparent',
-                color: on ? C.maroon : C.tl,
-                border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
-              }}
-            >
-              {roomy ? p.label : p.short}
-            </button>
-          )
-        })}
-      </div>
-
-      {period === 'custom' && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
-          <div style={{ flex: '1 1 150px', minWidth: 140 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: C.tl, marginBottom: 4 }}>
-              {hi ? 'तारीख़ / से' : 'Date / from'}
-            </div>
-            <input
-              type="date" max={ymd(new Date())} value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              style={{ ...inputStyle(C), padding: '9px 11px', fontSize: 13 }}
-            />
-          </div>
-          <div style={{ flex: '1 1 150px', minWidth: 140 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: C.tl, marginBottom: 4 }}>
-              {hi ? 'तक (वैकल्पिक)' : 'To (optional)'}
-            </div>
-            <input
-              type="date" min={customFrom} max={ymd(new Date())} value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              style={{ ...inputStyle(C), padding: '9px 11px', fontSize: 13 }}
-            />
-          </div>
-          <div style={{ fontSize: 11.5, color: C.faint, flex: '1 1 190px', paddingBottom: 9, lineHeight: 1.5 }}>
-            {hi ? 'सिर्फ़ एक दिन देखना हो तो "तक" खाली छोड़ दें।' : 'Leave "to" empty to look at a single day.'}
-          </div>
-        </div>
-      )}
+      <PeriodBar
+        C={C} hi={hi}
+        period={period} setPeriod={setPeriod}
+        customFrom={customFrom} setCustomFrom={setCustomFrom}
+        customTo={customTo} setCustomTo={setCustomTo}
+      />
 
       {/* venue + the two downloads ----------------------------------------- */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        <select
-          value={propId}
-          onChange={(e) => setPropId(e.target.value)}
-          disabled={!props || (!scopeAll && myProps.length < 2)}
-          style={{ ...inputStyle(C), width: 'auto', minWidth: 180, padding: '8px 12px', fontSize: 13, borderRadius: 999 }}
-        >
-          {scopeAll && <option value="">{hi ? 'सभी प्रॉपर्टी' : 'All properties'}</option>}
-          {myProps.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}{p.is_active === false ? (hi ? ' (बंद)' : ' (closed)') : ''}
-            </option>
-          ))}
-        </select>
+        <VenuePicker C={C} hi={hi} props={props} myProps={myProps} scopeAll={scopeAll} propId={propId} setPropId={setPropId} />
 
         <span style={{ flex: 1 }} />
 
@@ -358,15 +221,13 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
           <Icon name="download" size={15} color={C.tl} style={{ marginRight: 5 }} />
           {busy === 'csv' ? (hi ? 'बन रहा है…' : 'Preparing…') : (hi ? 'गेस्ट लिस्ट (CSV)' : 'Guest list (CSV)')}
         </Button>
-        <Button variant="primary" disabled={loading} onClick={() => load()} style={{ padding: '8px 13px', fontSize: 13 }}>
-          <Icon name="refresh" size={15} color="#fff" style={{ marginRight: 5 }} />
-          {hi ? 'ताज़ा करें' : 'Refresh'}
-        </Button>
       </div>
 
       {note && (
         <div style={{ fontSize: 12.5, color: C.tl, marginBottom: 12, textAlign: 'right' }}>{note}</div>
       )}
+
+      <LiveStamp C={C} hi={hi} at={at} failed={staleErr} />
 
       {/* A range over 730 days is clamped, not refused, and only the response
           says so. Silently reporting on a window nobody asked for is worse than
@@ -382,31 +243,7 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
       )}
 
       {loading ? <Loader /> : err ? (
-        <Card>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <Icon name="warning" size={18} color={C.red} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 4 }}>
-                {err.isSetup
-                  ? (hi ? 'वैले की तरफ़ सेटअप बाकी है' : 'The valet side is not set up yet')
-                  : (hi ? 'आँकड़े नहीं आ पाए' : 'Could not load the figures')}
-              </div>
-              <div style={{ fontSize: 12.5, color: C.tl, lineHeight: 1.55 }}>{err.message}</div>
-              {/* A setup problem is not retryable, and a Retry button on one just
-                  hides the thing somebody has to go and fix. */}
-              {err.isSetup ? (
-                <div style={{ fontSize: 12, color: C.faint, marginTop: 6 }}>
-                  {hi ? `कोड ${err.code} — दोबारा कोशिश करने से ठीक नहीं होगा, वैले टीम को बताएँ।`
-                      : `Code ${err.code} — retrying will not fix this; tell the valet team.`}
-                </div>
-              ) : (
-                <Button variant="ghost" onClick={() => load()} style={{ marginTop: 10, padding: '6px 12px', fontSize: 12.5 }}>
-                  {hi ? 'दोबारा कोशिश करें' : 'Try again'}
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
+        <Card><ValetError C={C} hi={hi} err={err} /></Card>
       ) : !summary ? (
         <EmptyState icon={null} title={hi ? 'कोई आँकड़ा नहीं' : 'No figures'} />
       ) : (
