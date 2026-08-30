@@ -790,6 +790,13 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // copy nobody is assigned to yet.
       venuesAt: [...new Set(g.rows.map((r) => r.property))],
       people: [...new Set(g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to))],
+      // Rows with nobody on them. `people` filters these out, and until this was
+      // carried through, a group could hold three rows assigned to no one and
+      // the sheet would still read as fully staffed — which is how three copies
+      // of "Saturday: Sunday Readiness Check" sat unnoticed behind an identical
+      // job that WAS assigned. Two rows at one venue is normal (two guards on a
+      // round); a row with nobody on it is not.
+      unmanned: [...new Set(g.rows.filter((r) => !r.assigned_to).map((r) => r.property))],
     })))
     setLoading(false)
   }, [props])
@@ -2245,6 +2252,28 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             >
                               {names.length ? names.join(', ') : `+ ${t.assign}`}
                             </button>
+                            {/* Only when the job has people on it AND rows that
+                                have none — a job nobody is on at all already
+                                reads "+ Assign" above, and saying it twice would
+                                be noise. */}
+                            {names.length > 0 && g.unmanned?.length > 0 && (
+                              <span style={{ display: 'flex', justifyContent: 'center', marginTop: 3 }}>
+                                <span
+                                  title={lang === 'hi'
+                                    ? 'इन जगहों की एक और कॉपी है जिस पर कोई नहीं है'
+                                    : 'a second copy at these venues has nobody on it'}
+                                  style={{
+                                    fontSize: 10.5, fontWeight: 700, letterSpacing: '0.03em',
+                                    color: C.yellow, background: C.yBg,
+                                    border: `1px solid ${C.yellow}55`,
+                                    borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {lang === 'hi' ? 'बिना किसी के: ' : 'nobody on: '}
+                                  {g.unmanned.map((c) => propName(c, lang)).join(', ')}
+                                </span>
+                              </span>
+                            )}
                             {/* A pill, so it does not read as one more name on
                                 the end of the list. */}
                             {g.staffing && (

@@ -163,6 +163,36 @@ export function inputStyle(C) {
   }
 }
 
+// A whole-number field that does not keep its zero.
+//
+// Two separate things put a leading zero on screen, and both need this:
+//
+//   * Where the handler coerces to Number, React refuses to correct the DOM.
+//     It compares the node's text with the new value LOOSELY, and `"01" != 1`
+//     is false in JavaScript, so it decides nothing changed. State says 1, the
+//     box says 01, and nothing you type fixes it.
+//   * Where the handler keeps the raw string, "01" simply IS the state.
+//
+// Select-on-focus stops it forming — typing replaces the 0 rather than landing
+// after it — and the strip guarantees it cannot survive if it does form.
+//
+// Deliberately only for WHOLE numbers. The strip requires a digit after the
+// zeros, so "0.5" is left alone, but a decimal field wants its own treatment
+// rather than this one.
+export const wholeNumberField = (onValue) => ({
+  type: 'number',
+  min: 0,
+  inputMode: 'numeric',
+  onFocus: (e) => e.target.select(),
+  onChange: (e) => {
+    const clean = e.target.value.replace(/^0+(?=\d)/, '')
+    // Written back to the node, not left to React — React is exactly what does
+    // not correct it here.
+    if (clean !== e.target.value) e.target.value = clean
+    onValue(clean)
+  },
+})
+
 // A filter is not a form field. The standard input above is 15px text in 11px
 // of padding, sized for something you type into; a row of filters wants to sit
 // quietly above the thing it filters. Oval to say so — nothing here is typed,

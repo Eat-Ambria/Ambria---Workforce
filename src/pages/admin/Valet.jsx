@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
 import { typedPhone } from '../../lib/phone'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
-import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, filterStyle, FilterField, Spinner } from '../../components/common/UI'
+import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, filterStyle, FilterField, Spinner, wholeNumberField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
@@ -27,6 +27,23 @@ const weekdays = (lang) => (lang === 'hi' ? WEEKDAYS_HI : WEEKDAYS)
 // digits only; '' stays '' so the field can be cleared
 const digitsOnly = (v) => (v == null ? '' : String(v).replace(/\D/g, ''))
 const overGuestLimit = (v) => Number(v) > MAX_GUESTS
+
+// A heavy date puts two more drivers on. Drivers, because the pinch on a busy
+// night is cars moving — a second key man or guard does not clear a queue at the
+// gate.
+//
+// Applied to the MATRIX result, not to a manual override: an override is the
+// admin stating the exact numbers, and quietly adding two to what they typed
+// would make their own figure wrong.
+const HEAVY_ROLE = 'Driver'
+const HEAVY_EXTRA = 2
+const withHeavy = (breakdown, heavy) => {
+  if (!heavy || !breakdown) return breakdown
+  // Only where that role exists. Restro and Janakpuri run no Rider; if a venue
+  // ever runs no Driver this must add nothing rather than invent a role.
+  if (!breakdown.some((b) => b.role === HEAVY_ROLE)) return breakdown
+  return breakdown.map((b) => (b.role === HEAVY_ROLE ? { ...b, count: b.count + HEAVY_EXTRA } : b))
+}
 
 const pad = (n) => String(n).padStart(2, '0')
 const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}` // m is 0-based
@@ -600,6 +617,10 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
   const [err, setErr] = useState('')
   const [editStaff, setEditStaff] = useState(false)
   const [manual, setManual] = useState(null) // admin override [{role,count}]; null = use matrix
+  // A fact about the DATE, not about the staffing — a wedding night against a
+  // quiet weekday. Stored on the booking so reopening it does not silently drop
+  // the two extra drivers on the next save.
+  const [heavy, setHeavy] = useState(() => !!editing?.heavy_date)
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   const bookedCodes = bookedOn(form.event_date)
@@ -617,10 +638,16 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
   }
 
   const alloc = form.guests && !noneAvailable && !guestsOver ? allocateValet(form.property, form.guests, matrix) : null
+  // What the matrix says for this many guests, before the heavy-date uplift —
+  // kept so the note below can show the two numbers rather than just the total.
+  const baseDrivers = alloc?.breakdown?.find((b) => b.role === HEAVY_ROLE)?.count
+  const autoBreakdown = withHeavy(alloc ? alloc.breakdown : null, heavy)
   // effective staffing = admin override if set, else the matrix result
-  const effBreakdown = manual || (alloc ? alloc.breakdown : null)
+  const effBreakdown = manual || autoBreakdown
   const effTotal = effBreakdown ? effBreakdown.reduce((s, x) => s + (Number(x.count) || 0), 0) : null
 
+  // Seeded from the EFFECTIVE numbers, so a heavy date's two extra drivers are
+  // already in the boxes when the admin starts editing rather than being lost.
   const startEdit = () => { if (!manual) setManual((effBreakdown || []).map((x) => ({ ...x }))); setEditStaff(true) }
   const setRoleCount = (i, v) => setManual((m) => (m || []).map((x, idx) => (idx === i ? { ...x, count: Math.max(0, Math.floor(Number(v) || 0)) } : x)))
   const useAuto = () => { setManual(null); setEditStaff(false) }
@@ -657,6 +684,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
       guests: Number(form.guests) || 0,
       staff_total: effTotal,
       staff_breakdown: effBreakdown,
+      heavy_date: heavy,
       notes: form.notes || null,
     }
     const { error } = editing
@@ -757,14 +785,43 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
             )}
           </div>
 
+          {/* What kind of night this is. Two named choices rather than an
+              unlabelled switch: "heavy" alone does not say what the other
+              position means, and this one changes the staffing below it. */}
+          <div style={{ display: 'flex', gap: 3, padding: 3, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, marginBottom: 12 }}>
+            {[
+              { key: false, label: lang === 'hi' ? 'सामान्य तारीख़' : 'Light date' },
+              { key: true, label: lang === 'hi' ? 'भारी तारीख़' : 'Heavy date' },
+            ].map((o) => {
+              const on = heavy === o.key
+              return (
+                <button
+                  key={String(o.key)}
+                  type="button"
+                  onClick={() => setHeavy(o.key)}
+                  aria-pressed={on}
+                  style={{
+                    flex: 1, padding: '7px 10px', borderRadius: 999, whiteSpace: 'nowrap',
+                    fontSize: 12.5, fontWeight: on ? 700 : 600,
+                    background: on ? C.brandBg : 'transparent',
+                    color: on ? '#fff' : C.tl,
+                    border: 'none', cursor: 'pointer',
+                  }}
+                >
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
+
           {editStaff ? (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 10, marginBottom: 12 }}>
                 {(manual || []).map((x, i) => (
                   <div key={x.role} style={{ background: C.bg, borderRadius: 10, padding: 10, textAlign: 'center' }}>
                     <input
-                      type="number" min={0} value={x.count}
-                      onChange={(e) => setRoleCount(i, e.target.value)}
+                      {...wholeNumberField((v) => setRoleCount(i, v))}
+                      value={x.count}
                       style={{ ...inputStyle(C), textAlign: 'center', fontSize: 20, fontWeight: 800, padding: '6px 4px' }}
                     />
                     <div style={{ fontSize: 13, color: C.tl, fontWeight: 600, marginTop: 6 }}>{x.role}</div>
@@ -778,6 +835,33 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
             </>
           ) : (
             <StaffBreakdown C={C} result={{ breakdown: effBreakdown || [], total: effTotal ?? 0 }} />
+          )}
+
+          {/* Why the number moved. A count that changes when you press a button
+              and does not say why is a count nobody trusts. */}
+          {heavy && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 10,
+              fontSize: 11.5, lineHeight: 1.5,
+              color: manual ? C.faint : C.tl,
+              background: manual ? 'transparent' : C.yBg,
+              border: `1px solid ${manual ? 'transparent' : `${C.yellow}55`}`,
+              borderRadius: 10, padding: manual ? 0 : '8px 10px',
+            }}>
+              <Icon name="info" size={13} color={manual ? C.faint : C.yellow} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                {manual
+                  // The admin has typed their own numbers, so nothing is being
+                  // added on top — saying "+2 added" here would be a lie about
+                  // the figures on screen.
+                  ? (lang === 'hi'
+                    ? 'भारी तारीख़ चुनी है, पर स्टाफ़ आपने खुद भरा है — ऊपर से कुछ नहीं जोड़ा जा रहा।'
+                    : 'Heavy date is on, but these are your own numbers — nothing is being added on top.')
+                  : (lang === 'hi'
+                    ? `भारी तारीख़ — ${HEAVY_EXTRA} ड्राइवर ज़्यादा${baseDrivers != null ? ` (${baseDrivers} की जगह ${baseDrivers + HEAVY_EXTRA})` : ''}`
+                    : `Heavy date — ${HEAVY_EXTRA} extra drivers${baseDrivers != null ? ` (${baseDrivers} becomes ${baseDrivers + HEAVY_EXTRA})` : ''}`)}
+              </span>
+            </div>
           )}
 
           {manual && !editStaff && (
@@ -1127,9 +1211,9 @@ function MatrixEditor({ C, t, property, matrix, onSaved, onCancel }) {
           {/* rows */}
           {tiers.map((tr, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, marginBottom: 8, alignItems: 'center' }}>
-              <input type="number" min={0} value={tr.max} onChange={(e) => setMax(i, e.target.value)} style={{ ...inputStyle(C), padding: '8px 8px', textAlign: 'center' }} />
+              <input {...wholeNumberField((v) => setMax(i, v))} value={tr.max} style={{ ...inputStyle(C), padding: '8px 8px', textAlign: 'center' }} />
               {roles.map((r, j) => (
-                <input key={r} type="number" min={0} value={tr.values[j]} onChange={(e) => setVal(i, j, e.target.value)} style={{ ...inputStyle(C), padding: '8px 6px', textAlign: 'center' }} />
+                <input key={r} {...wholeNumberField((v) => setVal(i, j, v))} value={tr.values[j]} style={{ ...inputStyle(C), padding: '8px 6px', textAlign: 'center' }} />
               ))}
               <button onClick={() => removeTier(i)} style={{ background: 'transparent', color: C.red }} aria-label={t.delete}>
                 <Icon name="trash" size={16} color={C.red} />
