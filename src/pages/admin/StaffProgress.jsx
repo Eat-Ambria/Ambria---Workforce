@@ -4,7 +4,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
   TASK_STATUS, DEPARTMENT_MAP, deptName, personName, isDueToday, taskFrequency,
-  frequencyLabel, FREQUENCY_MAP,
+  frequencyLabel, FREQUENCY_MAP, PROPERTIES, propName,
 } from '../../constants/org'
 import { Card, ProgressBar, Loader, EmptyState } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
@@ -191,8 +191,12 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                       {frequencyLabel(band, lang)}
                       <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
                     </div>
-                    {tasks.map((task) => (
-                      <TaskLine key={task.id} C={C} t={t} lang={lang} task={task} onOpen={onOpenTask} />
+                    {groupByJob(tasks).map(({ key, rows }) => (
+                      rows.length === 1
+                        // A grouped line for a job that exists once would be a
+                        // heading and one chip where a line already says it.
+                        ? <TaskLine key={rows[0].id} C={C} t={t} lang={lang} task={rows[0]} onOpen={onOpenTask} />
+                        : <TaskLineGroup key={key} C={C} t={t} lang={lang} rows={rows} onOpen={onOpenTask} />
                     ))}
                   </div>
                 ))}
@@ -299,6 +303,116 @@ function groupByBand(tasks) {
       band,
       tasks: by.get(band).sort((a, b) => (a.time_block || 'zz').localeCompare(b.time_block || 'zz')),
     }))
+}
+
+// The same job at several venues is one job. Vipul's fourteen lines are six
+// pieces of work: two of them exist at all five venues, and the list repeated
+// each one five times with only the venue differing — which the line did not
+// even show, so the five reads as the same row printed five times.
+//
+// Keyed on title and time window. Frequency is not in the key because the band
+// above already IS the frequency, and property is deliberately out of it —
+// that is the thing being collapsed.
+//
+// PROPERTIES order rather than the order they arrive in, so a venue turning
+// green never moves the chips around under the reader.
+const propRank = (code) => {
+  const i = PROPERTIES.findIndex((p) => p.code === code)
+  return i === -1 ? PROPERTIES.length : i
+}
+function groupByJob(tasks) {
+  const by = new Map()
+  const order = []
+  for (const task of tasks || []) {
+    const key = `${(task.title || '').trim().toLowerCase()}|${(task.time_block || '').trim().toLowerCase()}`
+    if (!by.has(key)) { by.set(key, []); order.push(key) }
+    by.get(key).push(task)
+  }
+  // A group takes the position of its first member, so the band's existing
+  // sort by time survives the grouping.
+  return order.map((key) => ({
+    key,
+    rows: by.get(key).sort((a, b) => propRank(a.property) - propRank(b.property)),
+  }))
+}
+
+// One job, several venues: the title and its time stated once, then a chip per
+// venue carrying that venue's own state and its own way in.
+function TaskLineGroup({ C, t, lang, rows, onOpen }) {
+  const first = rows[0]
+  const done = rows.filter((r) => r.status === TASK_STATUS.COMPLETED).length
+  const doing = rows.some((r) => r.status === TASK_STATUS.IN_PROGRESS)
+  const allDone = done === rows.length
+  const tone = allDone ? C.green : doing ? C.yellow : C.tl
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.45 }}>
+      {/* The same three icons a single line uses, read across the set: every
+          venue done, someone mid-job, or nothing started. */}
+      <span style={{ marginTop: 1, flexShrink: 0 }}>
+        <Icon name={allDone ? 'check' : doing ? 'clock' : 'inbox'} size={16} color={tone} />
+      </span>
+
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: allDone ? C.tl : C.text, textDecoration: allDone ? 'line-through' : 'none' }}>
+            {lang === 'hi' && first.title_hi ? first.title_hi : first.title}
+          </span>
+          {/* How far through the set, before reading which venues. */}
+          <span style={{
+            fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
+            color: allDone ? C.green : C.tl, fontVariantNumeric: 'tabular-nums',
+          }}>
+            {done}/{rows.length}
+          </span>
+        </span>
+
+        {first.time_block && (
+          <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: C.tl }}>
+            {first.time_block}
+          </span>
+        )}
+
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+          {rows.map((task) => {
+            const isDone = task.status === TASK_STATUS.COMPLETED
+            const isDoing = task.status === TASK_STATUS.IN_PROGRESS
+            const ink = isDone ? C.green : isDoing ? C.yellow : C.tl
+            return (
+              <button
+                key={task.id}
+                type="button"
+                onClick={onOpen ? (e) => { e.stopPropagation(); onOpen(task) } : undefined}
+                disabled={!onOpen}
+                title={`${propName(task.property, lang)} · ${isDone ? t.completed : isDoing ? t.inProgress : t.pending}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px 3px 5px', borderRadius: 999,
+                  background: isDone ? `${C.green}14` : 'transparent',
+                  border: `1px solid ${isDone ? C.green : isDoing ? `${C.yellow}88` : C.border}`,
+                  cursor: onOpen ? 'pointer' : 'default', whiteSpace: 'nowrap',
+                }}
+              >
+                {/* Filled once that venue is done, hollow while it is not —
+                    the eye finds the ones that are NOT ticked. */}
+                <span style={{
+                  width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                  display: 'grid', placeItems: 'center',
+                  background: isDone ? C.green : 'transparent',
+                  border: `1.5px solid ${isDone ? C.green : isDoing ? C.yellow : C.borderStrong}`,
+                }}>
+                  {isDone && <Icon name="check" size={9} color="#fff" />}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: ink }}>
+                  {propName(task.property, lang)}
+                </span>
+              </button>
+            )
+          })}
+        </span>
+      </span>
+    </div>
+  )
 }
 
 // One job, and whether it is done. A tick beats the word "completed" repeated

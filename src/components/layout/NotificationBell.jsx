@@ -5,7 +5,21 @@ import { pendingNotification } from '../../lib/pendingNotification'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useNotifications } from '../../hooks/useNotifications'
+import { propName } from '../../constants/org'
 import Icon from '../common/Icon'
+
+// Which venue this is about. Seven job titles in this database have been
+// notified from more than one venue — "Vendor Coordination Calls and
+// coordination" from all five — so without it the list shows the same sentence
+// five times over with nothing to tell them apart.
+//
+// Not for the daily digest: that is a count across whatever the person has on
+// today, so naming one venue would be a claim about the whole number.
+function venueOf(n, lang) {
+  if (n.type === 'task_due' && !n.entity_id) return ''
+  if (!n.property || n.property === 'all') return ''
+  return propName(n.property, lang)
+}
 
 // short relative time, e.g. "now", "5m", "3h", "2d"
 function ago(iso, hi) {
@@ -193,6 +207,7 @@ export default function NotificationBell() {
             ) : (
               items.map((n) => {
                 const m = meta(n, hi)
+                const venue = venueOf(n, lang)
                 return (
                   <button
                     key={n.id}
@@ -207,7 +222,30 @@ export default function NotificationBell() {
                         <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, flex: 1 }}>{m.title}</span>
                         <span style={{ fontSize: 11, color: C.faint, flexShrink: 0 }}>{ago(n.created_at, hi)}</span>
                       </div>
-                      {m.body && <div style={{ fontSize: 12.5, color: C.tl, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.body}</div>}
+                      {/* The venue is its own tag rather than words joined onto
+                          the front of the body: this line truncates, and a tag
+                          that cannot be eaten by a long task title is the point
+                          of putting it here. */}
+                      {(m.body || venue) && (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 3, minWidth: 0 }}>
+                          {venue && (
+                            <span style={{
+                              flexShrink: 0, fontSize: 10, fontWeight: 800,
+                              letterSpacing: '0.03em', textTransform: 'uppercase',
+                              color: C.maroon, background: C.maroonSoft,
+                              border: `1px solid ${C.border}`,
+                              borderRadius: 999, padding: '1px 7px',
+                            }}>
+                              {venue}
+                            </span>
+                          )}
+                          {m.body && (
+                            <span style={{ fontSize: 12.5, color: C.tl, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {m.body}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.brandBg, flexShrink: 0, marginTop: 6 }} />}
                   </button>

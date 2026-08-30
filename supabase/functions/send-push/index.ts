@@ -19,6 +19,28 @@ import webpush from 'npm:web-push@3.6.7'
 
 const BASE = '/Ambria---Workforce/' // must match the frontend `base` in vite.config.js
 
+// Venue names. A copy of PROPERTIES in src/constants/org.js, because this runs
+// on Deno and cannot import from the app — keep the two in step when a venue is
+// added. An unknown code falls back to the code itself rather than vanishing.
+const VENUES: Record<string, [string, string]> = {
+  pp: ['Pushpanjali', 'पुष्पांजलि'],
+  ex: ['Exotica', 'एक्सोटिका'],
+  mk: ['Manaktala', 'मनकतला'],
+  rs: ['Restro', 'रेस्ट्रो'],
+  jp: ['Janakpuri', 'जनकपुरी'],
+}
+// FIRST in the body, not appended. Seven job titles in this database have
+// already been notified from more than one venue — "Vendor Coordination Calls
+// and coordination" has fired from all five — so five identical banners stack
+// up and the venue is the only thing telling them apart. An OS banner truncates
+// its tail, so the part that differs has to lead.
+const venuePrefix = (code: unknown, hi: boolean) => {
+  const c = typeof code === 'string' ? code : ''
+  if (!c || c === 'all') return ''
+  const v = VENUES[c]
+  return `${v ? (hi ? v[1] : v[0]) : c} · `
+}
+
 // Map a notification row -> the title / body / deep-link shown in the OS banner,
 // localized to the recipient's language (`lang` = 'hi' | 'en').
 function render(n: Record<string, unknown>, lang: string) {
@@ -52,6 +74,9 @@ function render(n: Record<string, unknown>, lang: string) {
   // daily due digest: one row for the whole day whose task_text is the count and
   // which points at no single task (see db/migrations/SUPABASE-MIGRATION-DUE-DIGEST.sql)
   if (n.type === 'task_due' && !n.entity_id) {
+    // No venue on this one: a digest is a count across whatever the person has
+    // on today, so naming one venue in front of it would be a claim about the
+    // whole number that is not true.
     return {
       title: hi ? 'टास्क की समय-सीमा' : 'Task due / overdue',
       body: hi ? `${item} टास्क आज ड्यू हैं` : `${item} tasks due today`,
@@ -68,7 +93,12 @@ function render(n: Record<string, unknown>, lang: string) {
   // request rather than the page it lives on. The app reads ?n= on arrival, and
   // the service worker hands the same url to an already-open window.
   const url = BASE + path + (n.id ? `?n=${n.id}` : '')
-  return { title, body: item + (needsWho ? who : ''), url, tag: `${n.type}-${n.entity_id ?? ''}` }
+  return {
+    title,
+    body: venuePrefix(n.property, hi) + item + (needsWho ? who : ''),
+    url,
+    tag: `${n.type}-${n.entity_id ?? ''}`,
+  }
 }
 
 Deno.serve(async (req) => {
