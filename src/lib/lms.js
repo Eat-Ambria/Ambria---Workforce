@@ -72,6 +72,11 @@ function pick(obj, ...suffixes) {
   return undefined
 }
 
+// The whole original row used to ride along on every contract as `raw`. Nothing
+// in the app ever read it, and it was 92% of the payload — 2.18 MB against the
+// 176 KB the named fields come to. Add a named field here instead of putting it
+// back; a cache cannot hold 2 MB and this is what made one possible.
+
 // pull the array out of the response envelope (leadinfo / Contractinfo / etc.)
 function asArray(res) {
   if (Array.isArray(res)) return res
@@ -109,7 +114,6 @@ function normEvent(row) {
     functionType: fnType(pick(row, 'function_type')),
     guests: pick(row, 'pax_no', 'no_of_pax'),
     cancelled: !!pick(row, 'cancel_remarks'),
-    raw: row,
   }
 }
 
@@ -131,7 +135,6 @@ function normContract(row) {
     location: pick(row, 'location_name', 'location'),
     status: pick(row, 'status'),
     cancelled: !!pick(row, 'cancel_remarks'),
-    raw: row,
   }
 }
 
@@ -144,10 +147,93 @@ export async function lmsVenueEvents(body = {}) {
 // venue contracts — CONFIRMED events with venue/date/time/pax/amount.
 // Every page by default; pass { paginate: false } for the raw first page (10
 // rows) when debugging.
-export async function lmsVenueContracts(body = {}, { paginate = true } = {}) {
+// --- the contract cache -----------------------------------------------------
+//
+// This one call is 88 pages, 2.2 MB and about twelve seconds, and the valet
+// calendar makes it on every mount — so walking away from the page and coming
+// back means watching the spinner again for work that was already done.
+//
+// Three layers, each covering what the one before cannot:
+//
+//   * an in-flight promise, so two mounts in the same tick make ONE request
+//     rather than two twelve-second ones racing each other;
+//   * memory, so moving around the app is instant;
+//   * localStorage, so a reload or a PWA relaunch is instant too — which is the
+//     common case on a phone, where the app gets killed between uses.
+//
+// Stale-while-revalidate rather than a hard expiry: past the TTL the cached
+// contracts are still handed back immediately and a refresh runs behind them,
+// because a twelve-second wait for figures that are ten minutes old helps
+// nobody. The caller gets the new rows through `onFresh` when they land.
+const CONTRACTS_TTL_MS = 10 * 60 * 1000
+const CONTRACTS_KEY = 'ambria.lms.contracts.v1'
+
+let contractsMemo = null   // { at, rows }
+let contractsInFlight = null
+
+// Every storage call is guarded: a private window throws on access rather than
+// returning empty, and a cache is never worth taking the page down for.
+const readStore = () => {
+  try {
+    const raw = localStorage.getItem(CONTRACTS_KEY)
+    const v = raw ? JSON.parse(raw) : null
+    return v && Array.isArray(v.rows) ? v : null
+  } catch { return null }
+}
+const writeStore = (v) => {
+  try { localStorage.setItem(CONTRACTS_KEY, JSON.stringify(v)) } catch { /* full or blocked */ }
+}
+
+export function clearLmsCache() {
+  contractsMemo = null
+  try { localStorage.removeItem(CONTRACTS_KEY) } catch { /* ignore */ }
+}
+
+async function fetchContracts(body, paginate) {
   const res = await lmsCall('/api/v1/processerp_api/get_venue_contract_information_list', body, paginate)
   return asArray(res)
     .map(normContract)
     .filter((c) => !c.cancelled)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+}
+
+/**
+ * Confirmed venue events.
+ *
+ * @param body      LMS filters. Anything non-empty bypasses the cache entirely —
+ *                  a filtered result must never be served as the full list.
+ * @param onFresh   called with newer rows if the cache was stale and a
+ *                  background refresh brought something back.
+ */
+export async function lmsVenueContracts(body = {}, { paginate = true, onFresh } = {}) {
+  const cacheable = paginate && Object.keys(body).length === 0
+  if (!cacheable) return fetchContracts(body, paginate)
+
+  const load = () => {
+    // One request, however many callers. Cleared in a finally so a failure does
+    // not leave every later call awaiting a promise that already rejected.
+    if (!contractsInFlight) {
+      contractsInFlight = fetchContracts(body, paginate)
+        .then((rows) => {
+          contractsMemo = { at: Date.now(), rows }
+          writeStore(contractsMemo)
+          return rows
+        })
+        .finally(() => { contractsInFlight = null })
+    }
+    return contractsInFlight
+  }
+
+  const cached = contractsMemo || readStore()
+  if (cached?.rows?.length) {
+    contractsMemo = cached
+    if (Date.now() - cached.at < CONTRACTS_TTL_MS) return cached.rows
+    // Stale: hand back what we have now, and let the refresh catch up behind it.
+    // The rejection is swallowed on purpose — the caller already has usable
+    // rows, and an unhandled rejection over a background refresh is noise.
+    if (onFresh) load().then((rows) => onFresh(rows)).catch(() => {})
+    return cached.rows
+  }
+
+  return load()
 }

@@ -114,7 +114,11 @@ export default function Valet() {
   const [lmsLoading, setLmsLoading] = useState(true)
   useEffect(() => {
     let alive = true
-    lmsVenueContracts()
+    // Cached in lms.js — this is 88 pages and about twelve seconds cold, so the
+    // second visit to this page should not pay for it again. `onFresh` is the
+    // other half: past the cache's TTL the stale contracts arrive instantly and
+    // the newer ones replace them here when the background refresh lands.
+    lmsVenueContracts({}, { onFresh: (rows) => { if (alive) setLms(rows) } })
       .then((rows) => { if (alive) setLms(rows) })
       .catch((e) => { if (alive) setLmsError(e.message || 'Could not reach LMS') })
       .finally(() => { if (alive) setLmsLoading(false) })
