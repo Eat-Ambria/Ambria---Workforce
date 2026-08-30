@@ -320,21 +320,49 @@ const propRank = (code) => {
   const i = PROPERTIES.findIndex((p) => p.code === code)
   return i === -1 ? PROPERTIES.length : i
 }
+// time_block is free text, and not all of it is a time. "As needed" means the
+// job has no window — the same thing an empty one means — so the two must key
+// alike. They did not, and it split Vicky Arya's "Villa Guest/Booking
+// Coordination" into two entries on the same screen: two venues in one, the
+// third on its own line, one job appearing twice.
+//
+// A window has digits in it. Every one of the twenty in this database does, and
+// "As needed" is the only value that does not.
+const windowKey = (tb) => {
+  const s = (tb || '').trim().toLowerCase()
+  return /\d/.test(s) ? s : ''
+}
+
 function groupByJob(tasks) {
   const by = new Map()
   const order = []
   for (const task of tasks || []) {
-    const key = `${(task.title || '').trim().toLowerCase()}|${(task.time_block || '').trim().toLowerCase()}`
+    const key = `${(task.title || '').trim().toLowerCase()}|${windowKey(task.time_block)}`
     if (!by.has(key)) { by.set(key, []); order.push(key) }
     by.get(key).push(task)
   }
-  // A group takes the position of its first member, so the band's existing
-  // sort by time survives the grouping.
-  return order.map((key) => ({
-    key,
-    rows: by.get(key).sort((a, b) => propRank(a.property) - propRank(b.property)),
-  }))
+  return order
+    .map((key, seq) => {
+      const rows = by.get(key).sort((a, b) => propRank(a.property) - propRank(b.property))
+      return {
+        key,
+        rows,
+        // A group is finished only when every venue is. A 3/5 still has work in
+        // it and belongs with the work.
+        finished: rows.every((r) => r.status === TASK_STATUS.COMPLETED),
+        seq,
+      }
+    })
+    // Done at the bottom. What is left is what the reader is here for, and a
+    // struck-through line in the middle of the list is something the eye has to
+    // step over on the way to the next real one.
+    //
+    // `seq` breaks the tie, so within each half the band's existing sort by time
+    // survives — a group holds the position of its first member.
+    .sort((a, b) => (Number(a.finished) - Number(b.finished)) || (a.seq - b.seq))
 }
+
+const timeOf = (rows) => (rows.find((r) => (r.time_block || '').trim()) || {}).time_block || ''
 
 // One job, several venues: the title and its time stated once, then a chip per
 // venue carrying that venue's own state and its own way in.
@@ -367,9 +395,13 @@ function TaskLineGroup({ C, t, lang, rows, onOpen }) {
           </span>
         </span>
 
-        {first.time_block && (
+        {/* Not first.time_block: the rows are ordered by venue, so the first one
+            may be the one with no window while another says "As needed" — which
+            is worth keeping rather than dropping because of chip order. Two
+            different real windows cannot be here; that would be two groups. */}
+        {timeOf(rows) && (
           <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: C.tl }}>
-            {first.time_block}
+            {timeOf(rows)}
           </span>
         )}
 
