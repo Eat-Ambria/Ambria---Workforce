@@ -16,6 +16,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useColors } from '../../context/ThemeContext'
 import { useLang } from '../../context/LangContext'
+import { useAuth } from '../../context/AuthContext'
+import { canSeeGuestPhone } from '../../constants/org'
 import { Card, Button, Loader, EmptyState, inputStyle } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -74,6 +76,11 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
   const { lang } = useLang()
   const hi = lang === 'hi'
   const wide = useMediaQuery('(min-width: 900px)')
+  const { user } = useAuth()
+  // The valet team gets no guest phone numbers — not in the table, and not in
+  // the file either. Hiding the column on screen while the export still carried
+  // it would be the rule in name only.
+  const showPhone = canSeeGuestPhone(user?.role)
 
   const scope = useValetScope()
   const { period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo,
@@ -170,7 +177,9 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
         [
           { key: 'name', label: hi ? 'मेहमान का नाम' : 'Guest name' },
           { key: 'tier', label: hi ? 'गाड़ी की श्रेणी' : 'Car tier' },
-          { key: 'phone', label: hi ? 'नंबर' : 'Number', text: true },
+          // Dropped entirely for the valet team, not blanked: an empty column
+          // headed "Number" invites somebody to go looking for why.
+          ...(showPhone ? [{ key: 'phone', label: hi ? 'नंबर' : 'Number', text: true }] : []),
         ],
         all.map((r) => ({ name: r.guest_name ?? '', tier: r.car_tier ?? '', phone: r.guest_phone ?? '' })),
       )
@@ -248,6 +257,8 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
             ? (hi ? `"${query}" से कुछ नहीं मिला` : `Nothing matches "${query}"`)
             : (hi ? 'इन तारीख़ों में कोई गाड़ी नहीं' : 'No cars in these dates')}
           hint={query
+            // Searching BY a phone still works for everyone — the API matches on
+            // it. Only reading one back is restricted, so the hint stays true.
             ? (hi ? 'नाम, फ़ोन, गाड़ी नंबर या टोकन से खोजें।' : 'Search by name, phone, car number or token.')
             : `${rangeLabel(range.from, range.to, hi)} · ${scopeLabel}`}
         />
@@ -265,7 +276,7 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
               <div style={{ minWidth: wide ? 940 : 820 }}>
                 <Head C={C} hi={hi} showVenue={showVenue} />
                 {rows.map((r) => (
-                  <Row key={r.id} C={C} hi={hi} r={r} showVenue={showVenue} />
+                  <Row key={r.id} C={C} hi={hi} r={r} showVenue={showVenue} showPhone={showPhone} />
                 ))}
               </div>
             </div>
@@ -334,7 +345,7 @@ function Head({ C, hi, showVenue }) {
   )
 }
 
-function Row({ C, hi, r, showVenue }) {
+function Row({ C, hi, r, showVenue, showPhone }) {
   // Read defensively: a valet deployment without migration 0044 omits these two
   // keys entirely rather than sending null, and `undefined` down this path would
   // take the table with it.
@@ -357,7 +368,7 @@ function Row({ C, hi, r, showVenue }) {
         <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {r.guest_name || '—'}
         </span>
-        {r.guest_phone && (
+        {showPhone && r.guest_phone && (
           <span style={{ display: 'block', fontSize: 11.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
             {r.guest_phone}
           </span>

@@ -112,11 +112,31 @@ export const ROLES = {
   SUPER_ADMIN: 'sa',
   ADMIN: 'a',
   EMPLOYEE: 'e',
+  // The valet team. Not an admin: they get the whole Valet page and nothing
+  // else, so isAdminRole must stay false for them — that one function gates
+  // /tasks, /vendors and a great many in-page permissions.
+  VALET: 'v',
 }
 
 export const isAdminRole = (role) => role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
 export const isSuperAdmin = (role) => role === ROLES.SUPER_ADMIN
 export const isEmployee = (role) => role === ROLES.EMPLOYEE
+export const isValetRole = (role) => role === ROLES.VALET
+// Who may open the Valet page at all.
+export const canSeeValet = (role) => isAdminRole(role) || isValetRole(role)
+
+// Guests' phone numbers. The valet team runs the operation without needing to
+// reach the guest, so they do not get the number — on screen, in the printed
+// sheet, or in the exported guest list. One predicate rather than a check at
+// each of the six places it is rendered, because the sixth is the one that gets
+// forgotten.
+export const canSeeGuestPhone = (role) => !isValetRole(role)
+
+// Where a role belongs when it lands with no route of its own — after login, and
+// wherever a blocked route redirects. Named once, because /dashboard as a
+// hardcoded fallback is what would drop a valet user on a page built for
+// somebody else and then bounce them straight back out of it.
+export const homeFor = (role) => (isValetRole(role) ? '/valet' : '/dashboard')
 
 // --- Access scope -----------------------------------------------------------
 // Only the Super Admin and these named admins may see EVERY property.
@@ -130,8 +150,19 @@ export const DEPARTMENT_LOCKED_ADMINS = { sandeep: 's' }
 const uname = (user) => (user?.username || '').trim().toLowerCase()
 
 // True when the user should see data across ALL properties.
+//
+// The valet team's scope follows its own `property` field, which nothing else
+// here does — for an admin, `property: 'all'` deliberately does NOT grant
+// cross-venue access; only the named admins above get that. Four admins are on
+// 'all' without being named, and honouring the field for everyone would widen
+// their access silently, so the clause is scoped to the one role.
+//
+// Without it a valet user set to All Properties saw nothing at all: visibleProps
+// filtered PROPERTIES down to a code called 'all' that does not exist, and the
+// bookings query asked for property = 'all'.
 export const canSeeAllProperties = (user) =>
   isSuperAdmin(user?.role) ||
+  (isValetRole(user?.role) && user?.property === 'all') ||
   (isAdminRole(user?.role) && ALL_PROPERTY_ADMINS.includes(uname(user)))
 
 // The single property this user is locked to, or null when they see all.
@@ -160,7 +191,7 @@ export const scopedDepartment = (user) =>
 // Work (tasks + repair requests) can be handed to staff AND to fellow admins —
 // department heads and admins do fieldwork too. Super admins are included so
 // work can be handed "up", and so an admin can assign something to themselves.
-export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.SUPER_ADMIN]
+export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.VALET, ROLES.SUPER_ADMIN]
 
 // Whose output Analytics reports on. Admins are in: they are given tasks and
 // they close repairs, so leaving them out under-reported the venue. The super
@@ -179,6 +210,7 @@ export const memberInProperty = (member, property) =>
 export const roleTag = (role, lang) => {
   if (role === ROLES.SUPER_ADMIN) return lang === 'hi' ? 'सुपर एडमिन' : 'Super Admin'
   if (role === ROLES.ADMIN) return lang === 'hi' ? 'एडमिन' : 'Admin'
+  if (role === ROLES.VALET) return lang === 'hi' ? 'वैले' : 'Valet'
   return ''
 }
 

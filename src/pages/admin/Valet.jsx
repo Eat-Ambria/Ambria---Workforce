@@ -5,7 +5,7 @@ import { useColors, useTheme } from '../../context/ThemeContext'
 import { esc } from '../../lib/printable'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties, canSeeGuestPhone } from '../../constants/org'
 import { typedPhone } from '../../lib/phone'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
 import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, filterStyle, FilterField, Spinner, wholeNumberField } from '../../components/common/UI'
@@ -235,7 +235,7 @@ export default function Valet() {
         confirm({ message: t.noBookings, danger: false, hideCancel: true, confirmLabel: t.ok })
         return
       }
-      if (!exportBookingsPdf(sections, lang)) {
+      if (!exportBookingsPdf(sections, lang, canSeeGuestPhone(user?.role))) {
         confirm({ message: t.popupBlocked, danger: false, hideCancel: true, confirmLabel: t.ok })
       }
     } finally {
@@ -643,6 +643,11 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, sco
 
 /* ---- LMS confirmed venue events + contract details for one date ---- */
 function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, loadedCount, onCreateFrom }) {
+  // Read here rather than threaded down from Valet: this is three levels below
+  // it, and a prop passed through two components that do not use it is two
+  // chances to forget it on the next panel somebody adds.
+  const { user: viewer } = useAuth()
+  const showPhone = canSeeGuestPhone(viewer?.role)
   // build a valet-booking prefill from an LMS venue event
   const prefillFrom = (c) => ({
     property: PROP_BY_LMS_VENUE[Number(c.venueId)] || undefined,
@@ -683,7 +688,7 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, load
                 {c.guests != null && <Meta C={C} icon="team" text={`${c.guests} pax`} />}
                 {c.functionType && <Meta C={C} icon="star" text={String(c.functionType)} />}
                 {c.location && <Meta C={C} icon="pin" text={String(c.location)} />}
-                {c.phone && <Meta C={C} icon="phone" text={String(c.phone)} />}
+                {showPhone && c.phone && <Meta C={C} icon="phone" text={String(c.phone)} />}
               </div>
 
               {!isPast && onCreateFrom && (
@@ -702,6 +707,8 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, load
 }
 
 function BookingCard({ C, t, lang, b, scopeAll, matrix, busy, onEdit, onDelete }) {
+  const { user: viewer } = useAuth()
+  const showPhone = canSeeGuestPhone(viewer?.role)
   // prefer the snapshot saved with the booking (may be an admin override);
   // fall back to computing from the current matrix, then to the stored total.
   const stored = Array.isArray(b.staff_breakdown) ? b.staff_breakdown : null
@@ -736,7 +743,7 @@ function BookingCard({ C, t, lang, b, scopeAll, matrix, busy, onEdit, onDelete }
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
         {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
         <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
-        {b.phone && <Meta C={C} icon="phone" text={b.phone} />}
+        {showPhone && b.phone && <Meta C={C} icon="phone" text={b.phone} />}
       </div>
 
       {(breakdown || total != null) && (
@@ -1109,14 +1116,17 @@ const escapeHtml = esc
 
 // Build a printable page of the given date-grouped bookings and open the browser
 // print dialog (user picks "Save as PDF"). No external library needed.
-function exportBookingsPdf(sections, lang) {
+// `showPhone` is a parameter rather than something read inside, because this is
+// a plain function, not a component. A printed sheet is the easiest place for a
+// hidden column to leak back: the screen hides it and the paper does not.
+function exportBookingsPdf(sections, lang, showPhone = true) {
   const genDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const body = sections.map((sec) => {
     const rows = sec.items.map((b) => `
       <tr>
         <td>${escapeHtml(propName(b.property, lang))}</td>
         <td>${escapeHtml(b.customer_name || '—')}</td>
-        <td>${escapeHtml(b.phone || '—')}</td>
+        ${showPhone ? `<td>${escapeHtml(b.phone || '—')}</td>` : ''}
         <td>${escapeHtml(b.event_time ? fmtTime(b.event_time) : '—')}</td>
         <td class="num">${b.guests || 0}</td>
         <td class="num">${b.staff_total ?? '—'}</td>
@@ -1124,7 +1134,7 @@ function exportBookingsPdf(sections, lang) {
     return `
       <h2>${escapeHtml(fmtLong(sec.date))}</h2>
       <table>
-        <thead><tr><th>Venue</th><th>Customer</th><th>Phone</th><th>Time</th><th class="num">Guests</th><th class="num">Staff</th></tr></thead>
+        <thead><tr><th>Venue</th><th>Customer</th>${showPhone ? '<th>Phone</th>' : ''}<th>Time</th><th class="num">Guests</th><th class="num">Staff</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`
   }).join('')

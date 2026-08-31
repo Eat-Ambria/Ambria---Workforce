@@ -14,7 +14,7 @@
 // arrived yet.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 
 vi.mock('../../lib/valetReport', () => ({
   EXPORT_CAP: 5000,
@@ -67,18 +67,37 @@ import ValetRecords from './ValetRecords'
 import { LangProvider } from '../../context/LangContext'
 // eslint-disable-next-line import/first
 import { ThemeProvider } from '../../context/ThemeContext'
+// eslint-disable-next-line import/first
+import { AuthProvider } from '../../context/AuthContext'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
-// The component reads colours and language from context, the way it does in the
-// app. Rendering it bare would only prove the providers are missing.
+// Colours, language and the signed-in user, the way the app provides them.
+// Rendering it bare would only prove the providers are missing.
+//
+// Auth matters to what this page shows now: the valet role sees no guest phone
+// numbers. `as` puts a signed-in user in storage before the provider reads it,
+// which is how the two cases below are told apart. With no user the role is
+// undefined — NOT valet — so the phone shows, which is the unrestricted case.
+const as = (role) => {
+  if (role) localStorage.setItem('ambria_user', JSON.stringify({ id: 'u_t', name: 'T', role, property: 'all' }))
+  else localStorage.removeItem('ambria_user')
+}
+
 const draw = () => render(
   <ThemeProvider>
     <LangProvider>
-      <ValetRecords visibleProps={[{ code: 'ex' }]} scopeAll />
+      <AuthProvider>
+        <ValetRecords visibleProps={[{ code: 'ex' }]} scopeAll />
+      </AuthProvider>
     </LangProvider>
   </ThemeProvider>,
 )
+
+// Testing Library only auto-cleans when vitest runs with globals on, and this
+// repo has no vitest config. Without a file-wide hook the first describe's
+// render stays in the document and the next one finds two of everything.
+afterEach(() => { cleanup(); as(null) })
 
 describe('ValetRecords', () => {
   it('renders live-shaped rows without throwing', async () => {
@@ -104,6 +123,39 @@ describe('ValetRecords', () => {
 
     // The pager reads off `total`, not the page length.
     expect(screen.getByText(/1–3 of 3/)).toBeTruthy()
+  })
+})
+
+describe('guest phone numbers', () => {
+  it('are shown to an admin', async () => {
+    as('a')
+    draw()
+    await flush()
+    await flush()
+    expect(await screen.findByText('Bipul')).toBeTruthy()
+    expect(screen.queryByText('7011775583')).toBeTruthy()
+  })
+
+  it('are hidden from the valet team', async () => {
+    as('v')
+    draw()
+    await flush()
+    await flush()
+    // The row is there — the guest, the car, the venue. Only the number is not.
+    expect(await screen.findByText('Bipul')).toBeTruthy()
+    expect(screen.queryByText('7011775583')).toBeNull()
+    expect(screen.queryByText('6575676571')).toBeNull()
+    expect(screen.queryByText('9999949494')).toBeNull()
+  })
+
+  it('are dropped from the column headings too, not left blank', async () => {
+    as('v')
+    draw()
+    await flush()
+    await flush()
+    // A column headed Number with nothing under it invites somebody to go
+    // looking for why it is empty.
+    expect(screen.queryByText('Number')).toBeNull()
   })
 })
 

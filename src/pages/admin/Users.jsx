@@ -6,25 +6,29 @@ import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
 import {
-  ROLES, DEPARTMENTS, DEPARTMENT_MAP, DESIGNATIONS, PROPERTIES, PROPERTY_MAP, propName, deptName, personName, shiftLabel,
+  ROLES, ASSIGNABLE_ROLES, DEPARTMENTS, DEPARTMENT_MAP, DESIGNATIONS, PROPERTIES, PROPERTY_MAP, propName, deptName, personName, shiftLabel,
 } from '../../constants/org'
-import { navForRole, ALWAYS_VISIBLE } from '../../constants/nav'
+import { navForRole, alwaysVisibleFor } from '../../constants/nav'
 import { normalizePhone, typedPhone, isValidPhone } from '../../lib/phone'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
 
-const ROLE_OPTIONS = [
-  { value: ROLES.EMPLOYEE, label: 'Employee' },
-  { value: ROLES.ADMIN, label: 'Admin' },
-  { value: ROLES.SUPER_ADMIN, label: 'Super Admin' },
-]
-// role name in the active language
+// Straight off ASSIGNABLE_ROLES. This screen used to keep its own hardcoded
+// list of three, so adding a fourth role to org.js left the picker showing three
+// — the role existed everywhere except the one screen that assigns it.
 const roleLabel = (role, t) => ({
-  [ROLES.SUPER_ADMIN]: t.roleSuperAdmin, [ROLES.ADMIN]: t.roleAdmin, [ROLES.EMPLOYEE]: t.roleEmployee,
+  [ROLES.SUPER_ADMIN]: t.roleSuperAdmin,
+  [ROLES.ADMIN]: t.roleAdmin,
+  [ROLES.EMPLOYEE]: t.roleEmployee,
+  [ROLES.VALET]: t.roleValet,
 }[role] || role)
-const roleTone = (role, C) => (role === ROLES.SUPER_ADMIN ? C.maroon : role === ROLES.ADMIN ? C.indigo : C.blue)
+const roleTone = (role, C) => ({
+  [ROLES.SUPER_ADMIN]: C.maroon,
+  [ROLES.ADMIN]: C.indigo,
+  [ROLES.VALET]: C.cyan || C.purple,
+}[role] || C.blue)
 
 // default set of visible tab paths for a role
 const seedAccess = (role) => new Set(navForRole(role).map((i) => i.path))
@@ -57,7 +61,7 @@ export default function Users() {
   // options for the multi-select dropdowns ({ value, label })
   const deptOptions = useMemo(() => DEPARTMENTS.map((d) => ({ value: d.code, label: deptName(d.code, lang) })), [lang])
   const propOptions = useMemo(() => PROPERTIES.map((p) => ({ value: p.code, label: p.name })), [])
-  const roleOptions = useMemo(() => ROLE_OPTIONS.map((r) => ({ value: r.value, label: roleLabel(r.value, t) })), [t])
+  const roleOptions = useMemo(() => ASSIGNABLE_ROLES.map((r) => ({ value: r, label: roleLabel(r, t) })), [t])
 
   // debounce the search box so we don't hit the DB on every keystroke
   useEffect(() => {
@@ -367,9 +371,12 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
     if (pwChanged && !/^\d{4}$/.test(form.password)) { setErr(t.pinRule || 'PIN must be exactly 4 digits'); return }
     setBusy(true); setErr('')
 
-    // always keep dashboard visible; store only tabs valid for the chosen role
+    // Keep the role's own un-removable tab visible, and store only tabs valid
+    // for the chosen role. For the valet role that pinned tab is Valet, not
+    // Dashboard — writing Dashboard into their access list would offer them a
+    // page their role cannot open.
     const validPaths = new Set(candidateTabs.map((i) => i.path))
-    const accessList = [...new Set([...ALWAYS_VISIBLE, ...[...access].filter((p) => validPaths.has(p))])]
+    const accessList = [...new Set([...alwaysVisibleFor(form.role), ...[...access].filter((p) => validPaths.has(p))])]
 
     const base = {
       name: form.name.trim(),
@@ -477,7 +484,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
         <div style={{ flex: 1 }}>
           <Field label={t.role}>
             <select style={inputStyle(C)} value={form.role} onChange={changeRole} disabled={isSelf}>
-              {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{roleLabel(r.value, t)}</option>)}
+              {ASSIGNABLE_ROLES.map((r) => <option key={r} value={r}>{roleLabel(r, t)}</option>)}
             </select>
           </Field>
         </div>
@@ -557,7 +564,7 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
         <div style={{ fontSize: 13, fontWeight: 600, color: C.tl, marginBottom: 8 }}>{t.visibleTabs}</div>
         <div style={{ display: 'grid', gap: 8 }}>
           {candidateTabs.map((item) => {
-            const fixed = ALWAYS_VISIBLE.includes(item.path)
+            const fixed = alwaysVisibleFor(form.role).includes(item.path)
             const on = fixed || access.has(item.path)
             return (
               <button

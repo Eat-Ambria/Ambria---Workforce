@@ -20,6 +20,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useColors } from '../../context/ThemeContext'
 import { useLang } from '../../context/LangContext'
+import { useAuth } from '../../context/AuthContext'
+import { canSeeGuestPhone } from '../../constants/org'
 import { Card, Button, Loader, EmptyState } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -45,6 +47,9 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
   const { lang } = useLang()
   const hi = lang === 'hi'
   const wide = useMediaQuery('(min-width: 1000px)')
+  const { user } = useAuth()
+  // Same rule as the Records tab: the valet team's guest list carries no numbers.
+  const showPhone = canSeeGuestPhone(user?.role)
 
   const scope = useValetScope()
   const { period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo,
@@ -131,8 +136,8 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
     { key: 'name', label: hi ? 'मेहमान का नाम' : 'Guest name' },
     { key: 'tier', label: hi ? 'गाड़ी की श्रेणी' : 'Car tier' },
     // text: true, or Excel renders 6576543210 as 6.576E+09. See lib/csv.js.
-    { key: 'phone', label: hi ? 'नंबर' : 'Number', text: true },
-  ], [hi])
+    ...(showPhone ? [{ key: 'phone', label: hi ? 'नंबर' : 'Number', text: true }] : []),
+  ], [hi, showPhone])
 
   async function exportCsv() {
     setBusy('csv')

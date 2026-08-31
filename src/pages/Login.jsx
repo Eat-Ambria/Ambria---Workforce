@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useColors, useTheme } from '../context/ThemeContext'
 import { useLang, useT } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
+import { homeFor } from '../constants/org'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { Spinner, inputStyle } from '../components/common/UI'
 import PoweredBy from '../components/common/PoweredBy'
@@ -24,7 +25,13 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = !!username && !!password && !busy
+  // This one field takes a username OR a phone number, so the rule has to be
+  // conditional: all digits means they are entering a phone, and a phone here is
+  // ten digits. A username like `test` must stay untouched — a blanket ten-digit
+  // rule would lock out every non-numeric login.
+  const looksLikePhone = /^\d+$/.test(username.trim())
+  const phoneIncomplete = looksLikePhone && username.trim().length !== 10
+  const canSubmit = !!username && !!password && !phoneIncomplete && !busy
   const gradient = `linear-gradient(150deg, ${C.brandBg} 0%, ${C.maroonDark} 100%)`
 
   async function onSubmit(e) {
@@ -33,7 +40,9 @@ export default function Login() {
     setBusy(true)
     const res = await login(username, password)
     setBusy(false)
-    if (res.ok) navigate('/dashboard', { replace: true })
+    // Their own landing page: the valet team has no dashboard, and sending them
+    // there only to be bounced back is a visible flash on every login.
+    if (res.ok) navigate(homeFor(res.user?.role), { replace: true })
     else if (res.reason === 'inactive') setError(t.accountInactive)
     else if (res.reason === 'error') setError(hi ? 'कनेक्शन त्रुटि। इंटरनेट/सर्वर जाँचें।' : 'Connection error. Check internet / Supabase config.')
     else setError(t.invalidLogin)
@@ -89,8 +98,26 @@ export default function Login() {
           <label style={fieldLabel(C)}>{t.usernameOrPhone || t.username}</label>
           <div style={{ position: 'relative' }}>
             <span style={leadIcon(C)}><Icon name="user" size={18} /></span>
-            <input style={field} placeholder={t.usernameOrPhone || t.username} value={username} autoCapitalize="none" autoCorrect="off" onChange={(e) => setUsername(e.target.value)} />
+            <input
+              style={{ ...field, borderColor: phoneIncomplete ? C.red : field.borderColor }}
+              placeholder={t.usernameOrPhone || t.username}
+              value={username}
+              autoCapitalize="none"
+              autoCorrect="off"
+              // Digits only: a phone keyboard on a phone, letters still typeable
+              // on a keyboard, because this field takes usernames too.
+              inputMode={looksLikePhone ? 'numeric' : 'text'}
+              onChange={(e) => setUsername(e.target.value)}
+            />
           </div>
+          {/* Said as they type, not on submit. A wrong-length phone would
+              otherwise cost a round trip and come back as "invalid login",
+              which reads as a wrong PIN. */}
+          {phoneIncomplete && (
+            <div style={{ fontSize: 12, color: C.red, fontWeight: 600, marginTop: 5 }}>
+              {t.phoneRule}
+            </div>
+          )}
         </div>
 
         <div style={{ marginBottom: 16 }}>
