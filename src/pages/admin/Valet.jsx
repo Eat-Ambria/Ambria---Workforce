@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { todayISO, nowISO, fmtTime, to24h } from '../../lib/time'
-import { useColors } from '../../context/ThemeContext'
+import { useColors, useTheme } from '../../context/ThemeContext'
 import { esc } from '../../lib/printable'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
@@ -22,6 +22,9 @@ const WEEKDAYS_HI = ['र', 'सो', 'मं', 'बु', 'गु', 'शु', '�
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const MONTHS_HI = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर']
 const monthName = (i, lang) => (lang === 'hi' ? MONTHS_HI[i] : MONTHS[i])
+// Four to a row, so the grid takes the short form. Hindi month names are already
+// short enough to use whole.
+const monthShort = (i, lang) => (lang === 'hi' ? MONTHS_HI[i] : MONTHS[i].slice(0, 3))
 const weekdays = (lang) => (lang === 'hi' ? WEEKDAYS_HI : WEEKDAYS)
 
 // digits only; '' stays '' so the field can be cleared
@@ -45,6 +48,25 @@ const withHeavy = (breakdown, heavy) => {
   return breakdown.map((b) => (b.role === HEAVY_ROLE ? { ...b, count: b.count + HEAVY_EXTRA } : b))
 }
 
+// A booked date carries the venue's own colour rather than one brand tint, so
+// the month reads as "which venues are working" instead of "something is on".
+// Several bookings become several bands across the tile — one booking per
+// property per day is enforced on save, so a band is always a distinct venue.
+//
+// Translucent, and layered over the tile's own background rather than replacing
+// it: VENUE_COLORS are chosen to be told apart at full strength on a dot, and at
+// that strength behind a date number nothing is readable.
+const BAND_ALPHA = { light: '2e', dark: '66' }   // ~18% and ~40%
+
+const venueBands = (codes, theme) => {
+  if (!codes.length) return undefined
+  const a = BAND_ALPHA[theme === 'dark' ? 'dark' : 'light']
+  const step = 100 / codes.length
+  // Hard stops, so the bands are blocks rather than a blur nobody can count.
+  const stops = codes.map((c, i) => `${VENUE_COLORS[c]}${a} ${i * step}% ${(i + 1) * step}%`)
+  return `linear-gradient(90deg, ${stops.join(', ')})`
+}
+
 const pad = (n) => String(n).padStart(2, '0')
 const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}` // m is 0-based
 function fmtLong(iso, lang) {
@@ -54,6 +76,8 @@ function fmtLong(iso, lang) {
 
 export default function Valet() {
   const C = useColors()
+  const { theme } = useTheme()
+  const confirm = useConfirm()
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
@@ -70,7 +94,16 @@ export default function Valet() {
   const [ty, tmn, td] = today.split('-').map(Number) // tmn is 1-based
   // bookings are allowed from today up to exactly one year ahead
   const maxDate = `${ty + 1}-${pad(tmn)}-${pad(td)}`
-  const minMonth = { y: ty, m: tmn - 1 }
+  // A year back and a year forward. Back was pinned to the current month, which
+  // meant past bookings had no route on this tab at all — the Bookings tab's
+  // "Past" list was the only way to reach them, and paging back now shows them
+  // as coloured tiles like any other month.
+  //
+  // Nothing here lets you BOOK in the past. Three guards already stand in the
+  // way and none of them depend on the month limit: an empty past tile does not
+  // open, a past date's modal offers no New Booking, and the form refuses a past
+  // date on save.
+  const minMonth = { y: ty - 1, m: tmn - 1 }
   const maxMonth = { y: ty + 1, m: tmn - 1 }
   const [month, setMonth] = useState(() => ({ y: ty, m: tmn - 1 }))
   const [bookings, setBookings] = useState([])
@@ -80,7 +113,6 @@ export default function Valet() {
   const [creatingDate, setCreatingDate] = useState(null) // ISO -> create modal
   const [createPrefill, setCreatePrefill] = useState(null) // prefill from an LMS event
   const [editingBooking, setEditingBooking] = useState(null) // existing booking being edited
-  const [bump, setBump] = useState(0) // bumps to re-fetch the Bookings list after a save
 
   // admin-editable staffing matrix (DB overrides the built-in defaults)
   const [matrix, setMatrix] = useState(VALET_MATRIX)
@@ -163,6 +195,22 @@ export default function Valet() {
   for (let i = 0; i < firstDow; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
+  // Every month the arrows can reach, as one list. ONE select rather than a
+  // month picker beside a year picker: two controls can be set to a pair that
+  // does not exist here — July 2025 — and would then need clamping. A list built
+  // from the range can only produce a month the range contains.
+  const monthOptions = useMemo(() => {
+    const out = []
+    let y = ty - 1
+    let m = tmn - 1
+    while (y < ty + 1 || (y === ty + 1 && m <= tmn - 1)) {
+      out.push({ y, m })
+      m += 1
+      if (m > 11) { m = 0; y += 1 }
+    }
+    return out
+  }, [ty, tmn])
+
   const canPrev = month.y > minMonth.y || (month.y === minMonth.y && month.m > minMonth.m)
   const canNext = month.y < maxMonth.y || (month.y === maxMonth.y && month.m < maxMonth.m)
   const shiftMonth = (delta) => {
@@ -176,6 +224,25 @@ export default function Valet() {
   const openCreate = (iso, prefill = null) => { setSelectedDate(null); setCreatePrefill(prefill); setCreatingDate(iso || today) }
   const openEdit = (booking) => { setSelectedDate(null); setEditingBooking(booking); setCreatingDate(booking.event_date) }
 
+  // The same sheet the Bookings tab exports, from the same query — so the two
+  // buttons can never disagree about what "the next seven dates" means.
+  const [exporting, setExporting] = useState(false)
+  const exportUpcoming = async () => {
+    setExporting(true)
+    try {
+      const sections = await upcomingBookingSections({ scopeAll, user, property: propFilter })
+      if (!sections.length) {
+        confirm({ message: t.noBookings, danger: false, hideCancel: true, confirmLabel: t.ok })
+        return
+      }
+      if (!exportBookingsPdf(sections, lang)) {
+        confirm({ message: t.popupBlocked, danger: false, hideCancel: true, confirmLabel: t.ok })
+      }
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div>
       <SectionTitle>{t.valet}</SectionTitle>
@@ -183,7 +250,6 @@ export default function Valet() {
       <Tabs
         tabs={[
           { key: 'calendar', label: t.calendar },
-          { key: 'bookings', label: t.bookings },
           { key: 'calculator', label: t.calculator },
           // These two read the LIVE valet parking system — a different
           // Supabase project. Everything above them is our own bookings table.
@@ -200,8 +266,6 @@ export default function Valet() {
         <ValetAnalytics visibleProps={visibleProps} scopeAll={scopeAll} />
       ) : view === 'calculator' ? (
         <Calculator C={C} t={t} lang={lang} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix} canEdit={scopeAll} onMatrixSaved={loadMatrix} />
-      ) : view === 'bookings' ? (
-        <BookingsList C={C} t={t} lang={lang} user={user} scopeAll={scopeAll} reloadSignal={bump} onEdit={openEdit} />
       ) : (
         <>
           {/* property filter — only for admins who oversee all properties */}
@@ -233,12 +297,23 @@ export default function Valet() {
             </div>
           ))}
 
+          {/* The Bookings tab's sheet, reachable without leaving the calendar.
+              Its own row rather than tucked into the filter chips: an admin
+              posted to one venue has no chip row at all, and the button must
+              still be there. */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <Button variant="primary" onClick={exportUpcoming} disabled={exporting} style={{ padding: '8px 13px', fontSize: 13 }}>
+              <Icon name="download" size={15} color="#fff" style={{ marginRight: 5 }} />
+              {t.exportPdf}
+            </Button>
+          </div>
+
           {/* month navigator */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <button onClick={() => shiftMonth(-1)} disabled={!canPrev} style={navBtn(C, !canPrev)} aria-label={t.prevMonth}>
               <Icon name="chevronLeft" size={18} color={canPrev ? C.text : C.faint} />
             </button>
-            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{monthName(month.m, lang)} {month.y}</div>
+            <MonthPicker C={C} lang={lang} month={month} options={monthOptions} onPick={setMonth} />
             <button onClick={() => shiftMonth(1)} disabled={!canNext} style={navBtn(C, !canNext)} aria-label={t.nextMonth}>
               <Icon name="chevronRight" size={18} color={canNext ? C.text : C.faint} />
             </button>
@@ -296,6 +371,11 @@ export default function Valet() {
                       n: dayEvents.filter((e) => PROP_BY_LMS_VENUE[Number(e.venueId)] === pr.code).length,
                     }))
                     .filter((v) => v.n > 0)
+                  // Booked venues in PROPERTIES order, so a venue keeps the
+                  // same side of the tile from one day to the next.
+                  const bookedVenues = visibleProps
+                    .filter((pr) => list.some((b) => b.property === pr.code))
+                    .map((pr) => pr.code)
                   const isToday = iso === today
                   const isPast = iso < today // past dates can't be booked...
                   const hasItems = list.length > 0 || lmsCount > 0
@@ -305,18 +385,42 @@ export default function Valet() {
                       key={i}
                       onClick={() => canOpen && setSelectedDate(iso)}
                       disabled={!canOpen}
+                      // Colour is never the only thing that says which venue —
+                      // the legend above names them and this names them here.
+                      title={bookedVenues.length
+                        ? bookedVenues.map((c) => propName(c, lang)).join(', ')
+                        : undefined}
                       style={{
                         position: 'relative', height: 'clamp(42px, 8.5vh, 68px)', borderRadius: 10,
                         border: `1px solid ${isToday ? C.maroon : C.border}`,
-                        background: isPast ? C.cardAlt : (list.length ? C.maroonSoft : C.card),
+                        // The bands go on backgroundImage over a solid base, so
+                        // the translucency reads against the tile rather than
+                        // against whatever is behind the card.
+                        background: isPast ? C.cardAlt : C.card,
+                        backgroundImage: venueBands(bookedVenues, theme),
                         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
                         cursor: canOpen ? 'pointer' : 'not-allowed',
                         opacity: isPast ? (hasItems ? 0.75 : 0.45) : 1,
                       }}
                     >
-                      <span style={{ fontSize: 14, fontWeight: isToday ? 800 : 600, color: isToday ? C.maroon : C.text }}>{d}</span>
-                      {list.length > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: C.brandBg, borderRadius: 999, padding: '1px 6px', lineHeight: 1.5 }}>
+                      {/* Today is normally maroon, but MEASURED against the
+                          bands it drops to 2.5:1 in dark — so on a banded tile
+                          the number takes the ordinary ink, which clears 6.3:1
+                          on every venue colour in both themes. Today is still
+                          marked: it keeps the maroon border and the bold weight. */}
+                      <span style={{
+                        fontSize: 14,
+                        fontWeight: isToday ? 800 : 600,
+                        color: isToday && !bookedVenues.length ? C.maroon : C.text,
+                      }}>
+                        {d}
+                      </span>
+                      {/* The count pill is gone above one booking: the bands are
+                          the count, and a maroon pill sitting on top of blue and
+                          yellow bands fought the colours it was labelling. Two
+                          bookings still say so, in ink rather than brand fill. */}
+                      {list.length > 1 && (
+                        <span style={{ fontSize: 10, fontWeight: 800, color: C.tl, lineHeight: 1.4 }}>
                           {list.length}
                         </span>
                       )}
@@ -370,10 +474,120 @@ export default function Valet() {
           C={C} t={t} lang={lang} user={user} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix}
           date={creatingDate} minDate={today} maxDate={maxDate} existing={bookings} prefill={createPrefill} editing={editingBooking}
           onClose={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null) }}
-          onSaved={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null); setBump((b) => b + 1); load() }}
+          onSaved={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null); load() }}
         />
       )}
     </div>
+  )
+}
+
+// Jump to a month, without a 25-row scrolling list.
+//
+// A native <select> was tried and is wrong here for a reason worth writing down:
+// the browser paints the dropdown itself, so `background: transparent` never
+// reaches it while `color` does — in dark theme that is near-white option text
+// on the browser's own light popup, unreadable. `color-scheme: dark` patches it,
+// but a 25-item scroll to reach March is a poor control either way.
+//
+// A year-grouped grid of short month names instead: every month the arrows can
+// reach, visible at once, three rows of four. Nothing to scroll and nothing that
+// depends on the browser's own styling.
+function MonthPicker({ C, lang, month, options, onPick }) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+
+  // A panel that covers the grid must close on a click anywhere else and on Esc
+  // — the second because a keyboard user who opened it has no other way out.
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  // Grouped by year, in order, so the panel reads like a calendar rather than a
+  // list that happens to be sorted.
+  const years = []
+  options.forEach((o) => {
+    const row = years.find((y) => y.y === o.y)
+    if (row) row.months.push(o.m)
+    else years.push({ y: o.y, months: [o.m] })
+  })
+
+  const now = new Date()
+  const isNow = (y, m) => y === now.getFullYear() && m === now.getMonth()
+
+  return (
+    <span ref={boxRef} style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={lang === 'hi' ? 'महीना चुनें' : 'Pick a month'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          padding: '5px 11px', borderRadius: 999, cursor: 'pointer',
+          background: open ? C.cardAlt : 'transparent',
+          border: `1px solid ${open ? C.borderStrong : 'transparent'}`,
+          fontSize: 16, fontWeight: 800, color: C.text,
+        }}
+      >
+        {monthName(month.m, lang)} {month.y}
+        <Icon name="chevronRight" size={13} color={C.tl} style={{ transform: open ? 'rotate(-90deg)' : 'rotate(90deg)' }} />
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+            zIndex: 60, width: 268, padding: 12,
+            background: C.card, border: `1px solid ${C.borderStrong}`,
+            borderRadius: 14, boxShadow: C.shadowLg || C.shadow,
+          }}
+        >
+          {years.map((row) => (
+            <div key={row.y} style={{ marginBottom: 10 }}>
+              <div style={{
+                fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em',
+                color: C.faint, marginBottom: 6, paddingLeft: 2,
+              }}>
+                {row.y}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+                {row.months.map((m) => {
+                  const on = month.y === row.y && month.m === m
+                  const today = isNow(row.y, m)
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { onPick({ y: row.y, m }); setOpen(false) }}
+                      style={{
+                        padding: '7px 0', borderRadius: 9, cursor: 'pointer',
+                        fontSize: 12.5, fontWeight: on ? 800 : 600,
+                        background: on ? C.brandBg : 'transparent',
+                        color: on ? '#fff' : C.text,
+                        // The current month keeps a ring when it is not the one
+                        // selected, so "where am I" and "where is now" are two
+                        // readable states rather than one.
+                        border: `1px solid ${on ? C.brandBg : today ? C.maroon : C.border}`,
+                      }}
+                    >
+                      {monthShort(m, lang)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
   )
 }
 
@@ -954,123 +1168,31 @@ function exportBookingsPdf(sections, lang) {
   return true
 }
 
-/* --------------------- all valet bookings (list view) --------------------- */
-function BookingsList({ C, t, lang, user, scopeAll, reloadSignal, onEdit }) {
-  const confirm = useConfirm()
-  const [rows, setRows] = useState(null)
-  const [propFilter, setPropFilter] = useState('all')
+// The next seven DISTINCT dates that have bookings — seven dates, not seven
+// bookings, since a date can hold one per venue.
+//
+// QUERIED, not taken from a list the caller already holds. The Calendar only
+// loads the month on screen, so an export built from its rows would quietly stop
+// at the end of the month while still calling itself "the next seven dates".
+// Both tabs come through here so they cannot produce two different files under
+// one label.
+async function upcomingBookingSections({ scopeAll, user, property = 'all' }) {
+  let q = supabase
+    .from('valet_bookings')
+    .select('*')
+    .gte('event_date', todayISO())
+    .order('event_date', { ascending: true })
+  if (!scopeAll) q = q.eq('property', user.property)
+  else if (property !== 'all') q = q.eq('property', property)
 
-  const load = useCallback(async () => {
-    let q = supabase.from('valet_bookings').select('*').order('event_date', { ascending: false })
-    if (!scopeAll) q = q.eq('property', user.property)
-    const { data } = await q
-    setRows(data || [])
-  }, [scopeAll, user])
-
-  useEffect(() => { load() }, [load, reloadSignal])
-
-  const shown = useMemo(
-    () => (propFilter === 'all' ? (rows || []) : (rows || []).filter((b) => b.property === propFilter)),
-    [rows, propFilter]
-  )
-
-  async function del(id) {
-    if (!(await confirm({ message: t.deleteBookingConfirm }))) return
-    await supabase.from('valet_bookings').delete().eq('id', id)
-    load()
-  }
-
-  if (rows === null) return <Loader label={t.loading} />
-
-  const today = todayISO()
-  const upcoming = shown.filter((b) => b.event_date >= today).sort((a, b) => (a.event_date < b.event_date ? -1 : 1)) // soonest first
-  const past = shown.filter((b) => b.event_date < today).sort((a, b) => (a.event_date > b.event_date ? -1 : 1))       // most recent first
-
-  const renderCard = (b) => (
-    <Card key={b.id} style={{ padding: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>{b.customer_name || '—'}</div>
-          <div style={{ fontSize: 12.5, color: C.tl, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <Meta C={C} icon="calendar" text={fmtLong(b.event_date, lang)} />
-            <Meta C={C} icon="pin" text={propName(b.property, lang)} />
-            {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
-            <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
-            {b.staff_total != null && <Meta C={C} icon="valet" text={`${b.staff_total} staff`} />}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => onEdit?.(b)} style={{ background: 'transparent', color: C.maroon }} aria-label={t.editBooking}>
-            <Icon name="edit" size={18} color={C.maroon} />
-          </button>
-          <button onClick={() => del(b.id)} style={{ background: 'transparent', color: C.red }} aria-label={t.delete}>
-            <Icon name="trash" size={18} color={C.red} />
-          </button>
-        </div>
-      </div>
-    </Card>
-  )
-
-  const groupHeader = (label, n) => (
-    <div style={{ fontSize: 13, color: C.tl, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', margin: '2px 0 10px' }}>
-      {label} · {n}
-    </div>
-  )
-
-  // PDF = the next 7 DISTINCT upcoming dates (multiple bookings per day allowed)
-  const onExport = () => {
-    const byDate = {}
-    const days = []
-    upcoming.forEach((b) => {
-      if (!byDate[b.event_date]) { byDate[b.event_date] = []; days.push(b.event_date) }
-      byDate[b.event_date].push(b)
-    })
-    const sections = days.slice(0, 7).map((d) => ({ date: d, items: byDate[d] }))
-    if (sections.length && !exportBookingsPdf(sections, lang)) {
-      confirm({ message: t.popupBlocked, danger: false, hideCancel: true, confirmLabel: t.ok })
-    }
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        {scopeAll && (
-          <div style={{ flex: 1, minWidth: 150 }}>
-            <FilterField label={t.properties}>
-              <select style={filterStyle(C)} value={propFilter} onChange={(e) => setPropFilter(e.target.value)}>
-                <option value="all">{t.all}</option>
-                {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
-              </select>
-            </FilterField>
-          </div>
-        )}
-        {upcoming.length > 0 && (
-          <Button variant="primary" onClick={onExport} style={{ marginLeft: 'auto' }}>
-            <Icon name="download" size={16} color="#fff" style={{ marginRight: 4 }} /> {t.exportPdf}
-          </Button>
-        )}
-      </div>
-
-      {shown.length === 0 ? (
-        <EmptyState icon="calendar" title={t.noBookings} />
-      ) : (
-        <>
-          {upcoming.length > 0 && (
-            <div style={{ marginBottom: past.length ? 22 : 0 }}>
-              {groupHeader(t.upcoming, upcoming.length)}
-              <div style={{ display: 'grid', gap: 10 }}>{upcoming.map(renderCard)}</div>
-            </div>
-          )}
-          {past.length > 0 && (
-            <div style={{ opacity: 0.85 }}>
-              {groupHeader(t.past, past.length)}
-              <div style={{ display: 'grid', gap: 10 }}>{past.map(renderCard)}</div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
+  const { data } = await q
+  const byDate = {}
+  const days = []
+  ;(data || []).forEach((b) => {
+    if (!byDate[b.event_date]) { byDate[b.event_date] = []; days.push(b.event_date) }
+    byDate[b.event_date].push(b)
+  })
+  return days.slice(0, 7).map((d) => ({ date: d, items: byDate[d] }))
 }
 
 /* --------------------------- staffing calculator --------------------------- */
