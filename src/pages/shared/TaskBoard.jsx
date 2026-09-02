@@ -207,6 +207,12 @@ export default function TaskBoard() {
   // keep the board fresh without a manual refresh: reload on mount, every 20s,
   // and whenever the tab/window regains focus (mirrors the notifications hook).
   // load() doesn't flip the loader, so these background refreshes never flicker.
+  //
+  // The interval alone is not enough, and not because 20s is too slow: browsers
+  // throttle timers hard in a tab that is not visible — Chrome to once a minute,
+  // and a tab hidden long enough is frozen outright. So a second tab sat stale
+  // until it was clicked, and the focus listener below is what made it catch up.
+  // That is why the realtime subscription that follows exists.
   useEffect(() => {
     load()
     const id = setInterval(load, 20000)
@@ -219,6 +225,34 @@ export default function TaskBoard() {
       document.removeEventListener('visibilitychange', onFocus)
     }
   }, [load])
+
+  // Live: the board follows the table, so starting work in one tab moves the
+  // card in every other tab and on every other device, without anybody clicking.
+  // Same pattern the notification bell already uses.
+  //
+  // No `filter`: unlike the bell, which only cares about one person's rows, any
+  // change here can matter to anyone looking — a new request, somebody else's
+  // status change, a reassignment.
+  //
+  // Debounced, because one action writes more than one row. A reassignment
+  // touches work_board AND work_board_updates, and a burst of events must be one
+  // reload rather than three.
+  useEffect(() => {
+    if (!user) return undefined
+    let timer = null
+    const soon = () => {
+      clearTimeout(timer)
+      timer = setTimeout(load, 250)
+    }
+    const channel = supabase
+      .channel('work-board-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'work_board' }, soon)
+      .subscribe()
+    return () => {
+      clearTimeout(timer)
+      supabase.removeChannel(channel)
+    }
+  }, [user, load])
 
   // deep-link from a notification: open the exact fix request by id
   // Guarded on the navigation, not the id. Remembering the id meant the second
