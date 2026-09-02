@@ -3,8 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/time'
 import { useColors, useTheme } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
-import { PROPERTIES, PROPERTY_MAP, propName, deptName, personName } from '../constants/org'
-import { assigneesQuery } from '../lib/assignees'
+import { PROPERTIES, PROPERTY_MAP, propName, deptName } from '../constants/org'
 import { hindiFor } from '../lib/translate'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs, Field } from '../components/common/UI'
 import HindiInput from '../components/common/HindiInput'
@@ -396,9 +395,8 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   const [form, setForm] = useState({
     name: '', phone: '', property: 'pp', location: '',
     title: '', titleHi: '', issue: '', descHi: '', category: 'other', priority: 'normal',
-    department: '', assignee: '',
+    department: '',
   })
-  const [people, setPeople] = useState([])
   const [photos, setPhotos] = useState([])
   const [voice, setVoice] = useState('')
   // Can this device record at all? A phone with no microphone, or a browser where
@@ -410,22 +408,9 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   const [done, setDone] = useState(false)
   const [ticket, setTicket] = useState(null)   // the number to quote later
 
-  // Loaded once and filtered in the browser: switching department should not
-  // cost a round trip on a phone at the gate.
-  useEffect(() => { assigneesQuery().then(({ data }) => setPeople(data || [])) }, [])
-
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  // By department, not by venue. The venue is already on the request; who fixes
-  // a broken pipe is a trade, and the plumber may well be based elsewhere.
-  const inDept = useMemo(
-    () => (form.department ? people.filter((m) => m.department === form.department) : []),
-    [people, form.department]
-  )
-
-  // Changing department must not leave the previous person selected — that is
-  // how a request ends up assigned to someone the picker no longer even lists.
-  const setDept = (e) => setForm((f) => ({ ...f, department: e.target.value, assignee: '' }))
+  const setDept = (e) => setForm((f) => ({ ...f, department: e.target.value }))
 
   // A kitchen fault is a kitchen job, a wiring fault is the electrician's. The
   // kind of repair already names the team, so fill it in rather than making the
@@ -436,6 +421,13 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   // it can go to are the four that do general work. Kitchen, Electrician and the
   // rest are their own kind of repair — offering them here as well would let a
   // request say "General repair" and "Electrician" at the same time.
+  // Said in exactly one place. It appears twice — as the first option in the
+  // picker, and as the whole answer where a department has nobody in it — and
+  // it was two different sentences for the same thing: "Leave it to the admin"
+  // in the dropdown, "The admin will decide" on the line. One outcome, two
+  // names for it.
+  const adminDecides = hi ? 'एडमिन तय करेगा' : 'The admin will decide'
+
   const GENERAL_DEPTS = ['a', 'h', 'k', 's']
   const deptChoices = CAT_DEPT[form.category] ? [CAT_DEPT[form.category]] : GENERAL_DEPTS
 
@@ -449,7 +441,6 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       // survives the switch: a trade sets its own, and going back to General
       // clears it rather than leaving "Kitchen" sitting under "General repair".
       department: dept || '',
-      assignee: '',
     }))
   }
   // phone: keep digits only, never longer than 10
@@ -489,8 +480,6 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
     ].filter((l) => l !== null).join('\n')
     const description = block(issue, hi)
     const title = form.title.trim()
-    // resolved from the loaded list, never trusted from the select's value alone
-    const assignee = inDept.find((m) => m.id === form.assignee) || null
 
     // Whatever the reporter left in the Hindi boxes wins — those boxes show the
     // machine's attempt and let it be corrected, so overwriting it here would
@@ -522,11 +511,11 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       priority: form.priority,
       photos,
       voice_url: voice || null,
-      assigned_to: assignee?.id || null,
-      assigned_to_name: assignee?.name || null,
-      // naming someone at submit skips the open -> assigned hop, same as the
-      // admin form does
-      status: assignee ? 'assigned' : 'open',
+      // Nobody is named here any more — the picker came off, so every request
+      // from this form arrives unassigned and the department's admin routes it.
+      assigned_to: null,
+      assigned_to_name: null,
+      status: 'open',
     }).select('id').single()
 
     setBusy(false)
@@ -678,7 +667,16 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
           control with one option in it, which is not a question worth asking.
           Hiding the whole field was worse: the person then had no idea who the
           request was going to. So the field stays and states the answer. */}
-      {form.department && inDept.length === 0 && (
+      {/* One answer, always: the admin routes it.
+          There used to be a person picker here, listing whoever was in the chosen
+          department. It came off because the people filling this form in — staff
+          reporting a fault, and outside visitors through the public link — are
+          not the ones who know who should do the job. Naming somebody was a guess
+          that then had to be undone, and three of the nine departments have
+          nobody in them anyway.
+          It states the outcome rather than saying nothing, so nobody is left
+          wondering where the request went. */}
+      {form.department && (
         <div style={{ marginBottom: 16 }}>
           <label style={fieldLabel}>{hi ? 'किसे सौंपें' : 'Assigned to'}</label>
           <div style={{
@@ -687,25 +685,12 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
             background: C.cardAlt, color: C.tl, cursor: 'default',
           }}>
             <Icon name="user" size={15} color={C.faint} />
-            {hi ? 'एडमिन तय करेगा' : 'The admin will decide'}
+            {adminDecides}
           </div>
           <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
             {hi
-              ? `${deptName(form.department, lang)} टीम में अभी कोई नहीं है — यह ${deptName(form.department, lang)} के एडमिन के पास जाएगा।`
-              : `Nobody is in ${deptName(form.department, lang)} yet — it goes to that department's admin.`}
-          </span>
-        </div>
-      )}
-
-      {form.department && inDept.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <label style={fieldLabel}>{hi ? 'किसे सौंपें (वैकल्पिक)' : 'Assign to (optional)'}</label>
-          <select style={inputStyle(C)} value={form.assignee} onChange={set('assignee')}>
-            <option value="">{hi ? '— कोई नहीं, एडमिन तय करेगा —' : '\u2014 Leave it to the admin \u2014'}</option>
-            {inDept.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
-          </select>
-          <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
-            {hi ? 'जगह से नहीं, डिपार्टमेंट से नाम दिख रहे हैं।' : 'Names are listed by department, not by venue.'}
+              ? `यह ${deptName(form.department, lang)} के एडमिन के पास जाएगा, वही किसी को सौंपेंगे।`
+              : `It goes to the ${deptName(form.department, lang)} admin, who assigns it.`}
           </span>
         </div>
       )}

@@ -6,13 +6,23 @@ import { Spinner } from './UI'
 import Icon from './Icon'
 import PhotoViewer from './PhotoViewer'
 
+// Ten per field. There was no ceiling at all, so a single task could carry as
+// many photos as somebody kept tapping — each one a full-size upload sitting in
+// storage forever, and a review screen nobody can scroll through.
+//
+// The cap is enforced on the TOTAL, not per pick: eight already there and five
+// chosen takes the first two and says so. Silently keeping all thirteen, or
+// silently dropping the lot, are both worse than a short sentence.
+export const MAX_PHOTOS = 10
+
 // Camera-first photo capture with preview + upload.
 // Props:
 //   folder     - storage folder (e.g. 'tasks', 'attendance')
 //   multiple   - allow more than one photo
 //   value      - array of uploaded URLs (controlled)
 //   onChange   - (urls[]) => void
-export default function PhotoCapture({ folder = 'misc', multiple = true, value = [], onChange }) {
+//   max        - ceiling on how many this field holds (default MAX_PHOTOS)
+export default function PhotoCapture({ folder = 'misc', multiple = true, value = [], onChange, max = MAX_PHOTOS }) {
   const C = useColors()
   const t = useT()
   const camRef = useRef(null)
@@ -24,12 +34,27 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
   // there was no way to check what you had just uploaded before submitting it.
   const [viewAt, setViewAt] = useState(null)
 
+  const room = multiple ? Math.max(0, max - value.length) : 1
+  const full = room === 0
+
   async function handleFiles(files) {
     if (!files || !files.length) return
+    const picked = Array.from(files)
+    // Trimmed BEFORE the upload, not after: an eleventh photo that is discarded
+    // on the way back has still been uploaded and still occupies storage.
+    const taking = multiple ? picked.slice(0, room) : picked.slice(-1)
+    if (!taking.length) {
+      setErr(t.photoLimitReached.replace('{n}', max))
+      if (camRef.current) camRef.current.value = ''
+      if (galRef.current) galRef.current.value = ''
+      return
+    }
     setBusy(true)
-    setErr('')
+    setErr(taking.length < picked.length
+      ? t.photoLimitTrimmed.replace('{taken}', taking.length).replace('{n}', max)
+      : '')
     try {
-      const urls = await uploadPhotos(Array.from(files), folder)
+      const urls = await uploadPhotos(taking, folder)
       const next = multiple ? [...value, ...urls] : urls.slice(-1)
       onChange?.(next)
     } catch (e) {
@@ -79,16 +104,16 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
         <button
           type="button"
           onClick={() => camRef.current?.click()}
-          disabled={busy}
-          style={btn(C, C.brandBg, '#fff')}
+          disabled={busy || full}
+          style={{ ...btn(C, C.brandBg, '#fff'), opacity: full ? 0.5 : 1 }}
         >
           {busy ? <Spinner size={16} color="#fff" /> : <Icon name="camera" size={18} color="#fff" />} {t.takePhoto}
         </button>
         <button
           type="button"
           onClick={() => galRef.current?.click()}
-          disabled={busy}
-          style={btn(C, 'transparent', C.text, C.border)}
+          disabled={busy || full}
+          style={{ ...btn(C, 'transparent', C.text, C.border), opacity: full ? 0.5 : 1 }}
         >
           <Icon name="image" size={18} /> {t.uploadPhoto}
         </button>
@@ -114,9 +139,13 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
         onChange={(e) => handleFiles(e.target.files)}
       />
 
+      {/* "3 photos added · add more" said nothing about a ceiling, so hitting it
+          would arrive as a surprise. The count now reads against the limit, and
+          the trailing hint drops once there is no more room. */}
       {multiple && value.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 7 }}>
-          {value.length} {value.length === 1 ? t.photoAdded : t.photosAdded} · {t.addMorePhotos}
+        <div style={{ fontSize: 11.5, color: full ? C.tl : C.faint, marginTop: 7 }}>
+          {value.length}/{max} {value.length === 1 ? t.photoAdded : t.photosAdded}
+          {full ? '' : ` · ${t.addMorePhotos}`}
         </div>
       )}
 

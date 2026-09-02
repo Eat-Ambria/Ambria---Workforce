@@ -693,13 +693,18 @@ function WorkModal({ task, onClose, onSaved, user }) {
   // admin, so one proving it to themselves seemed like theatre — but that made
   // the tick do nothing on their own rostered work, and an admin on the roster
   // is doing the work like anyone else.
-  const showCapture = task.photo_required !== false  // offer the camera
+  // One flag was doing two jobs — whether a photo can be ADDED and whether one
+  // is DEMANDED — so switching the camera off removed the upload entirely. A
+  // supervisory round then had no way to attach a photo even when there was
+  // something worth showing, and staff had to report it in the note instead.
+  //
+  // Adding is always offered. The roster's tick decides only the demand.
   // Only the "after" one is insisted on. The photo is there to show the work was
   // done, and that is the one that shows it — demanding a "before" as well meant
   // standing at the job unable to start it, which is the worst possible moment
   // to be arguing with a phone. It is still offered, and it is still worth
   // taking on anything where the state beforehand is the point.
-  const needsAfter = showCapture
+  const needsAfter = task.photo_required !== false
   const canComplete = !needsAfter || photos.length > 0   // "after" photo to submit
 
   // live timer while working
@@ -851,19 +856,22 @@ function WorkModal({ task, onClose, onSaved, user }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
-              {beforeLabel} {isPending && showCapture && (
+              {beforeLabel} {isPending && (
                 <span style={{ color: C.faint, fontWeight: 500 }}>({t.optional})</span>
               )}
             </div>
-            {isPending && showCapture ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
+            {isPending ? <PhotoCapture folder="tasks" value={beforePhotos} onChange={saveBefore} /> : thumbs(beforePhotos)}
           </div>
 
           {(isInProgress || isWaiting || isDone) && (
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 7 }}>
-                {afterLabel} {isInProgress && needsAfter && <span style={{ color: C.red }}>*</span>}
+                {afterLabel}
+                {isInProgress && (needsAfter
+                  ? <span style={{ color: C.red }}>*</span>
+                  : <span style={{ color: C.faint, fontWeight: 500 }}> ({t.optional})</span>)}
               </div>
-              {isInProgress && showCapture ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
+              {isInProgress ? <PhotoCapture folder="tasks" value={photos} onChange={savePhotos} /> : thumbs(photos)}
             </div>
           )}
         </div>

@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import {
-  TASK_STATUS, DEPARTMENT_MAP, deptName, personName, isDueToday, taskFrequency,
+  TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, deptName, personName, isDueToday, taskFrequency,
   frequencyLabel, FREQUENCY_MAP, PROPERTIES, propName,
 } from '../../constants/org'
 import { Card, ProgressBar, Loader, EmptyState } from '../../components/common/UI'
@@ -82,8 +82,34 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       else { p.todo += 1; sum.todo += 1 }
     })
 
+    // Department first, then who is furthest behind inside it.
+    //
+    // The list used to be one flat run ordered only by how far behind somebody
+    // was, so Security, Housekeeping and Horticulture were interleaved and the
+    // reader had to check the small grey line under each name to know whose team
+    // they were reading. Grouped, the teams read as blocks.
+    //
+    // The order is DEPARTMENTS' own — Admin, Horticulture, Housekeeping,
+    // Security, Kitchen, then the trades — rather than a second list here that
+    // would drift from it. Admin comes first because it already does there.
+    //
+    // Furthest-behind is not lost, only scoped: it still decides the order
+    // WITHIN a team, which is the comparison that means something. Two people on
+    // different teams with different job counts were never really ranked against
+    // each other anyway.
+    //
+    // A department filter makes this a no-op — everyone left is in one team — so
+    // it needs no condition of its own.
+    const deptRank = (code) => {
+      const i = DEPARTMENTS.findIndex((d) => d.code === code)
+      return i === -1 ? DEPARTMENTS.length : i   // retired or blank codes last
+    }
+
     const list = [...by.values()].sort((a, b) => {
       if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1   // nobody-yet last
+      const ad = deptRank(a.department)
+      const bd = deptRank(b.department)
+      if (ad !== bd) return ad - bd                                     // Admin, then the rest
       const ap = a.total ? a.done / a.total : 0
       const bp = b.total ? b.done / b.total : 0
       if (ap !== bp) return ap - bp                                     // furthest behind first
@@ -128,12 +154,66 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       </div>
 
       {/* one row per person — tap to see exactly which jobs */}
-      {people.map((p) => {
+      {people.map((p, i) => {
         const open = openId === p.id
         const dp = pct(p.done, p.total)
         const tone = dp === 100 ? C.green : (p.unassigned ? C.tl : C.maroon)
+        // A band at the top of each team. The rows were already grouped by the
+        // sort, but the only thing naming the team was the small grey line under
+        // each person — so the grouping was there and had to be worked out.
+        //
+        // Keyed on `unassigned` as well as the department: that bucket sorts
+        // last whatever department its tasks carry, so keying on the code alone
+        // would file it under whichever team happened to come before it.
+        const prev = people[i - 1]
+        const groupKey = p.unassigned ? '_none' : (p.department || '_blank')
+        const prevKey = !prev ? null : (prev.unassigned ? '_none' : (prev.department || '_blank'))
+        const newGroup = groupKey !== prevKey
+        const dept = DEPARTMENT_MAP[p.department]
         return (
-          <div key={p.id} style={{ borderTop: `1px solid ${C.border}` }}>
+          <div key={p.id}>
+            {/* No label on the unassigned bucket — the row underneath is already
+                called Unassigned, and repeating it would be the same word twice.
+                It still gets the band, so it does not read as part of the team
+                above it. */}
+            {newGroup && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 16px 7px',
+                background: C.cardAlt,
+                borderTop: `1px solid ${C.borderStrong}`,
+                borderBottom: `1px solid ${C.border}`,
+              }}>
+                {/* A filled chip in the department's own colour, white text on
+                    it. This was `ink` as plain text, which is MEASURED wrong in
+                    dark: ink is chosen to read on a PALE TINT of itself, and on
+                    the dark cardAlt every department fell under 4.5:1 — Admin
+                    1.54, Horticulture 2.20, Carpenter 1.07, which is invisible.
+                    White on `color` clears 4.5 for all nine in both themes (5.02
+                    at worst, Horticulture), and org.js says that is what `color`
+                    is for. The chip also carries the dot's job, so the separate
+                    dot is gone. */}
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center',
+                  padding: '3px 9px', borderRadius: 6,
+                  fontSize: 11, fontWeight: 800, letterSpacing: '0.07em',
+                  textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  ...(p.unassigned
+                    // No department, so no colour to claim. A bordered chip keeps
+                    // it the same kind of element without inventing an identity.
+                    ? { color: C.tl, background: 'transparent', border: `1px solid ${C.borderStrong}` }
+                    : { color: '#fff', background: dept?.color || C.tl }),
+                }}>
+                  {p.unassigned ? t.unassigned : deptName(p.department, lang)}
+                </span>
+                {/* how many people are in this team today, so a one-person team
+                    is visibly a one-person team */}
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                  {people.filter((x) => (x.unassigned ? '_none' : (x.department || '_blank')) === groupKey).length}
+                </span>
+              </div>
+            )}
+          <div style={{ borderTop: newGroup ? 'none' : `1px solid ${C.border}` }}>
             <div
               role="button"
               tabIndex={0}
@@ -202,6 +282,7 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                 ))}
               </div>
             )}
+          </div>
           </div>
         )
       })}
