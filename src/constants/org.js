@@ -191,7 +191,15 @@ export const scopedDepartment = (user) =>
 // Work (tasks + repair requests) can be handed to staff AND to fellow admins —
 // department heads and admins do fieldwork too. Super admins are included so
 // work can be handed "up", and so an admin can assign something to themselves.
+// Roles a super admin can put a user ON, in the User Management picker.
 export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.VALET, ROLES.SUPER_ADMIN]
+
+// Roles that can be handed WORK — a task or a repair request. A different
+// question from the list above, and the difference only appeared when the valet
+// role did: a valet user cannot open /tasks or /task-board at all, so putting
+// their name in an assignee picker means handing a job to somebody who will
+// never see it. Nothing would fail; the request would just sit there.
+export const WORK_ASSIGNEE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.SUPER_ADMIN]
 
 // Whose output Analytics reports on. Admins are in: they are given tasks and
 // they close repairs, so leaving them out under-reported the venue. The super
