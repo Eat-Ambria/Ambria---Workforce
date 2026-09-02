@@ -671,7 +671,33 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
 
       {/* Only once a department is chosen — a list of every member of staff is
           not a choice, it is a scroll. */}
-      {form.department && (
+      {/* Shown for every department, but not always as a control.
+          A list of every member of staff is not a choice, it is a scroll — so it
+          is filtered to the chosen department. Three of those departments are
+          empty (Electrician, Mistri, Carpenter), and there a dropdown was a
+          control with one option in it, which is not a question worth asking.
+          Hiding the whole field was worse: the person then had no idea who the
+          request was going to. So the field stays and states the answer. */}
+      {form.department && inDept.length === 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={fieldLabel}>{hi ? 'किसे सौंपें' : 'Assigned to'}</label>
+          <div style={{
+            ...inputStyle(C),
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: C.cardAlt, color: C.tl, cursor: 'default',
+          }}>
+            <Icon name="user" size={15} color={C.faint} />
+            {hi ? 'एडमिन तय करेगा' : 'The admin will decide'}
+          </div>
+          <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
+            {hi
+              ? `${deptName(form.department, lang)} टीम में अभी कोई नहीं है — यह ${deptName(form.department, lang)} के एडमिन के पास जाएगा।`
+              : `Nobody is in ${deptName(form.department, lang)} yet — it goes to that department's admin.`}
+          </span>
+        </div>
+      )}
+
+      {form.department && inDept.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <label style={fieldLabel}>{hi ? 'किसे सौंपें (वैकल्पिक)' : 'Assign to (optional)'}</label>
           <select style={inputStyle(C)} value={form.assignee} onChange={set('assignee')}>
@@ -679,9 +705,7 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
             {inDept.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
           </select>
           <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
-            {inDept.length === 0
-              ? (hi ? 'इस डिपार्टमेंट में अभी कोई नहीं है।' : 'Nobody is in this department yet.')
-              : (hi ? 'जगह से नहीं, डिपार्टमेंट से नाम दिख रहे हैं।' : 'Names are listed by department, not by venue.')}
+            {hi ? 'जगह से नहीं, डिपार्टमेंट से नाम दिख रहे हैं।' : 'Names are listed by department, not by venue.'}
           </span>
         </div>
       )}
