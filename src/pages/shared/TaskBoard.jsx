@@ -1236,7 +1236,19 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // used for the first assignment AND for admin reassignment later
   async function saveAssignment() {
     if (!assignTo) { setErr(`${t.assignedTo} ${t.isRequired}`); return }
-    if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
+    // Only a deadline the admin has just PICKED. `dueDate` starts as the one
+    // already stored on the row, and a stored deadline can be in the past — six
+    // of the twenty-six live requests are — so this guard was refusing to
+    // reassign those AT ALL, over a date nobody had typed. The first tap failed
+    // with "due date is in the past" and the reassignment only went through once
+    // somebody cleared the field, which read as "it takes two goes".
+    if (dueDate && dueDate !== (row.due_date || '') && dueDate < todayISO()) {
+      setErr(t.dueDatePast); return
+    }
+    // Held from the first tap, not from inside setStatus further down: the log
+    // insert below is a round trip, and until this the button stayed live and
+    // silent through it.
+    setBusy(true); setErr('')
     const m = members.find((x) => x.id === assignTo)
     const changedAssignee = assignTo !== row.assigned_to
     // reassigning to a new person resets to 'assigned' (fresh start);
@@ -1408,6 +1420,13 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   }
 
   // footer actions depend on status + who's looking
+  //
+  // Suppressed entirely while the reassign panel is open — see the end of this
+  // chain. Two primary buttons on screen at once, one of them the biggest thing
+  // in the footer and doing something else, is how a reassignment came to need
+  // two goes: an admin editing their OWN assignment saw "Start work" in the
+  // footer and "Save" up in the panel, tapped the footer one, and got a status
+  // change instead of the handover they had just set up.
   let actions = null
   if (s === 'open' && admin) {
     actions = <Button variant="primary" disabled={busy || !assignTo} onClick={saveAssignment} style={{ flex: 2 }}>{t.assign}</Button>
@@ -1443,6 +1462,18 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // behalf, and there is nobody else here. isAssignee rather than ownWork —
   // ownWork exempts super admins by design, and that exemption is about keeping
   // their approve/reassign/delete powers, not about this.
+  // Mid-edit, the panel's own Cancel/Save pair is the only thing that should be
+  // offered. Whatever the footer would otherwise hold — Start work, Approve,
+  // Reopen — is not the action somebody who just picked a new assignee wants,
+  // and it must not be the most prominent control on the screen.
+  if (reassigning) actions = null
+
+  // Deliberately NOT hidden while reassigning, unlike the primary action above.
+  // It was, briefly, on the same reasoning — and that was wrong twice over: it is
+  // green and says something else, so it was never the button anybody mistook for
+  // Save, and `!isAssignee` already keeps it off the case that actually broke.
+  // Hiding it only took away the ability to open the panel, think again, and close
+  // the job out instead.
   const canCloseNow = admin && !ownWork && !isAssignee && ['open', 'assigned', 'in_progress'].includes(s)
   // (delete is handled by the always-available button in the footer below)
 
