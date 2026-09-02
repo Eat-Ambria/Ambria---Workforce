@@ -891,7 +891,7 @@ export default function Analytics() {
               <select
                 style={filterStyle(C)}
                 value={propFilter}
-                onChange={(e) => { setPropFilter(e.target.value); setExpanded(null) }}
+                onChange={(e) => { setPropFilter(e.target.value) }}
               >
                 <option value="all">{t.all}</option>
                 {PROPERTIES.map((pr) => <option key={pr.code} value={pr.code}>{propName(pr.code, lang)}</option>)}
@@ -901,7 +901,7 @@ export default function Analytics() {
               <select
                 style={filterStyle(C)}
                 value={deptFilter}
-                onChange={(e) => { setDeptFilter(e.target.value); setExpanded(null) }}
+                onChange={(e) => { setDeptFilter(e.target.value) }}
               >
                 <option value="all">{t.all}</option>
                 {deptOptions.map((d) => (
@@ -916,7 +916,7 @@ export default function Analytics() {
               <select
                 style={filterStyle(C)}
                 value={personFilter}
-                onChange={(e) => { setPersonFilter(e.target.value); setExpanded(null) }}
+                onChange={(e) => { setPersonFilter(e.target.value) }}
               >
                 <option value="all">{t.all} ({personOptions.length})</option>
                 {personOptions.map((u) => (

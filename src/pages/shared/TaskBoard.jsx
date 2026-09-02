@@ -79,21 +79,35 @@ const fixCatLabel = (c, t, lang) => {
 }
 const FIX_CAT_TONE = { other: 'blue', kitchen: 'accent' }
 
-// Who may take this request. A kitchen fault goes to the kitchen team and a
-// wiring fault to the electricians — picking a gardener for a broken oven is a
-// mistake the list should not make available. A general repair has no such
-// team, so everyone is offered.
+// The request's own trade, then every admin. Nobody else.
 //
-// The exception is a team nobody is in yet: a picker with no names simply blocks
-// the assignment. Then everyone is offered and the hint says why, rather than
-// leaving the admin stuck at a blank list.
+// Two different jobs, and the list has to do both:
+//
+//   * DO the work — that belongs to the trade. A kitchen fault goes to the
+//     kitchen team and a wiring fault to the electricians; a gardener is not an
+//     answer to a broken oven, so the other trades' staff stay off the list.
+//   * GET the work done — that is an admin. When the tradesperson is not doing
+//     it, the request has to go back up to somebody who can chase it, and then
+//     out again.
+//
+// Admins used to be excluded too, which left a request with nowhere to go: the
+// Painter department is one person, so a painting request offered exactly one
+// name. Not even a head could take it back — by this system's own definition a
+// department head is an admin whose own department is that department, which for
+// Painter IS that one person. The way back up is the Admin department, and it
+// was not on the list.
+//
+// Trade first, so the obvious choice is the top of a searchable picker.
 function assignableFor(category, members) {
   const dept = catDept(category)
-  if (!dept) return { people: members, restricted: false }
+  if (!dept) return { people: members, dept: null }
   const team = members.filter((m) => m.department === dept)
-  return team.length
-    ? { people: team, restricted: true }
-    : { people: members, restricted: false }
+  // Nobody in that trade at all — three of them are empty. Offer everyone
+  // rather than a blank list the assignment cannot get past, and say nothing
+  // about an ordering that is not there.
+  if (!team.length) return { people: members, dept: null }
+  const admins = members.filter((m) => m.department !== dept && isAdminRole(m.role))
+  return { people: [...team, ...admins], dept }
 }
 
 // What the request says, in the reader's language. Written English and
@@ -103,6 +117,23 @@ function assignableFor(category, members) {
 // so a request can be referred to out loud — on the phone, in a WhatsApp
 // message, standing in front of the thing that is broken.
 const ticketNo = (r) => `#${r?.id ?? ''}`
+
+// How long ago, short. A reminder is judged by recency — "2h ago" answers
+// "should I send another" and a timestamp makes you do the arithmetic. Past a
+// week it becomes a date, where recency has stopped being the point.
+function agoText(iso, lang) {
+  if (!iso) return ''
+  const hi = lang === 'hi'
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return hi ? 'अभी' : 'just now'
+  if (mins < 60) return hi ? `${mins} मिनट पहले` : `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return hi ? `${hrs} घंटे पहले` : `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return hi ? 'कल' : 'yesterday'
+  if (days < 7) return hi ? `${days} दिन पहले` : `${days}d ago`
+  return fmtDate(iso)
+}
 
 const fixTitle = (r, hi) => (hi && r?.title_hi ? r.title_hi : r?.title)
 const fixDesc = (r, hi) => (hi && r?.description_hi ? r.description_hi : r?.description)
@@ -804,9 +835,9 @@ function PostModal({ user, members = [], onClose, onSaved }) {
   }
 
   // A kitchen request narrows the names the moment the kind is chosen.
-  const { people: atProperty, restricted: teamOnly } = assignableFor(form.category, members)
-  const teamHint = teamOnly
-    ? t.tradeStaffOnly.replace('{d}', deptName(catDept(form.category), lang))
+  const { people: atProperty, dept: leadDept } = assignableFor(form.category, members)
+  const teamHint = leadDept
+    ? t.tradeStaffFirst.replace('{d}', deptName(leadDept, lang))
     : t.assigneeAnyVenueHint
 
   async function save() {
@@ -1093,8 +1124,23 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // to be true before there is anything to remind anyone about.
   const overdue = row.due_date && row.due_date < todayISO()
     && !['approved', 'completed'].includes(row.status)
-  const canRemind = admin && overdue && !!row.assigned_to
+  // Somebody's name on it, the work not finished, and an admin looking at it.
+  //
+  // It used to require OVERDUE too, and a due date is optional — of the 26 open
+  // requests carrying a name, 20 have no due date at all, so the nudge could
+  // never be sent on any of them. Waiting for a deadline nobody set is not a
+  // reason to withhold it.
+  const canRemind = admin
+    && !!row.assigned_to
+    && !['approved', 'completed'].includes(row.status)
 
+  // When the last nudge went out. Read from the notifications table rather than
+  // held locally, so it survives closing the modal and shows what a DIFFERENT
+  // admin sent — which is the case the once-a-day guard exists for.
+  const [lastRemind, setLastRemind] = useState(null)
+  // Just-sent, for this modal only: it disables the button so a second tap
+  // cannot fire while the first is in flight. `lastRemind` above is the durable
+  // record; this is the immediate one.
   const [reminded, setReminded] = useState(false)
 
   // An update needs somebody to reach. A request from the public link has no
@@ -1112,6 +1158,20 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     setUpdates(data || [])
   }, [row.id])
   useEffect(() => { loadUpdates() }, [loadUpdates])
+
+  const loadLastRemind = useCallback(async () => {
+    if (!row.assigned_to) return
+    const { data } = await supabase
+      .from('notifications')
+      .select('created_at, by_name')
+      .eq('type', 'fix_reminder')
+      .eq('entity_id', String(row.id))
+      .eq('for_user', row.assigned_to)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    setLastRemind(data?.[0] || null)
+  }, [row.id, row.assigned_to])
+  useEffect(() => { loadLastRemind() }, [loadLastRemind])
 
   // One row in, and the trigger tells whoever is waiting. Nothing else about the
   // request changes — an update is a message, not a status.
@@ -1157,6 +1217,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     setBusy(false)
     if (error) { setErr(error.message); return }
     setReminded(true)
+    // Straight from the write, not a re-read: the row was just inserted and the
+    // stamp is the only thing that changed.
+    setLastRemind({ created_at: new Date().toISOString(), by_name: user.name })
   }
 
   async function del() {
@@ -1171,7 +1234,7 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
   // STEP 1: hand the request to a department. Stays 'open' and unassigned — the
   // trigger notifies that department's head, who then picks the person.
   // used for the first assignment AND for admin reassignment later
-  function saveAssignment() {
+  async function saveAssignment() {
     if (!assignTo) { setErr(`${t.assignedTo} ${t.isRequired}`); return }
     if (dueDate && dueDate < todayISO()) { setErr(t.dueDatePast); return }
     const m = members.find((x) => x.id === assignTo)
@@ -1179,6 +1242,34 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
     // reassigning to a new person resets to 'assigned' (fresh start);
     // editing only the due date keeps the current status
     const status = (s === 'open' || changedAssignee) ? 'assigned' : s
+
+    // A HANDOVER leaves a line in the thread. Without it a reassignment is
+    // silent: assigned_to and assigned_to_name are overwritten, so the fact that
+    // somebody had this request and did not do it disappears the moment it moves
+    // — which is exactly the thing an admin reassigns in order to deal with.
+    //
+    // Only a real handover. `row.assigned_to &&` skips the FIRST assignment,
+    // which is a start rather than a handover, and `changedAssignee` skips an
+    // edit that only touched the due date — both would be noise in a thread
+    // people read.
+    //
+    // Written BEFORE setStatus, because setStatus ends in onSaved() and this
+    // modal may be gone by the time an insert fired after it would land.
+    //
+    // Its failure must not block the reassignment: the log is the lesser of the
+    // two things happening here.
+    if (changedAssignee && row.assigned_to) {
+      const from = personName(members.find((x) => x.id === row.assigned_to) || {}, lang)
+        || row.assigned_to_name || '—'
+      const to = personName(m || {}, lang) || m?.name || '—'
+      await supabase.from('work_board_updates').insert({
+        board_id: row.id,
+        by_user: user.id,
+        by_name: personName(user, lang) || user.name || null,
+        note: t.movedFromTo.replace('{from}', from).replace('{to}', to),
+      })
+    }
+
     // stamp the assignee's department so the request follows the right team
     setStatus(status, {
       assigned_to: assignTo,
@@ -1395,7 +1486,9 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
       footer={(
         <>
           <Button variant="ghost" onClick={onClose} style={{ flex: '1 1 88px' }}>{t.close}</Button>
-          {/* Only on an overdue request that somebody is already holding. */}
+          {/* Anything still outstanding with somebody's name on it. Disabled
+              once sent — the guard is one a day, and the stamp beside the
+              assignee above says when the last one went. */}
           {canRemind && (
             <Button variant="ghost" disabled={busy || reminded} onClick={remind} style={{ flex: '1 1 150px', whiteSpace: 'nowrap' }}>
               <Icon name="bell" size={15} color={reminded ? C.green : TR_ORANGE} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
@@ -1493,8 +1586,24 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         </div>
       )}
 
+      {/* Beside the name, not down in the footer with the button: "have we
+          already chased this?" is asked while reading who is holding it, and the
+          answer has to be there then. It also says WHO sent it — the once-a-day
+          guard counts another admin's nudge too, and being refused with no
+          explanation is worse than the refusal. */}
       {row.assigned_to_name && (
-        <div style={{ fontSize: 13.5, marginBottom: 12 }}>{t.assignedTo}: <b>{assigneeName}</b></div>
+        <>
+          <div style={{ fontSize: 13.5, marginBottom: lastRemind ? 4 : 12 }}>
+            {t.assignedTo}: <b>{assigneeName}</b>
+          </div>
+          {lastRemind && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.tl, marginBottom: 12 }}>
+              <Icon name="bell" size={12} color={C.tl} />
+              {t.lastReminded} {agoText(lastRemind.created_at, lang)}
+              {lastRemind.by_name ? ` · ${lastRemind.by_name}` : ''}
+            </div>
+          )}
+        </>
       )}
       {row.due_date && s !== 'open' && (
         <div style={{ fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 5, color: C.tl }}>
@@ -1502,9 +1611,16 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         </div>
       )}
 
-      {/* admin can reassign a request that isn't finished yet — but not one
-          that's on their own plate; that's for another admin to move */}
-      {admin && !ownWork && ['assigned', 'in_progress', 'approval_requested'].includes(s) && !reassigning && (
+      {/* An admin can move any unfinished request, INCLUDING one on their own
+          plate.
+          It used to exclude their own — "that's for another admin to move" —
+          which read as a fair rule and blocked the one route the board needs.
+          Handing a request back up to a head is how it gets unstuck when the
+          tradesperson is not doing it, and a head who cannot then pass it on has
+          been given a dead end: their only option was to do the job themselves.
+          Staff still cannot reassign anything; `admin` above is the real gate,
+          and it always was. */}
+      {admin && ['assigned', 'in_progress', 'approval_requested'].includes(s) && !reassigning && (
         <button
           type="button"
           onClick={() => setReassigning(true)}
@@ -1527,8 +1643,8 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
           {/* Straight to a person — every assignable name, searchable. The
               department is taken from whoever is picked, so routing still works
               without anyone choosing a team first. */}
-          <Field label={t.assignedTo} required hint={assignPool.restricted
-            ? t.tradeStaffOnly.replace('{d}', deptName(catDept(row.category), lang))
+          <Field label={t.assignedTo} required hint={assignPool.dept
+            ? t.tradeStaffFirst.replace('{d}', deptName(assignPool.dept, lang))
             : t.assigneeAnyVenueHint}>
             <PersonPicker
               C={C} t={t} lang={lang}
@@ -1718,7 +1834,10 @@ function DetailModal({ row, user, admin, members, onClose, onSaved }) {
         </div>
       )}
 
-      {/* explain the missing admin buttons on work assigned to me */}
+      {/* Explain the admin buttons that are missing on work assigned to me.
+          Approve and Delete stay another admin's call — you should not sign off
+          your own work. Reassign is NOT in that group: passing a job on is not
+          judging it. */}
       {admin && ownWork && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.tl, marginTop: 12 }}>
           <Icon name="warning" size={14} color={C.tl} /> {t.ownWorkLocked}

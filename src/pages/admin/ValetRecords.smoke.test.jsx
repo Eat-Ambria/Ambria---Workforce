@@ -61,13 +61,9 @@ vi.mock('../../lib/valetReport', () => ({
   ValetReportError: class extends Error {},
 }))
 
-// eslint-disable-next-line import/first
 import ValetRecords from './ValetRecords'
-// eslint-disable-next-line import/first
 import { LangProvider } from '../../context/LangContext'
-// eslint-disable-next-line import/first
 import { ThemeProvider } from '../../context/ThemeContext'
-// eslint-disable-next-line import/first
 import { AuthProvider } from '../../context/AuthContext'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
