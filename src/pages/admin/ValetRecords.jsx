@@ -345,6 +345,31 @@ function Head({ C, hi, showVenue }) {
   )
 }
 
+// Gold, rose, blue — a tier each. Standard is 78% of the rows, so it was
+// tempting to leave it plain grey and let colour mean "not standard"; but grey is
+// also what an unknown tier renders as, and a screenful of grey chips reads as a
+// feature that failed rather than one that had nothing to say. So Standard gets
+// the quietest of the three real colours and grey is kept for the genuine unknown.
+//
+// Premium was violet first and sat too close to Standard's blue — two chips a
+// column apart have to separate at a glance, not on inspection. Rose is the one
+// family that clears gold, blue, and the status chip beside it in the same row,
+// which already owns green / blue / yellow (see STATUS_TONE).
+//
+// Every pair was measured against the card it sits on, in both themes:
+// gold 4.67 / 9.67, rose 5.53 / 6.30, blue 4.69 / 6.64. The border is the text
+// colour at low alpha, so it belongs to the chip rather than to the table.
+//
+// The API sends VIP / Premium / Standard mixed-case, so match lowered — the chip
+// uppercases in CSS, which would hide a mismatch here as a silently grey chip.
+function tierTone(C, tier) {
+  const key = String(tier || '').trim().toLowerCase()
+  if (key === 'vip') return { fg: C.yellow, bg: C.yBg, bd: `${C.yellow}44` }
+  if (key === 'premium') return { fg: C.pink, bg: C.pkBg, bd: `${C.pink}44` }
+  if (key === 'standard') return { fg: C.blue, bg: C.bBg, bd: `${C.blue}44` }
+  return { fg: C.tl, bg: C.cardAlt, bd: C.border }
+}
+
 function Row({ C, hi, r, showVenue, showPhone }) {
   // Read defensively: a valet deployment without migration 0044 omits these two
   // keys entirely rather than sending null, and `undefined` down this path would
@@ -379,17 +404,19 @@ function Row({ C, hi, r, showVenue, showPhone }) {
         <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
           {r.car_number || '—'}
         </span>
-        {r.car_tier && (
-          <span style={{
-            display: 'inline-block', marginTop: 2, fontSize: 10, fontWeight: 800,
-            letterSpacing: '0.03em', textTransform: 'uppercase',
-            color: r.car_tier === 'VIP' ? C.maroon : C.tl,
-            background: r.car_tier === 'VIP' ? C.maroonSoft : C.cardAlt,
-            border: `1px solid ${C.border}`, borderRadius: 999, padding: '0 7px',
-          }}>
-            {r.car_tier}
-          </span>
-        )}
+        {r.car_tier && (() => {
+          const tone = tierTone(C, r.car_tier)
+          return (
+            <span style={{
+              display: 'inline-block', marginTop: 2, fontSize: 10, fontWeight: 800,
+              letterSpacing: '0.03em', textTransform: 'uppercase',
+              color: tone.fg, background: tone.bg,
+              border: `1px solid ${tone.bd}`, borderRadius: 999, padding: '0 7px',
+            }}>
+              {r.car_tier}
+            </span>
+          )
+        })()}
       </span>
 
       {showVenue && (

@@ -48,7 +48,8 @@ export const light = {
   purple: '#7C3AED',
   cyan: '#0891B2',
   indigo: '#4F46E5',
-  pink: '#DB2777',
+  pink: '#BE185D',   // was #DB2777, which measured 4.21 on its own tint
+  pkBg: '#FDF2F8',   // pink 5.53 on it
 
   // effects
   overlay: 'rgba(15,23,42,0.42)',
@@ -104,6 +105,7 @@ export const dark = {
   cyan: '#22D3EE',
   indigo: '#818CF8',
   pink: '#F472B6',
+  pkBg: '#2E1626',   // pink 6.30 on it
 
   // effects — deeper, because a light shadow is invisible on a dark ground
   overlay: 'rgba(0,0,0,0.62)',
