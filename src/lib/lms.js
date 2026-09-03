@@ -166,7 +166,12 @@ export async function lmsVenueEvents(body = {}) {
 // because a twelve-second wait for figures that are ten minutes old helps
 // nobody. The caller gets the new rows through `onFresh` when they land.
 const CONTRACTS_TTL_MS = 10 * 60 * 1000
-const CONTRACTS_KEY = 'ambria.lms.contracts.v1'
+// Bump the version whenever a stored field changes shape. v1 was written while a
+// pax count of 0 was being dropped, so those rows carry no `guests` key at all —
+// reverting the code cannot fix a browser that already holds one. A new key
+// abandons the old rows instead of trying to repair them; the old key is left to
+// expire on its own rather than swept, which would need a scan on every load.
+export const CONTRACTS_KEY = 'ambria.lms.contracts.v2'
 
 let contractsMemo = null   // { at, rows }
 let contractsInFlight = null

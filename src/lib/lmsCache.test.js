@@ -23,7 +23,9 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-const KEY = 'ambria.lms.contracts.v1'
+// Imported rather than repeated, so bumping the cache version does not fail a
+// test that has nothing to do with the version.
+const { CONTRACTS_KEY: KEY } = await import('./lms.js')
 
 let lms
 beforeEach(async () => {

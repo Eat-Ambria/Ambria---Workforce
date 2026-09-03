@@ -94,17 +94,15 @@ export default function Valet() {
   const [ty, tmn, td] = today.split('-').map(Number) // tmn is 1-based
   // bookings are allowed from today up to exactly one year ahead
   const maxDate = `${ty + 1}-${pad(tmn)}-${pad(td)}`
-  // A year back and a year forward. Back was pinned to the current month, which
-  // meant past bookings had no route on this tab at all — the Bookings tab's
-  // "Past" list was the only way to reach them, and paging back now shows them
-  // as coloured tiles like any other month.
+  // The calendar roams freely — no floor and no ceiling on which month can be
+  // looked at. It was pinned to a year either side, which is a rule about
+  // BOOKING applied to LOOKING, and the two are not the same thing: an event a
+  // year and a half out is worth seeing even though it cannot be booked yet.
   //
-  // Nothing here lets you BOOK in the past. Three guards already stand in the
-  // way and none of them depend on the month limit: an empty past tile does not
-  // open, a past date's modal offers no New Booking, and the form refuses a past
-  // date on save.
-  const minMonth = { y: ty - 1, m: tmn - 1 }
-  const maxMonth = { y: ty + 1, m: tmn - 1 }
+  // Nothing here lets you book outside the window. Four guards stand in the way
+  // and none of them depend on how far the calendar can be scrolled: an empty
+  // out-of-window tile does not open, its modal offers no New Booking and says
+  // why, and the form refuses the date on save.
   const [month, setMonth] = useState(() => ({ y: ty, m: tmn - 1 }))
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -195,26 +193,9 @@ export default function Valet() {
   for (let i = 0; i < firstDow; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
-  // Every month the arrows can reach, as one list. ONE select rather than a
-  // month picker beside a year picker: two controls can be set to a pair that
-  // does not exist here — July 2025 — and would then need clamping. A list built
-  // from the range can only produce a month the range contains.
-  const monthOptions = useMemo(() => {
-    const out = []
-    let y = ty - 1
-    let m = tmn - 1
-    while (y < ty + 1 || (y === ty + 1 && m <= tmn - 1)) {
-      out.push({ y, m })
-      m += 1
-      if (m > 11) { m = 0; y += 1 }
-    }
-    return out
-  }, [ty, tmn])
-
-  const canPrev = month.y > minMonth.y || (month.y === minMonth.y && month.m > minMonth.m)
-  const canNext = month.y < maxMonth.y || (month.y === maxMonth.y && month.m < maxMonth.m)
+  const canPrev = true
+  const canNext = true
   const shiftMonth = (delta) => {
-    if (delta < 0 ? !canPrev : !canNext) return
     setMonth(({ y, m }) => {
       const nm = m + delta
       return { y: y + Math.floor(nm / 12), m: ((nm % 12) + 12) % 12 }
@@ -223,6 +204,24 @@ export default function Valet() {
 
   const openCreate = (iso, prefill = null) => { setSelectedDate(null); setCreatePrefill(prefill); setCreatingDate(iso || today) }
   const openEdit = (booking) => { setSelectedDate(null); setEditingBooking(booking); setCreatingDate(booking.event_date) }
+
+  // Back to the day it was opened from, not out to the calendar.
+  //
+  // Every route into the booking form comes from the day view — the New Booking
+  // button, an event's "+ Valet Booking", and editing a booking card — and
+  // saving dropped the reader onto the month grid, from where getting back to
+  // that day is another tap. It matters more now that a booked event disappears
+  // from the day's event list: the next thing after saving is usually the next
+  // event on the same day, on the list that just got shorter.
+  //
+  // `creatingDate` is the day in all three cases, including an edit, where it
+  // was set from the booking's own date.
+  const closeCreate = () => {
+    setSelectedDate(creatingDate)
+    setCreatingDate(null)
+    setCreatePrefill(null)
+    setEditingBooking(null)
+  }
 
   // The same sheet the Bookings tab exports, from the same query — so the two
   // buttons can never disagree about what "the next seven dates" means.
@@ -313,7 +312,7 @@ export default function Valet() {
             <button onClick={() => shiftMonth(-1)} disabled={!canPrev} style={navBtn(C, !canPrev)} aria-label={t.prevMonth}>
               <Icon name="chevronLeft" size={18} color={canPrev ? C.text : C.faint} />
             </button>
-            <MonthPicker C={C} lang={lang} month={month} options={monthOptions} onPick={setMonth} />
+            <MonthPicker C={C} lang={lang} month={month} onPick={setMonth} />
             <button onClick={() => shiftMonth(1)} disabled={!canNext} style={navBtn(C, !canNext)} aria-label={t.nextMonth}>
               <Icon name="chevronRight" size={18} color={canNext ? C.text : C.faint} />
             </button>
@@ -460,7 +459,7 @@ export default function Valet() {
           C={C} t={t} date={selectedDate} scopeAll={scopeAll} matrix={matrix}
           list={byDate[selectedDate] || []}
           lmsList={lmsByDate[selectedDate] || []} lmsError={lmsError} lmsCount={lms.length}
-          visibleProps={visibleProps} monthBookings={bookings}
+          visibleProps={visibleProps} monthBookings={bookings} maxDate={maxDate}
           onClose={() => setSelectedDate(null)}
           onAdd={() => openCreate(selectedDate)}
           onCreateFrom={(prefill) => openCreate(selectedDate, prefill)}
@@ -473,8 +472,8 @@ export default function Valet() {
         <CreateModal
           C={C} t={t} lang={lang} user={user} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix}
           date={creatingDate} minDate={today} maxDate={maxDate} existing={bookings} prefill={createPrefill} editing={editingBooking}
-          onClose={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null) }}
-          onSaved={() => { setCreatingDate(null); setCreatePrefill(null); setEditingBooking(null); load() }}
+          onClose={closeCreate}
+          onSaved={() => { closeCreate(); load() }}
         />
       )}
     </div>
@@ -492,9 +491,26 @@ export default function Valet() {
 // A year-grouped grid of short month names instead: every month the arrows can
 // reach, visible at once, three rows of four. Nothing to scroll and nothing that
 // depends on the browser's own styling.
-function MonthPicker({ C, lang, month, options, onPick }) {
+// Jump to a month: one year at a time, twelve months in a grid.
+//
+// A native <select> was tried first and is wrong here twice over. The browser
+// paints the dropdown itself, so `background: transparent` never reaches it
+// while `color` does — in dark theme that is near-white option text on the
+// browser's own light popup, unreadable. And a 25-item scroll to reach March is
+// a poor control even where it renders.
+//
+// A grid shows every month of a year at once, so any month is at most one year
+// step plus one tap away, and the year arrows are not bounded — looking at a
+// month is not the same act as booking in it, and an event eighteen months out
+// is worth seeing before it can be booked.
+function MonthPicker({ C, lang, month, onPick }) {
   const [open, setOpen] = useState(false)
+  const [year, setYear] = useState(month.y)
   const boxRef = useRef(null)
+
+  // Opening always starts on the month being shown, however far the year was
+  // wandered last time.
+  useEffect(() => { if (open) setYear(month.y) }, [open, month.y])
 
   // A panel that covers the grid must close on a click anywhere else and on Esc
   // — the second because a keyboard user who opened it has no other way out.
@@ -510,17 +526,7 @@ function MonthPicker({ C, lang, month, options, onPick }) {
     }
   }, [open])
 
-  // Grouped by year, in order, so the panel reads like a calendar rather than a
-  // list that happens to be sorted.
-  const years = []
-  options.forEach((o) => {
-    const row = years.find((y) => y.y === o.y)
-    if (row) row.months.push(o.m)
-    else years.push({ y: o.y, months: [o.m] })
-  })
-
   const now = new Date()
-  const isNow = (y, m) => y === now.getFullYear() && m === now.getMonth()
 
   return (
     <span ref={boxRef} style={{ position: 'relative', display: 'inline-flex' }}>
@@ -545,54 +551,75 @@ function MonthPicker({ C, lang, month, options, onPick }) {
         <div
           style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
-            zIndex: 60, width: 268, padding: 12,
+            zIndex: 60, width: 290, padding: 14,
             background: C.card, border: `1px solid ${C.borderStrong}`,
-            borderRadius: 14, boxShadow: C.shadowLg || C.shadow,
+            borderRadius: 16, boxShadow: C.shadowLg || C.shadow,
           }}
         >
-          {years.map((row) => (
-            <div key={row.y} style={{ marginBottom: 10 }}>
-              <div style={{
-                fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em',
-                color: C.faint, marginBottom: 6, paddingLeft: 2,
-              }}>
-                {row.y}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
-                {row.months.map((m) => {
-                  const on = month.y === row.y && month.m === m
-                  const today = isNow(row.y, m)
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => { onPick({ y: row.y, m }); setOpen(false) }}
-                      style={{
-                        padding: '7px 0', borderRadius: 9, cursor: 'pointer',
-                        fontSize: 12.5, fontWeight: on ? 800 : 600,
-                        background: on ? C.brandBg : 'transparent',
-                        color: on ? '#fff' : C.text,
-                        // The current month keeps a ring when it is not the one
-                        // selected, so "where am I" and "where is now" are two
-                        // readable states rather than one.
-                        border: `1px solid ${on ? C.brandBg : today ? C.maroon : C.border}`,
-                      }}
-                    >
-                      {monthShort(m, lang)}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+          {/* the year, with its own arrows — the months below never scroll */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setYear((y) => y - 1)}
+              aria-label={lang === 'hi' ? 'पिछला साल' : 'Previous year'}
+              style={arrowBtn(C, false)}
+            >
+              <Icon name="chevronLeft" size={16} color={C.text} />
+            </button>
+            <span style={{ fontSize: 16, fontWeight: 800, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+              {year}
+            </span>
+            <button
+              type="button"
+              onClick={() => setYear((y) => y + 1)}
+              aria-label={lang === 'hi' ? 'अगला साल' : 'Next year'}
+              style={arrowBtn(C, false)}
+            >
+              <Icon name="chevronRight" size={16} color={C.text} />
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {Array.from({ length: 12 }, (_, m) => {
+              const on = month.y === year && month.m === m
+              const today = year === now.getFullYear() && m === now.getMonth()
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { onPick({ y: year, m }); setOpen(false) }}
+                  style={{
+                    padding: '9px 0', borderRadius: 10, cursor: 'pointer',
+                    fontSize: 13, fontWeight: on ? 800 : 600,
+                    background: on ? C.brandBg : 'transparent',
+                    color: on ? '#fff' : C.text,
+                    // The current month keeps a ring when it is not the selected
+                    // one, so "where am I" and "where is now" stay two readable
+                    // states rather than one.
+                    border: `1px solid ${on ? C.brandBg : (today ? C.maroon : 'transparent')}`,
+                  }}
+                >
+                  {monthShort(m, lang)}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
     </span>
   )
 }
 
+const arrowBtn = (C, off) => ({
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 30, height: 30, borderRadius: 9,
+  background: 'transparent', border: `1px solid ${off ? C.border : C.borderStrong}`,
+  cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.45 : 1,
+})
+
+
 /* ------------------------------- day view ------------------------------- */
-function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, scopeAll, matrix, visibleProps, monthBookings, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
+function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, scopeAll, matrix, visibleProps, monthBookings, maxDate, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
   const { lang } = useLang()
   const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
@@ -602,6 +629,13 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, sco
   const bookedCodes = new Set(monthBookings.filter((b) => b.event_date === date).map((b) => b.property))
   const allBooked = visibleProps.every((p) => bookedCodes.has(p.code))
   const isPast = date < todayISO() // past dates: view/delete only, no new bookings
+  // The mirror of isPast at the other end. The calendar can now be scrolled as
+  // far ahead as anyone likes, but a booking is still only allowed a year out —
+  // so past that, this behaves exactly as a past date does: look, do not book.
+  // Without it the New Booking button would open a form that refuses to save,
+  // which is a worse way to learn the rule than being told it here.
+  const tooFar = !!maxDate && date > maxDate
+  const noNewBookings = isPast || tooFar
 
   async function del(id) {
     if (!(await confirm({ message: t.deleteBookingConfirm }))) return
@@ -615,8 +649,16 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, sco
     <Modal
       open onClose={onClose} title={fmtLong(date, lang)}
       footer={
-        isPast
-          ? <div style={{ fontSize: 13, color: C.tl, textAlign: 'center', width: '100%' }}>{t.pastDateNoBooking || "Past date — bookings can't be added."}</div>
+        noNewBookings
+          ? (
+            <div style={{ fontSize: 13, color: C.tl, textAlign: 'center', width: '100%' }}>
+              {isPast
+                ? (t.pastDateNoBooking || "Past date — bookings can't be added.")
+                : (lang === 'hi'
+                  ? 'बुकिंग सिर्फ़ एक साल आगे तक हो सकती है।'
+                  : 'Bookings can only be made up to a year ahead.')}
+            </div>
+          )
           : allBooked
             ? <div style={{ fontSize: 13, color: C.tl, textAlign: 'center', width: '100%' }}>{t.dateFullyBooked}</div>
             : null
@@ -636,19 +678,52 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, sco
       )}
 
       {/* confirmed venue events + contract details from the LMS for this date */}
-      <LmsVenuePanel C={C} t={t} date={date} list={lmsList} error={lmsError} isPast={isPast} loadedCount={lmsCount} onCreateFrom={onCreateFrom} />
+      {/* `list` is this date's bookings — what the panel checks each event
+          against. Deleting a booking reloads the day, so the event comes back
+          on its own; nothing has to remember to put it there. */}
+      <LmsVenuePanel C={C} t={t} date={date} list={lmsList} booked={list} error={lmsError} isPast={noNewBookings} loadedCount={lmsCount} onCreateFrom={onCreateFrom} />
     </Modal>
   )
 }
 
 /* ---- LMS confirmed venue events + contract details for one date ---- */
-function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, loadedCount, onCreateFrom }) {
+// An event that already has a booking drops out of this list.
+//
+// It used to sit here after being booked, looking like work still to do — and
+// that is not only untidy. On 15 Feb 2027 the same event was booked twice: the
+// first took Exotica, which is the venue the event names, and the second fell
+// through to firstFree(date) and landed on Manaktala, a venue with no such event
+// at all. With the event gone after the first booking, the second could not have
+// happened.
+//
+// Matched on CUSTOMER NAME + TIME, not on the entry number. Two events can share
+// an entry number and be different bookings — this same date carries 00631
+// twice, at 10:00 for 150 people and 19:00 for 300 — so keying on it would hide
+// the evening event the moment somebody booked the morning one.
+//
+// Name and time are what the booking form copies off the event and what the
+// booking stores, so they match exactly. That also makes this work for bookings
+// made BEFORE this existed, which a stored id could never have done.
+//
+// If somebody edits the name or the time afterwards, the event comes back into
+// the list. That is the safe direction to fail: showing an event that is already
+// booked costs a second look, hiding one that is not costs the booking.
+function LmsVenuePanel({ C, t, date, list = [], booked = [], error = '', isPast = false, loadedCount, onCreateFrom }) {
+  // Read here rather than threaded down, the same way DayModal above does it.
+  const { lang } = useLang()
   // Read here rather than threaded down from Valet: this is three levels below
   // it, and a prop passed through two components that do not use it is two
   // chances to forget it on the next panel somebody adds.
   const { user: viewer } = useAuth()
   const showPhone = canSeeGuestPhone(viewer?.role)
   // build a valet-booking prefill from an LMS venue event
+  // One key both sides can produce. to24h() so "10:00" and "10:00 AM" are the
+  // same slot however either side happens to write it.
+  const slot = (name, time) => `${String(name || '').trim().toLowerCase()}|${to24h(String(time || '')) || String(time || '').trim()}`
+  const takenSlots = new Set(booked.map((b) => slot(b.customer_name, b.event_time)))
+  const open = list.filter((c) => !takenSlots.has(slot(c.customer, c.time)))
+  const hidden = list.length - open.length
+
   const prefillFrom = (c) => ({
     property: PROP_BY_LMS_VENUE[Number(c.venueId)] || undefined,
     event_date: date,
@@ -669,6 +744,15 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, load
         <div style={{ background: C.rBg, color: C.red, fontSize: 12.5, borderRadius: 10, padding: '9px 12px' }}>
           {error}. Make sure the <b>lms-proxy</b> function is deployed.
         </div>
+      ) : open.length === 0 && hidden > 0 ? (
+        // Not "no events" — every one of them has a booking, which is a
+        // different thing and the thing somebody wants to know.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: C.green }}>
+          <Icon name="check" size={15} color={C.green} />
+          {lang === 'hi'
+            ? `सभी ${hidden} इवेंट की बुकिंग हो चुकी है`
+            : `All ${hidden} event${hidden === 1 ? '' : 's'} booked`}
+        </div>
       ) : list.length === 0 ? (
         <div>
           <div style={{ fontSize: 13, color: C.tl }}>{t.noLmsEvents}</div>
@@ -680,7 +764,16 @@ function LmsVenuePanel({ C, t, date, list = [], error = '', isPast = false, load
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {list.map((c) => (
+          {/* A quiet line, not a badge: it explains why the list is shorter than
+              the CRM's own count without competing with the events themselves. */}
+          {hidden > 0 && (
+            <div style={{ fontSize: 11.5, color: C.faint }}>
+              {lang === 'hi'
+                ? `${hidden} इवेंट की बुकिंग हो चुकी है, इसलिए यहाँ नहीं दिख रहे`
+                : `${hidden} already booked, so not listed here`}
+            </div>
+          )}
+          {open.map((c) => (
             <div key={c.rowId} style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{c.customer || c.functionType || 'Venue event'}</div>
               <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -723,8 +816,8 @@ function BookingCard({ C, t, lang, b, scopeAll, matrix, busy, onEdit, onDelete }
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{b.customer_name || '—'}</div>
           {scopeAll && (
-            <div style={{ fontSize: 12.5, color: C.faint, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="pin" size={13} /> {propName(b.property, lang)}
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="pin" size={13} color={C.tl} /> {propName(b.property, lang)}
             </div>
           )}
         </div>

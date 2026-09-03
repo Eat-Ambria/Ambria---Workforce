@@ -421,12 +421,6 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
   // it can go to are the four that do general work. Kitchen, Electrician and the
   // rest are their own kind of repair — offering them here as well would let a
   // request say "General repair" and "Electrician" at the same time.
-  // Said in exactly one place. It appears twice — as the first option in the
-  // picker, and as the whole answer where a department has nobody in it — and
-  // it was two different sentences for the same thing: "Leave it to the admin"
-  // in the dropdown, "The admin will decide" on the line. One outcome, two
-  // names for it.
-  const adminDecides = hi ? 'एडमिन तय करेगा' : 'The admin will decide'
 
   const GENERAL_DEPTS = ['a', 'h', 'k', 's']
   const deptChoices = CAT_DEPT[form.category] ? [CAT_DEPT[form.category]] : GENERAL_DEPTS
@@ -657,43 +651,6 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
             : 'This decides which department\u2019s admin sees the request.'}
         </span>
       </div>
-
-      {/* Only once a department is chosen — a list of every member of staff is
-          not a choice, it is a scroll. */}
-      {/* Shown for every department, but not always as a control.
-          A list of every member of staff is not a choice, it is a scroll — so it
-          is filtered to the chosen department. Three of those departments are
-          empty (Electrician, Mistri, Carpenter), and there a dropdown was a
-          control with one option in it, which is not a question worth asking.
-          Hiding the whole field was worse: the person then had no idea who the
-          request was going to. So the field stays and states the answer. */}
-      {/* One answer, always: the admin routes it.
-          There used to be a person picker here, listing whoever was in the chosen
-          department. It came off because the people filling this form in — staff
-          reporting a fault, and outside visitors through the public link — are
-          not the ones who know who should do the job. Naming somebody was a guess
-          that then had to be undone, and three of the nine departments have
-          nobody in them anyway.
-          It states the outcome rather than saying nothing, so nobody is left
-          wondering where the request went. */}
-      {form.department && (
-        <div style={{ marginBottom: 16 }}>
-          <label style={fieldLabel}>{hi ? 'किसे सौंपें' : 'Assigned to'}</label>
-          <div style={{
-            ...inputStyle(C),
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: C.cardAlt, color: C.tl, cursor: 'default',
-          }}>
-            <Icon name="user" size={15} color={C.faint} />
-            {adminDecides}
-          </div>
-          <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
-            {hi
-              ? `यह ${deptName(form.department, lang)} के एडमिन के पास जाएगा, वही किसी को सौंपेंगे।`
-              : `It goes to the ${deptName(form.department, lang)} admin, who assigns it.`}
-          </span>
-        </div>
-      )}
 
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'कितना ज़रूरी है?' : 'How urgent is it?'}</label>
