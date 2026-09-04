@@ -58,13 +58,18 @@ const withHeavy = (breakdown, heavy) => {
 // that strength behind a date number nothing is readable.
 const BAND_ALPHA = { light: '2e', dark: '66' }   // ~18% and ~40%
 
+//
+// The split runs on the diagonal rather than straight down. On a tile this small
+// a vertical cut lands right beside the date number and reads as a seam through
+// it; the diagonal passes behind the number instead, so the colours stay
+// countable without crowding the digit that has to be read first.
 const venueBands = (codes, theme) => {
   if (!codes.length) return undefined
   const a = BAND_ALPHA[theme === 'dark' ? 'dark' : 'light']
   const step = 100 / codes.length
   // Hard stops, so the bands are blocks rather than a blur nobody can count.
   const stops = codes.map((c, i) => `${VENUE_COLORS[c]}${a} ${i * step}% ${(i + 1) * step}%`)
-  return `linear-gradient(90deg, ${stops.join(', ')})`
+  return `linear-gradient(135deg, ${stops.join(', ')})`
 }
 
 const pad = (n) => String(n).padStart(2, '0')
