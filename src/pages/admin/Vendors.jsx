@@ -169,6 +169,12 @@ export default function Vendors() {
 // The first four were asked for; the rest are what the existing vendors already
 // use, kept so nothing already filed has to be re-filed.
 const VENDOR_TRADES = [
+  // First, and not alphabetically: the valet booking form reads this list to
+  // decide who can be assigned to a booking, so it is the one trade here with a
+  // second job. Before it existed as an option the two valet firms had been
+  // filed as "VALET" and "Valet service" — the picker has to match loosely on
+  // the word to catch both, and a real option is what stops a third spelling.
+  { en: 'Valet service',          hi: 'वैले सेवा' },
   { en: 'Electrician',            hi: 'बिजली मिस्त्री' },
   { en: 'Mistri work',            hi: 'मिस्त्री का काम' },
   { en: 'Painter',                hi: 'पेंटर' },

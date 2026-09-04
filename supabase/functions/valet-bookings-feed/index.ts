@@ -285,7 +285,49 @@ const MAX_SPAN_DAYS = 400
 const BOOKING_COLS = [
   'id', 'property', 'event_date', 'event_time', 'customer_name',
   'guests', 'staff_total', 'staff_breakdown', 'heavy_date', 'notes', 'created_at',
+  'valet_vendor_id',
 ]
+
+/** Bare digits, and the last 10 of them. */
+const phoneDigits = (v: unknown) => {
+  const d = String(v ?? '').replace(/\D/g, '')
+  // Vendor phones on file are typed by hand and inconsistent: "9818971578",
+  // "+91 88604 58280", "86849 50936". Taking the last 10 drops a 91 or 091
+  // country prefix without mangling a number that never had one, so both sides
+  // of the join compare the same thing.
+  return d.length > 10 ? d.slice(-10) : d
+}
+
+/**
+ * Resolve assigned valet vendors to a name, a firm and a phone.
+ *
+ * Looked up here rather than stored on the booking, so a rename or a corrected
+ * phone number in Ambria reaches the valet project instead of leaving a stale
+ * copy behind.
+ *
+ * The PHONE is the join key. The valet project keeps its own logins, so an
+ * Ambria vendor id means nothing there; the phone is the one identifier the same
+ * person carries into both systems, and it is the number their credentials are
+ * created with. This is supplier contact data, not guest data — the rule that
+ * keeps guest phones out of this feed is about the people being served, not the
+ * people doing the serving.
+ */
+async function resolveValetVendors(url: string, service: string, ids: number[]) {
+  const unique = [...new Set(ids.filter((n) => Number.isFinite(n)))]
+  if (!unique.length) return {} as Record<number, { name: unknown; company: unknown; phone: string }>
+  const q = new URLSearchParams({
+    select: 'id,name,company,phone',
+    // Plain integers, so no quoting needed — unlike the TEXT user ids this
+    // replaced, where an unquoted in.() read the dashes as list syntax.
+    id: `in.(${unique.join(',')})`,
+  })
+  const res = await fetch(`${url}/rest/v1/vendors?${q}`, { headers: restHeaders(service) })
+  if (!res.ok) return {}
+  const rows = (await res.json()) as Array<{ id: number; name: unknown; company: unknown; phone: unknown }>
+  return Object.fromEntries(
+    rows.map((r) => [r.id, { name: r.name, company: r.company, phone: phoneDigits(r.phone) }]),
+  )
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -359,10 +401,27 @@ Deno.serve(async (req) => {
   if (!res.ok) return json({ ok: false, code: 'QUERY_FAILED', error: text }, 502)
 
   const rows = JSON.parse(text) as Array<Record<string, unknown>>
-  const bookings = rows.map((r) => ({
-    ...r,
-    property_name: PROPERTIES[String(r.property)]?.name ?? String(r.property),
-  }))
+
+  // A failure here leaves the names off rather than failing the request: the
+  // booking itself is still correct and useful without them.
+  const vendors = await resolveValetVendors(url, service, rows.map((r) => Number(r.valet_vendor_id))).catch(() => ({}))
+
+  const bookings = rows.map((r) => {
+    const who = vendors[Number(r.valet_vendor_id)]
+    return {
+      ...r,
+      property_name: PROPERTIES[String(r.property)]?.name ?? String(r.property),
+      // null, not undefined, when nobody is assigned or the id no longer matches
+      // anybody — an absent key and an explicit null read differently on the
+      // other side, and "nobody" is a fact worth stating.
+      valet_name: who?.name ?? null,
+      valet_company: who?.company ?? null,
+      // Already reduced to bare digits, so the other side can compare it to its
+      // own user's number without repeating the normalisation and getting it
+      // subtly different.
+      valet_phone: who?.phone || null,
+    }
+  })
 
   // ------------------------------------------------------------ events
   // Reported rather than thrown: the CRM being down should not blank out the

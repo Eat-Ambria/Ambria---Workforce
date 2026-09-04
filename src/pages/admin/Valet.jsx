@@ -129,6 +129,31 @@ export default function Valet() {
   }, [])
   useEffect(() => { loadMatrix() }, [loadMatrix])
 
+  // The valet suppliers a booking can be handed to. These are VENDORS, not
+  // users: the valet firms were already on file there, and the only role 'v'
+  // logins are test accounts. Sourcing the picker from the vendor list means one
+  // place a supplier exists and one place they stop existing.
+  //
+  // Matched on the category CONTAINING "valet", case-insensitively, because the
+  // two on file are spelled differently — "VALET" and "Valet service". An exact
+  // match would silently list one of them. Keep the word in the category of any
+  // new valet vendor and it appears here on its own.
+  const [valetVendors, setValetVendors] = useState([])
+  useEffect(() => {
+    let alive = true
+    supabase.from('vendors')
+      .select('id,name,name_hi,company,phone')
+      .ilike('category', '%valet%')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => { if (alive) setValetVendors(data || []) })
+    return () => { alive = false }
+  }, [])
+  const valetById = useMemo(
+    () => Object.fromEntries(valetVendors.map((v) => [v.id, v])),
+    [valetVendors],
+  )
+
   const load = useCallback(async () => {
     setLoading(true)
     const first = ymd(month.y, month.m, 1)
@@ -461,7 +486,7 @@ export default function Valet() {
 
       {selectedDate && (
         <DayModal
-          C={C} t={t} date={selectedDate} scopeAll={scopeAll} matrix={matrix}
+          C={C} t={t} date={selectedDate} scopeAll={scopeAll} matrix={matrix} valetById={valetById}
           list={byDate[selectedDate] || []}
           lmsList={lmsByDate[selectedDate] || []} lmsError={lmsError} lmsCount={lms.length}
           visibleProps={visibleProps} monthBookings={bookings} maxDate={maxDate}
@@ -476,6 +501,7 @@ export default function Valet() {
       {creatingDate && (
         <CreateModal
           C={C} t={t} lang={lang} user={user} visibleProps={visibleProps} defaultProp={defaultProp} matrix={matrix}
+          valetVendors={valetVendors}
           date={creatingDate} minDate={today} maxDate={maxDate} existing={bookings} prefill={createPrefill} editing={editingBooking}
           onClose={closeCreate}
           onSaved={() => { closeCreate(); load() }}
@@ -624,7 +650,7 @@ const arrowBtn = (C, off) => ({
 
 
 /* ------------------------------- day view ------------------------------- */
-function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, scopeAll, matrix, visibleProps, monthBookings, maxDate, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
+function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, scopeAll, matrix, valetById = {}, visibleProps, monthBookings, maxDate, onClose, onAdd, onCreateFrom, onEdit, onChanged }) {
   const { lang } = useLang()
   const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
@@ -676,7 +702,7 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, sco
           <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 10 }}>{t.valetBooking}</div>
           <div style={{ display: 'grid', gap: 12 }}>
             {list.map((b) => (
-              <BookingCard key={b.id} C={C} t={t} lang={lang} b={b} scopeAll={scopeAll} matrix={matrix} busy={busy} onEdit={() => onEdit?.(b)} onDelete={() => del(b.id)} />
+              <BookingCard key={b.id} C={C} t={t} lang={lang} b={b} scopeAll={scopeAll} matrix={matrix} valetById={valetById} busy={busy} onEdit={() => onEdit?.(b)} onDelete={() => del(b.id)} />
             ))}
           </div>
         </>
@@ -804,7 +830,7 @@ function LmsVenuePanel({ C, t, date, list = [], booked = [], error = '', isPast 
   )
 }
 
-function BookingCard({ C, t, lang, b, scopeAll, matrix, busy, onEdit, onDelete }) {
+function BookingCard({ C, t, lang, b, scopeAll, matrix, valetById = {}, busy, onEdit, onDelete }) {
   const { user: viewer } = useAuth()
   const showPhone = canSeeGuestPhone(viewer?.role)
   // prefer the snapshot saved with the booking (may be an admin override);
@@ -841,6 +867,20 @@ function BookingCard({ C, t, lang, b, scopeAll, matrix, busy, onEdit, onDelete }
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
         {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
         <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
+        {/* Only when somebody is on it. An "unassigned" chip on every booking
+            would be noise on the many that are simply not staffed yet — the
+            absence already says it, and the edit form is where it gets fixed.
+            Resolved through the live staff list rather than a name stored on the
+            booking, so a rename shows up here instead of going stale. */}
+        {b.valet_vendor_id != null && valetById[b.valet_vendor_id] && (
+          <Meta
+            C={C}
+            icon="valet"
+            text={lang === 'hi' && valetById[b.valet_vendor_id].name_hi
+              ? valetById[b.valet_vendor_id].name_hi
+              : valetById[b.valet_vendor_id].name}
+          />
+        )}
         {showPhone && b.phone && <Meta C={C} icon="phone" text={b.phone} />}
       </div>
 
@@ -903,7 +943,7 @@ function StaffBreakdown({ C, result }) {
 }
 
 /* ------------------------------ create form ----------------------------- */
-function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDate, maxDate, matrix, existing = [], prefill = null, editing = null, onClose, onSaved }) {
+function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDate, maxDate, matrix, valetVendors = [], existing = [], prefill = null, editing = null, onClose, onSaved }) {
   // properties already booked on the chosen date can't be booked again
   // (when editing, the booking being edited doesn't count against itself)
   const bookedOn = (d) => new Set(existing.filter((b) => b.event_date === d && (!editing || b.id !== editing.id)).map((b) => b.property))
@@ -918,6 +958,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
         customer_name: editing.customer_name || '',
         phone: editing.phone || '',
         guests: editing.guests != null ? String(editing.guests) : '',
+        valet_vendor_id: editing.valet_vendor_id != null ? String(editing.valet_vendor_id) : '',
         notes: editing.notes || '',
       }
     }
@@ -933,6 +974,9 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
       customer_name: p.customer_name || '',
       phone: p.phone != null ? digitsOnly(String(p.phone)).slice(0, 10) : '',
       guests: p.guests != null ? digitsOnly(String(p.guests)) : '',
+      // Left blank rather than pre-picked. There is no defensible default here —
+      // guessing one supplier would get saved unread on most bookings.
+      valet_vendor_id: '',
       notes: p.customer_name ? `LMS venue event: ${p.customer_name}` : '',
     }
   })
@@ -983,6 +1027,11 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
     if (form.event_date > maxDate) { setErr('Bookings can only be made up to one year ahead'); return }
     if (overGuestLimit(form.guests)) { setErr(t.guestLimitExceeded); return }
     if (!/^\d{10}$/.test(form.phone)) { setErr(t.phoneRule); return }
+    // Required — but only when there is somebody to pick. If every valet vendor
+    // is deactivated, enforcing this would lock the form completely and no
+    // booking could be made at all; the hint under the empty dropdown is the
+    // better answer to that than a wall.
+    if (valetVendors.length && !form.valet_vendor_id) { setErr(t.valetRequired); return }
     setBusy(true); setErr('')
 
     // one booking per property per day (ignore the booking being edited)
@@ -1005,6 +1054,11 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
       customer_name: form.customer_name || null,
       phone: form.phone || null,
       guests: Number(form.guests) || 0,
+      // A <select> always hands back a string, and the column is an integer —
+      // without the Number() this posts "8" and PostgREST rejects the row. '' is
+      // the "nobody" option, and the column holds NULL for it, so an unassigned
+      // booking reads the same to every query.
+      valet_vendor_id: form.valet_vendor_id ? Number(form.valet_vendor_id) : null,
       staff_total: effTotal,
       staff_breakdown: effBreakdown,
       heavy_date: heavy,
@@ -1089,6 +1143,30 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
           onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))}
           placeholder={t.phonePlaceholder}
         />
+      </Field>
+
+      {/* Who runs this booking. Required, so the booking reaches somebody in the
+          valet project instead of sitting unassigned where nobody is looking.
+          The blank option stays as a placeholder rather than defaulting to the
+          first vendor — a select that arrives pre-filled gets saved unread. */}
+      <Field label={t.valetInCharge}>
+        <select style={inputStyle(C)} value={form.valet_vendor_id} onChange={set('valet_vendor_id')}>
+          <option value="">{t.selectValetVendor}</option>
+          {valetVendors.map((v) => (
+            <option key={v.id} value={v.id}>
+              {/* The firm in brackets, because both names on file end in the
+                  word "valet" and the firm is what tells them apart. */}
+              {lang === 'hi' && v.name_hi ? v.name_hi : v.name}
+              {v.company ? ` — ${String(v.company).trim()}` : ''}
+            </option>
+          ))}
+        </select>
+        {/* An empty dropdown looks broken. Say what is actually missing. */}
+        {valetVendors.length === 0 && (
+          <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 5, lineHeight: 1.45 }}>
+            {t.noValetStaffHint}
+          </span>
+        )}
       </Field>
 
       {/* staffing breakdown from the matrix, with an admin edit/override option */}
