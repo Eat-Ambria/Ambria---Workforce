@@ -286,6 +286,9 @@ const BOOKING_COLS = [
   'id', 'property', 'event_date', 'event_time', 'customer_name',
   'guests', 'staff_total', 'staff_breakdown', 'heavy_date', 'notes', 'created_at',
   'valet_vendor_id',
+  // Same field name and same readable values as the events list below, so a
+  // booking and an unbooked event can be rendered by one component.
+  'function_type',
 ]
 
 /** Bare digits, and the last 10 of them. */

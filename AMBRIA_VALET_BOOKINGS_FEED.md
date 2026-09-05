@@ -113,6 +113,7 @@ truncated list — a silently short answer is worse than an error.
         { "role": "Rider",   "count": 0 }
       ],
       "heavy_date": false,
+      "function_type": "Wedding",
       "notes": null,
       "valet_vendor_id": 8,
       "valet_name": "Sikandar valet",
@@ -211,6 +212,12 @@ stable, so it is a good React `key`.
 
 **At most one booking per venue per day.** Ambria enforces
 `UNIQUE (property, event_date)`, so one day holds at most five bookings.
+
+**`function_type` is the same field, with the same values, as on an event** —
+`"Wedding"`, `"Haldi"`, already resolved from the CRM's numeric id. It is copied
+onto the booking when the booking is made from a CRM event, so one component can
+render both lists. It is `null` on a booking made by hand, and on every booking
+made before the column existed.
 
 ### Who is running the booking — and how "my bookings" works
 
@@ -434,12 +441,14 @@ was deployed with JWT verification **on**; also section 8.
 ```
 SUPABASE-MIGRATION-LMS-FEED-CACHE.sql
 SUPABASE-MIGRATION-VALET-BOOKING-VENDOR.sql
+SUPABASE-MIGRATION-VALET-BOOKING-FUNCTION-TYPE.sql
 ```
 
 The first creates `lms_feed_cache`, a one-row table holding the CRM sweep so that
 repeated calls do not each pay 15 seconds for it. The second adds
 `valet_bookings.valet_vendor_id`, which is what the **Valet in charge** picker
-writes and what the `valet_*` fields are resolved from.
+writes and what the `valet_*` fields are resolved from. The third adds
+`function_type`, so a booking keeps saying what the event is for.
 
 (There is also a `...-VALET-BOOKING-ASSIGNEE.sql` in that folder. It is
 superseded — it pointed the assignee at users instead of vendors — and the file

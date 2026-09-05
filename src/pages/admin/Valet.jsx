@@ -762,6 +762,9 @@ function LmsVenuePanel({ C, t, date, list = [], booked = [], error = '', isPast 
     customer_name: c.customer ? String(c.customer) : '',
     phone: c.phone,
     guests: c.guests,
+    // Already a readable label ("Wedding"), not the CRM's numeric id — normContract
+    // resolves it. Carried so the booking keeps saying what the event is for.
+    function_type: c.functionType,
   })
 
   return (
@@ -866,6 +869,9 @@ function BookingCard({ C, t, lang, b, scopeAll, matrix, valetById = {}, busy, on
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
         {b.event_time && <Meta C={C} icon="clock" text={fmtTime(b.event_time)} />}
+        {/* Same star the unbooked event card uses, so "Wedding" looks like the
+            same fact before and after it becomes a booking. */}
+        {b.function_type && <Meta C={C} icon="star" text={String(b.function_type)} />}
         <Meta C={C} icon="team" text={`${b.guests || 0} ${t.guestCount.toLowerCase()}`} />
         {/* Only when somebody is on it. An "unassigned" chip on every booking
             would be noise on the many that are simply not staffed yet — the
@@ -959,6 +965,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
         phone: editing.phone || '',
         guests: editing.guests != null ? String(editing.guests) : '',
         valet_vendor_id: editing.valet_vendor_id != null ? String(editing.valet_vendor_id) : '',
+        function_type: editing.function_type || '',
         notes: editing.notes || '',
       }
     }
@@ -977,6 +984,11 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
       // Left blank rather than pre-picked. There is no defensible default here —
       // guessing one supplier would get saved unread on most bookings.
       valet_vendor_id: '',
+      // No input for this: the CRM is the only thing that knows it, and a booking
+      // made by hand has none. Kept in form state rather than read off `prefill`
+      // at save time so that reopening and saving an existing booking preserves
+      // it instead of quietly clearing it.
+      function_type: p.function_type || '',
       notes: p.customer_name ? `LMS venue event: ${p.customer_name}` : '',
     }
   })
@@ -1059,6 +1071,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
       // the "nobody" option, and the column holds NULL for it, so an unassigned
       // booking reads the same to every query.
       valet_vendor_id: form.valet_vendor_id ? Number(form.valet_vendor_id) : null,
+      function_type: form.function_type || null,
       staff_total: effTotal,
       staff_breakdown: effBreakdown,
       heavy_date: heavy,
