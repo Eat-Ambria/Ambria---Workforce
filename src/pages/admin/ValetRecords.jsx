@@ -16,8 +16,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useColors } from '../../context/ThemeContext'
 import { useLang } from '../../context/LangContext'
-import { useAuth } from '../../context/AuthContext'
-import { canSeeGuestPhone } from '../../constants/org'
 import { Card, Button, Loader, EmptyState, inputStyle } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -76,11 +74,6 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
   const { lang } = useLang()
   const hi = lang === 'hi'
   const wide = useMediaQuery('(min-width: 900px)')
-  const { user } = useAuth()
-  // The valet team gets no guest phone numbers — not in the table, and not in
-  // the file either. Hiding the column on screen while the export still carried
-  // it would be the rule in name only.
-  const showPhone = canSeeGuestPhone(user?.role)
 
   const scope = useValetScope()
   const { period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo,
@@ -177,9 +170,7 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
         [
           { key: 'name', label: hi ? 'मेहमान का नाम' : 'Guest name' },
           { key: 'tier', label: hi ? 'गाड़ी की श्रेणी' : 'Car tier' },
-          // Dropped entirely for the valet team, not blanked: an empty column
-          // headed "Number" invites somebody to go looking for why.
-          ...(showPhone ? [{ key: 'phone', label: hi ? 'नंबर' : 'Number', text: true }] : []),
+          { key: 'phone', label: hi ? 'नंबर' : 'Number', text: true },
         ],
         all.map((r) => ({ name: r.guest_name ?? '', tier: r.car_tier ?? '', phone: r.guest_phone ?? '' })),
       )
@@ -276,7 +267,7 @@ export default function ValetRecords({ visibleProps, scopeAll }) {
               <div style={{ minWidth: wide ? 940 : 820 }}>
                 <Head C={C} hi={hi} showVenue={showVenue} />
                 {rows.map((r) => (
-                  <Row key={r.id} C={C} hi={hi} r={r} showVenue={showVenue} showPhone={showPhone} />
+                  <Row key={r.id} C={C} hi={hi} r={r} showVenue={showVenue} />
                 ))}
               </div>
             </div>
@@ -370,7 +361,7 @@ function tierTone(C, tier) {
   return { fg: C.tl, bg: C.cardAlt, bd: C.border }
 }
 
-function Row({ C, hi, r, showVenue, showPhone }) {
+function Row({ C, hi, r, showVenue }) {
   // Read defensively: a valet deployment without migration 0044 omits these two
   // keys entirely rather than sending null, and `undefined` down this path would
   // take the table with it.
@@ -393,7 +384,7 @@ function Row({ C, hi, r, showVenue, showPhone }) {
         <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {r.guest_name || '—'}
         </span>
-        {showPhone && r.guest_phone && (
+        {r.guest_phone && (
           <span style={{ display: 'block', fontSize: 11.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
             {r.guest_phone}
           </span>

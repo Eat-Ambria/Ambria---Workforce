@@ -25,12 +25,18 @@
 // a cross-project Realtime subscription needs the anon key in the other
 // project's browser, which is the thing being avoided.
 //
-// GUEST PHONE IS NOT RETURNED, on purpose. Ambria hides it from the valet role
-// (canSeeGuestPhone in src/constants/org.js), and the audience on the other side
-// of this feed is the valet team. Sending it here would route around a rule that
-// already exists rather than honouring it. If the valet project ever genuinely
-// needs it, that is a decision to make out loud — add 'phone' to BOOKING_COLS
-// and the event mapping, and say why in this comment.
+// GUEST PHONE IS NOT RETURNED, on purpose. It is the guest's number, and the
+// audience on the other side of this feed is a different company's system: the
+// valet team runs the operation without ever needing to ring the guest, so the
+// number would be crossing a company boundary for no use anyone can name.
+//
+// This used to be justified by Ambria's own valet ROLE, which was hidden from
+// guest phones in the UI; that role has since been removed and this rule
+// deliberately outlived it. Nothing in the app depends on it any more, so if the
+// column is ever added here it will be added silently unless someone objects —
+// which is why the reason is written out. If the valet project ever genuinely
+// needs it, that is a decision to make out loud: add 'phone' to BOOKING_COLS and
+// the event mapping, and say why in this comment.
 //
 // SECRETS (Ambria Admin project → Edge Functions → Secrets):
 //   VALET_FEED_KEY = <a long random string; share it with the valet project only>

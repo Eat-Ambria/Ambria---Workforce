@@ -71,10 +71,8 @@ const flush = () => new Promise((r) => setTimeout(r, 0))
 // Colours, language and the signed-in user, the way the app provides them.
 // Rendering it bare would only prove the providers are missing.
 //
-// Auth matters to what this page shows now: the valet role sees no guest phone
-// numbers. `as` puts a signed-in user in storage before the provider reads it,
-// which is how the two cases below are told apart. With no user the role is
-// undefined — NOT valet — so the phone shows, which is the unrestricted case.
+// `as` puts a signed-in user in storage before the provider reads it, so a test
+// can render the page as a particular role.
 const as = (role) => {
   if (role) localStorage.setItem('ambria_user', JSON.stringify({ id: 'u_t', name: 'T', role, property: 'all' }))
   else localStorage.removeItem('ambria_user')
@@ -130,28 +128,6 @@ describe('guest phone numbers', () => {
     await flush()
     expect(await screen.findByText('Bipul')).toBeTruthy()
     expect(screen.queryByText('7011775583')).toBeTruthy()
-  })
-
-  it('are hidden from the valet team', async () => {
-    as('v')
-    draw()
-    await flush()
-    await flush()
-    // The row is there — the guest, the car, the venue. Only the number is not.
-    expect(await screen.findByText('Bipul')).toBeTruthy()
-    expect(screen.queryByText('7011775583')).toBeNull()
-    expect(screen.queryByText('6575676571')).toBeNull()
-    expect(screen.queryByText('9999949494')).toBeNull()
-  })
-
-  it('are dropped from the column headings too, not left blank', async () => {
-    as('v')
-    draw()
-    await flush()
-    await flush()
-    // A column headed Number with nothing under it invites somebody to go
-    // looking for why it is empty.
-    expect(screen.queryByText('Number')).toBeNull()
   })
 })
 

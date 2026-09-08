@@ -44,20 +44,29 @@ export function AuthProvider({ children }) {
     // active status, profile edits) take effect on the next app open
     ;(async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('users')
           .select('id, username, name, name_hi, role, property, department, phone, joining_date, is_active, left_date, designation, access, created_at')
           .eq('id', saved.id)
           .single()
-        if (data) {
-          if (data.is_active === false) { logout() }
-          else {
-            const { password: _pw, ...rest } = data
-            const fresh = { ...rest, cover: await loadCover(rest.id) }
-            setUser(fresh)
-            const store = localStorage.getItem(STORAGE_KEY) ? localStorage : sessionStorage
-            store.setItem(STORAGE_KEY, JSON.stringify(fresh))
-          }
+        // The row is gone — the account was deleted. This has to end the
+        // session: there is no token to expire, so the cached copy in storage
+        // IS the session, and a device left open would otherwise stay signed in
+        // with full access to a login that no longer exists.
+        //
+        // Only PGRST116 ("no rows") means that. Every other error is a bad
+        // connection or a sleeping project, where signing the person out would
+        // be a bug — hence the specific code rather than `if (error)`.
+        if (error) {
+          if (error.code === 'PGRST116') logout()
+        } else if (data.is_active === false) {
+          logout()
+        } else {
+          const { password: _pw, ...rest } = data
+          const fresh = { ...rest, cover: await loadCover(rest.id) }
+          setUser(fresh)
+          const store = localStorage.getItem(STORAGE_KEY) ? localStorage : sessionStorage
+          store.setItem(STORAGE_KEY, JSON.stringify(fresh))
         }
       } catch {
         /* offline / transient — keep the cached user */

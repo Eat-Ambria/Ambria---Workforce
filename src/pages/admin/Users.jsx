@@ -14,20 +14,22 @@ import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyl
 import Modal from '../../components/common/Modal'
 import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
+import { useConfirm } from '../../components/common/ConfirmDialog'
+import Toast from '../../components/common/Toast'
+import HindiInput from '../../components/common/HindiInput'
 
 // Straight off ASSIGNABLE_ROLES. This screen used to keep its own hardcoded
-// list of three, so adding a fourth role to org.js left the picker showing three
-// — the role existed everywhere except the one screen that assigns it.
+// list, so a role added to org.js left the picker short — the role existed
+// everywhere except the one screen that assigns it. Falling back to the raw
+// code rather than a blank keeps a row on a retired role legible.
 const roleLabel = (role, t) => ({
   [ROLES.SUPER_ADMIN]: t.roleSuperAdmin,
   [ROLES.ADMIN]: t.roleAdmin,
   [ROLES.EMPLOYEE]: t.roleEmployee,
-  [ROLES.VALET]: t.roleValet,
 }[role] || role)
 const roleTone = (role, C) => ({
   [ROLES.SUPER_ADMIN]: C.maroon,
   [ROLES.ADMIN]: C.indigo,
-  [ROLES.VALET]: C.cyan || C.purple,
 }[role] || C.blue)
 
 // default set of visible tab paths for a role
@@ -52,6 +54,9 @@ export default function Users() {
   const [roleSel, setRoleSel] = useState([])     // selected role codes
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState(null) // user object, or 'new'
+  // set only by a deletion: a saved edit shows its result in the row itself,
+  // but a deleted row just vanishes, which on its own reads like a mis-tap.
+  const [toast, setToast] = useState('')
   // Deactivated people are kept forever (their name is on old tasks) but they
   // are not staff any more, so they are a separate list rather than greyed-out
   // rows mixed into the working one.
@@ -264,9 +269,11 @@ export default function Users() {
           record={editing === 'new' ? null : editing}
           currentUserId={user.id}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); load() }}
+          onSaved={(msg) => { setEditing(null); if (msg) setToast(msg); load() }}
         />
       )}
+
+      {toast && <Toast message={toast} onDone={() => setToast('')} />}
     </div>
   )
 }
@@ -299,6 +306,36 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [showPw, setShowPw] = useState(false)
+  const confirm = useConfirm()
+
+  // Deleting is offered only on an account somebody has already switched off,
+  // and never on your own. Deactivating first is not ceremony: it is what ends
+  // the person's session, so by the time this appears they are already signed
+  // out everywhere. `is_active` is read off the SAVED record, not the form —
+  // toggling the switch in this modal without saving must not unlock it.
+  const canDelete = !isNew && !isSelf && record.is_active === false
+
+  async function remove() {
+    const name = personName(record, lang) || record.username
+    if (!(await confirm({ message: t.deleteUserConfirm.replace('{name}', name), confirmLabel: t.deleteUser }))) return
+    setBusy(true); setErr('')
+    // An RPC, not .delete() — nothing has a foreign key to users.id, so the
+    // cleanup of every dangling reference happens inside one transaction there.
+    // See SUPABASE-MIGRATION-DELETE-USER.sql.
+    const { data, error } = await supabase.rpc('delete_user', { p_id: record.id })
+    setBusy(false)
+    if (error) {
+      // PGRST202 = no such function: the migration has not been run on this
+      // project yet. Say that, rather than showing PostgREST's wording.
+      setErr(error.code === 'PGRST202' ? t.deleteUserMissing : (error.message || ''))
+      return
+    }
+    if (!data?.ok) {
+      setErr(data?.error === 'USER_IS_ACTIVE' ? t.deleteUserActive : (data?.error || ''))
+      return
+    }
+    onSaved(t.deleteUserDone.replace('{name}', name))
+  }
   const [pwLoading, setPwLoading] = useState(!isNew) // fetching the current password
   const loadedPwRef = useRef('') // the stored PIN as loaded — used to detect changes
   const [fixStats, setFixStats] = useState(null)     // fix-request history for this staff
@@ -372,9 +409,8 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
     setBusy(true); setErr('')
 
     // Keep the role's own un-removable tab visible, and store only tabs valid
-    // for the chosen role. For the valet role that pinned tab is Valet, not
-    // Dashboard — writing Dashboard into their access list would offer them a
-    // page their role cannot open.
+    // for the chosen role — writing a path the role cannot open into an access
+    // list would offer somebody a page that bounces them straight back out.
     const validPaths = new Set(candidateTabs.map((i) => i.path))
     const accessList = [...new Set([...alwaysVisibleFor(form.role), ...[...access].filter((p) => validPaths.has(p))])]
 
@@ -427,10 +463,22 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
           <Field label={t.fullName}><input style={inputStyle(C)} value={form.name} onChange={set('name')} /></Field>
         </div>
         <div style={{ flex: 1 }}>
-          {/* typed by hand — machine translation mangles names ("Mali" -> gardener) */}
-          <Field label={`${t.fullName} (हिंदी)`} hint={t.nameHiHint}>
-            <input style={inputStyle(C)} value={form.name_hi} onChange={set('name_hi')} placeholder="जैसे सोनू माली" />
-          </Field>
+          {/* Transliterated, NOT translated — the distinction is the whole reason
+              this was typed by hand before. A translator reads "Ram Narayan the
+              Mali" as a gardener; spelling it out gives राम नारायण, the same
+              name, readable by staff who do not read Latin script. Same
+              component and same reasoning as the vendor name field.
+              Editing an existing person leaves their Hindi name alone:
+              HindiInput only auto-fills a field that started empty, so a
+              correction somebody made by hand is never overwritten. */}
+          <HindiInput
+            transliterate
+            label={`${t.fullName} (हिंदी)`}
+            hint={t.nameHiHint}
+            source={form.name}
+            value={form.name_hi}
+            onChange={(v) => setForm((f) => ({ ...f, name_hi: v }))}
+          />
         </div>
       </div>
 
@@ -590,6 +638,19 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
           })}
         </div>
       </div>
+
+      {canDelete && (
+        <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.red, marginBottom: 6 }}>{t.deleteUser}</div>
+          <div style={{ fontSize: 12.5, color: C.tl, lineHeight: 1.5, marginBottom: 10 }}>{t.deleteUserHint}</div>
+          {/* Here rather than in the footer, and away from Save: this is the one
+              irreversible action on the screen, so it should take a deliberate
+              scroll to reach instead of sitting under the thumb. */}
+          <Button variant="danger" onClick={remove} disabled={busy}>
+            <Icon name="trash" size={16} style={{ marginRight: 6 }} />{t.deleteUser}
+          </Button>
+        </div>
+      )}
 
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 12 }}>{err}</div>}
     </Modal>

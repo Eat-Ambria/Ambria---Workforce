@@ -5,7 +5,7 @@ import { useColors, useTheme } from '../../context/ThemeContext'
 import { esc } from '../../lib/printable'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties, canSeeGuestPhone } from '../../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName, canSeeAllProperties } from '../../constants/org'
 import { typedPhone } from '../../lib/phone'
 import { allocateValet, MAX_GUESTS, VALET_MATRIX } from '../../constants/valetMatrix'
 import { Card, Loader, Button, Badge, SectionTitle, Tabs, EmptyState, Field, FilterChip, inputStyle, filterStyle, FilterField, Spinner, wholeNumberField } from '../../components/common/UI'
@@ -130,9 +130,9 @@ export default function Valet() {
   useEffect(() => { loadMatrix() }, [loadMatrix])
 
   // The valet suppliers a booking can be handed to. These are VENDORS, not
-  // users: the valet firms were already on file there, and the only role 'v'
-  // logins are test accounts. Sourcing the picker from the vendor list means one
-  // place a supplier exists and one place they stop existing.
+  // users: the valet firms were already on file there, and the valet team does
+  // not log in to this app at all. Sourcing the picker from the vendor list
+  // means one place a supplier exists and one place they stop existing.
   //
   // Matched on the category CONTAINING "valet", case-insensitively, because the
   // two on file are spelled differently — "VALET" and "Valet service". An exact
@@ -264,7 +264,7 @@ export default function Valet() {
         confirm({ message: t.noBookings, danger: false, hideCancel: true, confirmLabel: t.ok })
         return
       }
-      if (!exportBookingsPdf(sections, lang, canSeeGuestPhone(user?.role))) {
+      if (!exportBookingsPdf(sections, lang)) {
         confirm({ message: t.popupBlocked, danger: false, hideCancel: true, confirmLabel: t.ok })
       }
     } finally {
@@ -742,11 +742,6 @@ function DayModal({ C, t, date, list, lmsList = [], lmsError = '', lmsCount, sco
 function LmsVenuePanel({ C, t, date, list = [], booked = [], error = '', isPast = false, loadedCount, onCreateFrom }) {
   // Read here rather than threaded down, the same way DayModal above does it.
   const { lang } = useLang()
-  // Read here rather than threaded down from Valet: this is three levels below
-  // it, and a prop passed through two components that do not use it is two
-  // chances to forget it on the next panel somebody adds.
-  const { user: viewer } = useAuth()
-  const showPhone = canSeeGuestPhone(viewer?.role)
   // build a valet-booking prefill from an LMS venue event
   // One key both sides can produce. to24h() so "10:00" and "10:00 AM" are the
   // same slot however either side happens to write it.
@@ -815,7 +810,7 @@ function LmsVenuePanel({ C, t, date, list = [], booked = [], error = '', isPast 
                 {c.guests != null && <Meta C={C} icon="team" text={`${c.guests} pax`} />}
                 {c.functionType && <Meta C={C} icon="star" text={String(c.functionType)} />}
                 {c.location && <Meta C={C} icon="pin" text={String(c.location)} />}
-                {showPhone && c.phone && <Meta C={C} icon="phone" text={String(c.phone)} />}
+                {c.phone && <Meta C={C} icon="phone" text={String(c.phone)} />}
               </div>
 
               {!isPast && onCreateFrom && (
@@ -834,8 +829,6 @@ function LmsVenuePanel({ C, t, date, list = [], booked = [], error = '', isPast 
 }
 
 function BookingCard({ C, t, lang, b, scopeAll, matrix, valetById = {}, busy, onEdit, onDelete }) {
-  const { user: viewer } = useAuth()
-  const showPhone = canSeeGuestPhone(viewer?.role)
   // prefer the snapshot saved with the booking (may be an admin override);
   // fall back to computing from the current matrix, then to the stored total.
   const stored = Array.isArray(b.staff_breakdown) ? b.staff_breakdown : null
@@ -887,7 +880,7 @@ function BookingCard({ C, t, lang, b, scopeAll, matrix, valetById = {}, busy, on
               : valetById[b.valet_vendor_id].name}
           />
         )}
-        {showPhone && b.phone && <Meta C={C} icon="phone" text={b.phone} />}
+        {b.phone && <Meta C={C} icon="phone" text={b.phone} />}
       </div>
 
       {(breakdown || total != null) && (
@@ -1305,17 +1298,14 @@ const escapeHtml = esc
 
 // Build a printable page of the given date-grouped bookings and open the browser
 // print dialog (user picks "Save as PDF"). No external library needed.
-// `showPhone` is a parameter rather than something read inside, because this is
-// a plain function, not a component. A printed sheet is the easiest place for a
-// hidden column to leak back: the screen hides it and the paper does not.
-function exportBookingsPdf(sections, lang, showPhone = true) {
+function exportBookingsPdf(sections, lang) {
   const genDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const body = sections.map((sec) => {
     const rows = sec.items.map((b) => `
       <tr>
         <td>${escapeHtml(propName(b.property, lang))}</td>
         <td>${escapeHtml(b.customer_name || '—')}</td>
-        ${showPhone ? `<td>${escapeHtml(b.phone || '—')}</td>` : ''}
+        <td>${escapeHtml(b.phone || '—')}</td>
         <td>${escapeHtml(b.event_time ? fmtTime(b.event_time) : '—')}</td>
         <td class="num">${b.guests || 0}</td>
         <td class="num">${b.staff_total ?? '—'}</td>
@@ -1323,7 +1313,7 @@ function exportBookingsPdf(sections, lang, showPhone = true) {
     return `
       <h2>${escapeHtml(fmtLong(sec.date))}</h2>
       <table>
-        <thead><tr><th>Venue</th><th>Customer</th>${showPhone ? '<th>Phone</th>' : ''}<th>Time</th><th class="num">Guests</th><th class="num">Staff</th></tr></thead>
+        <thead><tr><th>Venue</th><th>Customer</th><th>Phone</th><th>Time</th><th class="num">Guests</th><th class="num">Staff</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`
   }).join('')

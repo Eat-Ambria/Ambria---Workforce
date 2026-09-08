@@ -1,6 +1,6 @@
 // Role-based navigation. Each item: path, translation key, icon,
 // and which roles can see it.
-// 'e' = employee, 'a' = admin, 'sa' = super admin, 'v' = valet team.
+// 'e' = employee, 'a' = admin, 'sa' = super admin.
 
 export const NAV_ITEMS = [
   { path: '/dashboard', key: 'dashboard', icon: 'dashboard', roles: ['sa', 'a', 'e'] },
@@ -13,18 +13,18 @@ export const NAV_ITEMS = [
   { path: '/tasks', key: 'tasks', icon: 'tasks', roles: ['sa', 'a'] },
   { path: '/task-board', key: 'taskBoard', icon: 'taskBoard', roles: ['sa', 'a', 'e'] },
   { path: '/training', key: 'training', icon: 'training', roles: ['sa', 'a', 'e'] },
-  // The valet team's only item. They are not on any other line in this list,
-  // which is the whole definition of the role.
-  { path: '/valet', key: 'valet', icon: 'valet', roles: ['sa', 'a', 'v'] },
+  { path: '/valet', key: 'valet', icon: 'valet', roles: ['sa', 'a'] },
   { path: '/vendors', key: 'vendors', icon: 'vendors', roles: ['sa', 'a'] },
   { path: '/analytics', key: 'analytics', icon: 'dashboard', roles: ['sa'] },
   { path: '/users', key: 'userManagement', icon: 'team', roles: ['sa'] },
 ]
 
 // One item a per-user access list can never remove, so nobody can be locked out
-// of the app. For the valet team that item is Valet, not Dashboard — a dashboard
-// they cannot use is not a way back in.
-export const alwaysVisibleFor = (role) => (role === 'v' ? ['/valet'] : ['/dashboard'])
+// of the app. Every role can use the Dashboard, so today it is the same item for
+// all of them. It stays a function, and callers still pass their role, because
+// the pin is a per-role question — a role without a usable Dashboard would need
+// a different one, which is exactly what the valet role needed before it went.
+export const alwaysVisibleFor = () => ['/dashboard']
 
 export function navForRole(role) {
   return NAV_ITEMS.filter((i) => i.roles.includes(role))

@@ -112,31 +112,11 @@ export const ROLES = {
   SUPER_ADMIN: 'sa',
   ADMIN: 'a',
   EMPLOYEE: 'e',
-  // The valet team. Not an admin: they get the whole Valet page and nothing
-  // else, so isAdminRole must stay false for them — that one function gates
-  // /tasks, /vendors and a great many in-page permissions.
-  VALET: 'v',
 }
 
 export const isAdminRole = (role) => role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
 export const isSuperAdmin = (role) => role === ROLES.SUPER_ADMIN
 export const isEmployee = (role) => role === ROLES.EMPLOYEE
-export const isValetRole = (role) => role === ROLES.VALET
-// Who may open the Valet page at all.
-export const canSeeValet = (role) => isAdminRole(role) || isValetRole(role)
-
-// Guests' phone numbers. The valet team runs the operation without needing to
-// reach the guest, so they do not get the number — on screen, in the printed
-// sheet, or in the exported guest list. One predicate rather than a check at
-// each of the six places it is rendered, because the sixth is the one that gets
-// forgotten.
-export const canSeeGuestPhone = (role) => !isValetRole(role)
-
-// Where a role belongs when it lands with no route of its own — after login, and
-// wherever a blocked route redirects. Named once, because /dashboard as a
-// hardcoded fallback is what would drop a valet user on a page built for
-// somebody else and then bounce them straight back out of it.
-export const homeFor = (role) => (isValetRole(role) ? '/valet' : '/dashboard')
 
 // --- Access scope -----------------------------------------------------------
 // Only the Super Admin and these named admins may see EVERY property.
@@ -151,18 +131,11 @@ const uname = (user) => (user?.username || '').trim().toLowerCase()
 
 // True when the user should see data across ALL properties.
 //
-// The valet team's scope follows its own `property` field, which nothing else
-// here does — for an admin, `property: 'all'` deliberately does NOT grant
-// cross-venue access; only the named admins above get that. Four admins are on
-// 'all' without being named, and honouring the field for everyone would widen
-// their access silently, so the clause is scoped to the one role.
-//
-// Without it a valet user set to All Properties saw nothing at all: visibleProps
-// filtered PROPERTIES down to a code called 'all' that does not exist, and the
-// bookings query asked for property = 'all'.
+// `property: 'all'` on its own deliberately does NOT grant cross-venue access:
+// several admins are on 'all' without being named above, and honouring the field
+// for everyone would widen their access silently. The name is the grant.
 export const canSeeAllProperties = (user) =>
   isSuperAdmin(user?.role) ||
-  (isValetRole(user?.role) && user?.property === 'all') ||
   (isAdminRole(user?.role) && ALL_PROPERTY_ADMINS.includes(uname(user)))
 
 // The single property this user is locked to, or null when they see all.
@@ -192,13 +165,13 @@ export const scopedDepartment = (user) =>
 // department heads and admins do fieldwork too. Super admins are included so
 // work can be handed "up", and so an admin can assign something to themselves.
 // Roles a super admin can put a user ON, in the User Management picker.
-export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.VALET, ROLES.SUPER_ADMIN]
+export const ASSIGNABLE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.SUPER_ADMIN]
 
-// Roles that can be handed WORK — a task or a repair request. A different
-// question from the list above, and the difference only appeared when the valet
-// role did: a valet user cannot open /tasks or /task-board at all, so putting
-// their name in an assignee picker means handing a job to somebody who will
-// never see it. Nothing would fail; the request would just sit there.
+// Roles that can be handed WORK — a task or a repair request. Every current role
+// qualifies, so this reads as the same list; it stays a separate named filter
+// because `users.role` has no CHECK constraint behind it. A row left on a role
+// this app no longer defines — a retired one, or a typo — is then simply absent
+// from assignee pickers instead of being offered work nobody will ever see.
 export const WORK_ASSIGNEE_ROLES = [ROLES.EMPLOYEE, ROLES.ADMIN, ROLES.SUPER_ADMIN]
 
 // Whose output Analytics reports on. Admins are in: they are given tasks and
@@ -218,7 +191,6 @@ export const memberInProperty = (member, property) =>
 export const roleTag = (role, lang) => {
   if (role === ROLES.SUPER_ADMIN) return lang === 'hi' ? 'सुपर एडमिन' : 'Super Admin'
   if (role === ROLES.ADMIN) return lang === 'hi' ? 'एडमिन' : 'Admin'
-  if (role === ROLES.VALET) return lang === 'hi' ? 'वैले' : 'Valet'
   return ''
 }
 

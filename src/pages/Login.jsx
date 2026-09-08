@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useColors, useTheme } from '../context/ThemeContext'
 import { useLang, useT } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { homeFor } from '../constants/org'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { Spinner, inputStyle } from '../components/common/UI'
 import PoweredBy from '../components/common/PoweredBy'
@@ -40,9 +39,7 @@ export default function Login() {
     setBusy(true)
     const res = await login(username, password)
     setBusy(false)
-    // Their own landing page: the valet team has no dashboard, and sending them
-    // there only to be bounced back is a visible flash on every login.
-    if (res.ok) navigate(homeFor(res.user?.role), { replace: true })
+    if (res.ok) navigate('/dashboard', { replace: true })
     else if (res.reason === 'inactive') setError(t.accountInactive)
     else if (res.reason === 'error') setError(hi ? 'कनेक्शन त्रुटि। इंटरनेट/सर्वर जाँचें।' : 'Connection error. Check internet / Supabase config.')
     else setError(t.invalidLogin)

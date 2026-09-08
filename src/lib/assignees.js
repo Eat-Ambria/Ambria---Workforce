@@ -2,8 +2,8 @@ import { supabase } from './supabase'
 import { WORK_ASSIGNEE_ROLES } from '../constants/org'
 
 // Everyone an admin may hand work to: active staff *and* fellow admins.
-// NOT the valet role — they cannot open /tasks or /task-board, so a job in
-// their name is a job nobody sees. See WORK_ASSIGNEE_ROLES.
+// Filtered to the roles this app defines, so a row left on a retired role is
+// not offered work nobody will ever see. See WORK_ASSIGNEE_ROLES.
 // Scope mirrors the admin's own — `propScope` / `deptScope` come from
 // scopedProperty() / scopedDepartment(); null means "no limit".
 // Users on property='all' belong to every venue, so they always qualify.
