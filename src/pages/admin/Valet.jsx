@@ -13,7 +13,7 @@ import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { lmsVenueContracts, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE, LMS_ALL_VENUES, VENUE_COLORS, VENUE_DOT_RING } from '../../lib/lms'
+import { lmsVenueContracts, lmsContractsAge, lmsDateToIso, LMS_VENUE_BY_PROP, PROP_BY_LMS_VENUE, LMS_ALL_VENUES, VENUE_COLORS, VENUE_DOT_RING } from '../../lib/lms'
 import ValetAnalytics from './ValetAnalytics'
 import ValetRecords from './ValetRecords'
 
@@ -77,6 +77,21 @@ const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}` // m is 0-based
 function fmtLong(iso, lang) {
   const [y, m, d] = iso.split('-').map(Number)
   return `${d} ${monthName(m - 1, lang)} ${y}`
+}
+
+// How often the auto-refresh timer LOOKS. Cheap on its own — a look only reads
+// the cache age. What it actually costs the CRM is set by CONTRACTS_TTL_MS in
+// lms.js, because a look inside the TTL makes no request at all. Kept well under
+// that TTL so an idle tab picks up promptly once the TTL rolls over.
+const LMS_POLL_MS = 45 * 1000
+
+// "synced 2 min ago". Whole minutes only: this is a freshness reassurance, and a
+// seconds counter ticking next to a calendar reads like something is wrong.
+function syncedAgoLabel(ageMs, t) {
+  if (ageMs == null) return ''
+  const mins = Math.floor(ageMs / 60000)
+  if (mins < 1) return t.syncedJustNow
+  return t.syncedAgo.replace('{n}', String(mins))
 }
 
 export default function Valet() {
@@ -172,18 +187,56 @@ export default function Valet() {
   const [lms, setLms] = useState([])
   const [lmsError, setLmsError] = useState('')
   const [lmsLoading, setLmsLoading] = useState(true)
-  useEffect(() => {
-    let alive = true
-    // Cached in lms.js — this is 88 pages and about twelve seconds cold, so the
-    // second visit to this page should not pay for it again. `onFresh` is the
-    // other half: past the cache's TTL the stale contracts arrive instantly and
-    // the newer ones replace them here when the background refresh lands.
-    lmsVenueContracts({}, { onFresh: (rows) => { if (alive) setLms(rows) } })
-      .then((rows) => { if (alive) setLms(rows) })
-      .catch((e) => { if (alive) setLmsError(e.message || 'Could not reach LMS') })
-      .finally(() => { if (alive) setLmsLoading(false) })
-    return () => { alive = false }
+  const [lmsSyncing, setLmsSyncing] = useState(false)
+  // Bumped on every sync so the "synced N ago" line re-renders; the age itself
+  // is read from lms.js, which owns the timestamp.
+  const [lmsTick, setLmsTick] = useState(0)
+
+  // No arguments, and no way to force a refresh: syncing is entirely automatic.
+  // A look inside the TTL simply returns the cache and makes no request, which
+  // is what keeps the 45-second timer cheap.
+  const syncLms = useCallback(() => {
+    setLmsSyncing(true)
+    return lmsVenueContracts({}, {
+      onFresh: (rows) => { setLms(rows); setLmsTick((n) => n + 1) },
+      onSyncStart: () => setLmsSyncing(true),
+      onSyncEnd: () => { setLmsSyncing(false); setLmsTick((n) => n + 1) },
+    })
+      .then((rows) => { setLms(rows); setLmsError(''); setLmsTick((n) => n + 1) })
+      .catch((e) => setLmsError(e.message || 'Could not reach LMS'))
+      // onSyncEnd owns the spinner while a BACKGROUND refresh runs; this only
+      // has to cover the cold path, where the promise is the refresh.
+      .finally(() => { setLmsLoading(false); setLmsSyncing(false) })
   }, [])
+
+  // Keeps the calendar in step with the CRM without anyone reloading.
+  //
+  // Three triggers, because a timer alone is not enough: browsers throttle
+  // timers in a hidden tab to about once a minute and freeze one hidden long
+  // enough, so a tab left open in the background would drift and then show
+  // stale data the moment it came forward. Hence the visibility listener — and
+  // hence NOT polling while hidden, which is both pointless and a CRM bill for
+  // figures nobody is looking at.
+  useEffect(() => {
+    syncLms()
+    const tick = () => { if (document.visibilityState === 'visible') syncLms() }
+    const id = setInterval(tick, LMS_POLL_MS)
+    // Also re-render on the off-ticks so "synced 2 min ago" does not sit still
+    // between syncs.
+    const age = setInterval(() => setLmsTick((n) => n + 1), 30 * 1000)
+    document.addEventListener('visibilitychange', tick)
+    window.addEventListener('online', tick)
+    return () => {
+      clearInterval(id)
+      clearInterval(age)
+      document.removeEventListener('visibilitychange', tick)
+      window.removeEventListener('online', tick)
+    }
+  }, [syncLms])
+
+  // Recomputed on every tick so the label counts up between syncs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const lmsAge = useMemo(() => lmsContractsAge(), [lmsTick])
 
   const allowedVenues = useMemo(() => {
     const props = propFilter === 'all' ? visibleProps : visibleProps.filter((p) => p.code === propFilter)
@@ -348,16 +401,22 @@ export default function Valet() {
             </button>
           </div>
 
-          {/* one strip, three states: loading -> legend, or the failure */}
+          {/* one strip, four states: cold load -> failure -> syncing -> synced.
+              There is no button here on purpose — syncing is automatic. The last
+              two states are still worth showing: a calendar that quietly changes
+              under you is unsettling, and a stale one you cannot tell is stale is
+              worse. */}
           {lmsLoading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '2px 2px 0', fontSize: 12.5, color: C.tl }}>
               <Spinner size={14} /> {t.loadingEvents}
             </div>
-          ) : lmsError ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '2px 2px 0', fontSize: 12.5, color: C.red }}>
-              <Icon name="warning" size={14} color={C.red} /> {t.eventsLoadFailed}
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10, padding: '2px 2px 0', fontSize: 12.5, color: lmsError ? C.red : C.tl }}>
+              {lmsError ? <><Icon name="warning" size={14} color={C.red} /> {t.eventsLoadFailed}</>
+                : lmsSyncing ? <><Spinner size={14} /> {t.syncing}</>
+                : <><Icon name="check" size={13} color={C.green} /> {syncedAgoLabel(lmsAge, t)}</>}
             </div>
-          ) : null}
+          )}
 
           {/* which colour is which venue — dots alone would be a guessing game */}
           {!lmsLoading && Object.keys(lmsByDate).length > 0 && (

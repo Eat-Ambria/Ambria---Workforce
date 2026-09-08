@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The contract call is 88 pages and about twelve seconds. Everything below is
+// The contract call is 88 pages and about fifteen seconds. Everything below is
 // about not paying that twice — and about the cache never being the reason the
 // page breaks.
 
@@ -48,7 +48,7 @@ describe('the contract cache', () => {
 
   it('makes ONE request when several callers arrive together', async () => {
     // Two mounts in the same tick. Without the in-flight promise this is two
-    // twelve-second requests racing each other.
+    // fifteen-second requests racing each other.
     const [a, b] = await Promise.all([lms.lmsVenueContracts(), lms.lmsVenueContracts()])
     expect(hits).toBe(1)
     expect(a).toEqual(b)
@@ -71,9 +71,11 @@ describe('the contract cache', () => {
     await lms.lmsVenueContracts()
     expect(hits).toBe(1)
 
-    // Push the stored entry past the ten-minute TTL.
+    // Push the stored entry past the TTL. Read off the constant rather than
+    // written out, so shortening the TTL for the calendar's auto-refresh cannot
+    // leave this test quietly asserting nothing.
     const held = JSON.parse(localStorage.getItem(KEY))
-    held.at = Date.now() - 11 * 60 * 1000
+    held.at = Date.now() - (lms.CONTRACTS_TTL_MS + 60 * 1000)
     localStorage.setItem(KEY, JSON.stringify(held))
     vi.resetModules()
     const fresh = await import('./lms')
@@ -87,6 +89,43 @@ describe('the contract cache', () => {
     await vi.waitFor(() => expect(onFresh).toHaveBeenCalled())
     expect(onFresh.mock.calls[0][0].length).toBe(2)
     expect(hits).toBe(2)
+  })
+
+  it('brackets a background refresh with onSyncStart / onSyncEnd', async () => {
+    await lms.lmsVenueContracts()
+
+    const held = JSON.parse(localStorage.getItem(KEY))
+    held.at = Date.now() - (lms.CONTRACTS_TTL_MS + 60 * 1000)
+    localStorage.setItem(KEY, JSON.stringify(held))
+    vi.resetModules()
+    const fresh = await import('./lms')
+
+    const onSyncStart = vi.fn()
+    const onSyncEnd = vi.fn()
+    await fresh.lmsVenueContracts({}, { onFresh: () => {}, onSyncStart, onSyncEnd })
+
+    // Start fires synchronously, so the caller's spinner is up before the wait.
+    expect(onSyncStart).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(onSyncEnd).toHaveBeenCalledTimes(1))
+  })
+
+  it('clears the spinner even when the background refresh fails', async () => {
+    await lms.lmsVenueContracts()
+
+    const held = JSON.parse(localStorage.getItem(KEY))
+    held.at = Date.now() - (lms.CONTRACTS_TTL_MS + 60 * 1000)
+    localStorage.setItem(KEY, JSON.stringify(held))
+    vi.resetModules()
+    const fresh = await import('./lms')
+
+    // The whole reason onSyncEnd runs in a finally: a failed refresh that never
+    // called it would leave "Syncing…" on screen for good.
+    fails = true
+    const onSyncEnd = vi.fn()
+    const rowsBack = await fresh.lmsVenueContracts({}, { onFresh: () => {}, onSyncEnd })
+
+    expect(rowsBack.length).toBe(1)   // stale rows still served
+    await vi.waitFor(() => expect(onSyncEnd).toHaveBeenCalledTimes(1))
   })
 
   it('does not serve a filtered query from the full-list cache', async () => {

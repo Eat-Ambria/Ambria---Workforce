@@ -149,23 +149,31 @@ export async function lmsVenueEvents(body = {}) {
 // rows) when debugging.
 // --- the contract cache -----------------------------------------------------
 //
-// This one call is 88 pages, 2.2 MB and about twelve seconds, and the valet
+// This one call is 88 pages, 2.2 MB and about fifteen seconds, and the valet
 // calendar makes it on every mount — so walking away from the page and coming
 // back means watching the spinner again for work that was already done.
 //
 // Three layers, each covering what the one before cannot:
 //
 //   * an in-flight promise, so two mounts in the same tick make ONE request
-//     rather than two twelve-second ones racing each other;
+//     rather than two fifteen-second ones racing each other;
 //   * memory, so moving around the app is instant;
 //   * localStorage, so a reload or a PWA relaunch is instant too — which is the
 //     common case on a phone, where the app gets killed between uses.
 //
 // Stale-while-revalidate rather than a hard expiry: past the TTL the cached
 // contracts are still handed back immediately and a refresh runs behind them,
-// because a twelve-second wait for figures that are ten minutes old helps
+// because a fifteen-second wait for figures a few minutes old helps
 // nobody. The caller gets the new rows through `onFresh` when they land.
-const CONTRACTS_TTL_MS = 10 * 60 * 1000
+// Also the auto-refresh floor: the Valet calendar re-checks this on a timer, so
+// this number IS the CRM's bill. One refresh is 88 pages and a measured 15
+// seconds (14.3s / 15.2s / 13.8s / 15.1s / 16.0s across five runs), and the
+// dedupe below is per browser tab — five admins watching the calendar means five
+// separate sweeps per interval, not one. Three minutes is the compromise:
+// live enough to be useful, and at most 20 sweeps an hour per open tab.
+// Lowering it toward the 15s a sweep takes turns the timer into "always
+// refetch", which is what a shared server-side cache is for, not this.
+export const CONTRACTS_TTL_MS = 3 * 60 * 1000
 // Bump the version whenever a stored field changes shape. v1 was written while a
 // pax count of 0 was being dropped, so those rows carry no `guests` key at all —
 // reverting the code cannot fix a browser that already holds one. A new key
@@ -189,6 +197,14 @@ const writeStore = (v) => {
   try { localStorage.setItem(CONTRACTS_KEY, JSON.stringify(v)) } catch { /* full or blocked */ }
 }
 
+// How long ago the contracts were last fetched, in ms — null when nothing is
+// cached. Drives the "synced N ago" line, so it reads the same two layers
+// lmsVenueContracts does rather than keeping a third copy of the timestamp.
+export function lmsContractsAge() {
+  const c = contractsMemo || readStore()
+  return c?.at ? Date.now() - c.at : null
+}
+
 export function clearLmsCache() {
   contractsMemo = null
   try { localStorage.removeItem(CONTRACTS_KEY) } catch { /* ignore */ }
@@ -209,8 +225,14 @@ async function fetchContracts(body, paginate) {
  *                  a filtered result must never be served as the full list.
  * @param onFresh   called with newer rows if the cache was stale and a
  *                  background refresh brought something back.
+ * @param onSyncStart / onSyncEnd
+ *                  bracket a background refresh, so a caller can show that one
+ *                  is running. Reported rather than inferred: whether a refresh
+ *                  fires depends on the cache age, which only this function
+ *                  knows, and onSyncEnd runs in a finally so a FAILED refresh
+ *                  still clears the caller's spinner.
  */
-export async function lmsVenueContracts(body = {}, { paginate = true, onFresh } = {}) {
+export async function lmsVenueContracts(body = {}, { paginate = true, onFresh, onSyncStart, onSyncEnd } = {}) {
   const cacheable = paginate && Object.keys(body).length === 0
   if (!cacheable) return fetchContracts(body, paginate)
 
@@ -236,7 +258,10 @@ export async function lmsVenueContracts(body = {}, { paginate = true, onFresh } 
     // Stale: hand back what we have now, and let the refresh catch up behind it.
     // The rejection is swallowed on purpose — the caller already has usable
     // rows, and an unhandled rejection over a background refresh is noise.
-    if (onFresh) load().then((rows) => onFresh(rows)).catch(() => {})
+    if (onFresh) {
+      onSyncStart?.()
+      load().then((rows) => onFresh(rows)).catch(() => {}).finally(() => onSyncEnd?.())
+    }
     return cached.rows
   }
 
