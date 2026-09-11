@@ -1124,6 +1124,27 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
     r.status === TASK_STATUS.PENDING && !r.started_at
     && !(r.before_photo?.length) && !(r.completion_photo?.length)
 
+  // Can this row be deleted outright when its person is dropped, or does
+  // deleting it lose a record of work that exists nowhere else?
+  //
+  //   untouched  — nothing has happened on it. Nothing to lose.
+  //   completed  — trg_task_completion_history wrote the task_completions row on
+  //                the transition INTO 'completed', carrying the title, venue,
+  //                assignee name and timings. The record already lives somewhere
+  //                this cannot reach, so the task row is now just a duplicate of
+  //                it and keeping it helps nobody.
+  //
+  // Anything between the two — started, submitted for approval, raised as an
+  // issue — has NO history row yet, so it is still kept (unassigned) exactly as
+  // before. Deleting those really would erase the only trace.
+  //
+  // This is what stops the "nobody assigned" rows appearing: taking somebody off
+  // a job on the SAME DAY they finished it used to leave the finished row behind
+  // with its name stripped, and the morning reset then re-served it, unassigned,
+  // every day thereafter.
+  const safeToDelete = (r) =>
+    untouched(r) || r.status === TASK_STATUS.COMPLETED
+
   // what each group needs on save: people to add, rows to drop
   const plan = useMemo(() => groups.filter((g) => !g.isNew).map((g) => {
     const before = g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to)
@@ -1337,10 +1358,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             .in('id', g.rows.map((r) => r.id))
           if (error) throw error
         }
-        // people removed: reuse an untouched row by unassigning nothing —
-        // delete it outright; keep it (unassigned) once work exists on it
+        // people removed: the row goes unless losing it would lose the only
+        // record of work on it — see safeToDelete
         for (const r of dropped) {
-          if (untouched(r)) {
+          if (safeToDelete(r)) {
             const { error } = await supabase.from('tasks').delete().eq('id', r.id)
             if (error) throw error
           } else {
@@ -1430,14 +1451,16 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // Exotica while it is at it.
       for (const { drop } of venueMoves) {
         for (const r of drop) {
-          if (untouched(r)) {
+          if (safeToDelete(r)) {
             // The job no longer runs here. Leaving the row behind unassigned put
             // it straight back on the board under "Unassigned" — a venue the
             // admin had just taken it off.
             const { error } = await supabase.from('tasks').delete().eq('id', r.id)
             if (error) throw error
           } else {
-            // worked on: kept, unassigned, because the record belongs to it
+            // Part-done and not yet in task_completions — started, submitted, or
+            // sitting as an issue. Kept, unassigned, because this row is the only
+            // trace of that work.
             const { error } = await supabase.from('tasks')
               .update({ assigned_to: null, assignee_name: null }).eq('id', r.id)
             if (error) throw error

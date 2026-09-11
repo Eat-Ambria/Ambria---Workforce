@@ -16,7 +16,8 @@ Underneath the bookings, Ambria also lists **confirmed venue events from the CRM
 list.
 
 The valet team needs to see the same screen inside **Valet Admin**. This feed
-returns both lists, and mirrors what Ambria's own **valet role** sees.
+returns both lists — the same two Ambria's own Valet page is built from, minus
+the guest's phone number (see below).
 
 **It is read-only, and it must stay read-only.** Bookings are created, edited and
 deleted in Ambria Admin only — that app owns the unique constraint, the staffing
@@ -181,9 +182,15 @@ Each of these is a real property of the data, not a hypothetical.
 
 ### Guest phone is not in this feed, by design
 
-Ambria hides the guest's phone number from its **valet role**, and the audience
-on this side of the feed is the valet team. Sending it here would route around a
-rule that already exists. Do not add a phone column and do not source it from
+It is the guest's number, and the audience on this side of the feed is a
+different company's system. The valet team runs the operation without ever
+needing to ring the guest, so the number would be crossing a company boundary for
+no use anyone can name.
+
+This used to be justified by Ambria's own **valet role**, which was hidden from
+guest phones in its UI. That role has been removed and this rule deliberately
+outlived it — nothing in Ambria depends on it any more, so it holds only as long
+as it is written down. Do not add a phone column and do not source it from
 somewhere else. If the valet project genuinely needs it, raise it as a decision
 rather than a patch.
 

@@ -154,6 +154,7 @@ export default function TaskBoard() {
   const [catFilter, setCatFilter] = useState('all')       // all | other (general) | kitchen
   const [query, setQuery] = useState('')                  // ticket number or words
   const [prioFilter, setPrioFilter] = useState('all')     // all | urgent | high | normal | low
+  const [venueFilter, setVenueFilter] = useState('all')   // all | <property code>
   const [scope, setScope] = useState('assigned') // staff view: 'assigned' to me | 'posted' by me
   const [showAllDone, setShowAllDone] = useState(false) // Completed tab: recent vs everything
   const [creating, setCreating] = useState(false)
@@ -291,6 +292,23 @@ export default function TaskBoard() {
     (list) => (prioFilter === 'all' ? list : list.filter((r) => (r.priority || 'normal') === prioFilter)),
     [prioFilter]
   )
+  const byVenue = useCallback(
+    (list) => (venueFilter === 'all' ? list : list.filter((r) => r.property === venueFilter)),
+    [venueFilter]
+  )
+
+  // Which venues this person can see at all. null from scopedProperties means
+  // every one of them; otherwise it is their own posting plus anywhere they are
+  // covering today. Offering a venue they cannot see would be a filter that
+  // always returns nothing.
+  const venueScope = useMemo(() => scopedProperties(user), [user])
+  const venueChoices = useMemo(
+    () => (venueScope ? PROPERTIES.filter((pr) => venueScope.includes(pr.code)) : PROPERTIES),
+    [venueScope]
+  )
+  // One venue to choose from is not a choice. Hidden rather than disabled: the
+  // board is already four filters wide on a laptop.
+  const showVenueFilter = venueChoices.length > 1
 
   // Typed "#142" or "142" finds that one ticket; anything else is words, matched
   // against both titles and the description. Applied after the chips so their
@@ -305,15 +323,19 @@ export default function TaskBoard() {
   }, [needle])
 
   const visibleRows = useMemo(
-    () => bySearch(byPrio(byCat(scopedRows))),
-    [scopedRows, byCat, byPrio, bySearch]
+    () => bySearch(byPrio(byCat(byVenue(scopedRows)))),
+    [scopedRows, byVenue, byCat, byPrio, bySearch]
   )
 
   // Each filter counts with the OTHER already applied, so a number always says
   // what clicking it returns. Counting both from scopedRows is how a chip ends
   // up promising 28 above a list of 3.
-  const catPool = useMemo(() => byPrio(scopedRows), [scopedRows, byPrio])
-  const prioPool = useMemo(() => byCat(scopedRows), [scopedRows, byCat])
+  const catPool = useMemo(() => byPrio(byVenue(scopedRows)), [scopedRows, byVenue, byPrio])
+  const prioPool = useMemo(() => byCat(byVenue(scopedRows)), [scopedRows, byVenue, byCat])
+  // The venue counts are the only ones NOT narrowed by their own filter — they
+  // are narrowed by the others, so each reads "how many I would get if I picked
+  // this venue instead", which is the question somebody about to switch has.
+  const venuePool = useMemo(() => byPrio(byCat(scopedRows)), [scopedRows, byCat, byPrio])
 
   // repair rows keep the assignee name from assignment time; swap in the Hindi
   // name when the UI is Hindi and we know the person
@@ -507,6 +529,22 @@ export default function TaskBoard() {
           <FilterField label={t.repairStatus}>
             <select style={filterStyle(C)} value={tab} onChange={(e) => setTab(e.target.value)}>
               {tabs.map((tb) => <option key={tb.key} value={tb.key}>{tb.label}</option>)}
+            </select>
+          </FilterField>
+        )}
+
+        {/* Venues are all listed, including the empty ones — unlike a priority,
+            "nothing outstanding at Restro" is an answer worth being able to
+            reach, not a dead end. */}
+        {showVenueFilter && (
+          <FilterField label={t.propertyLabel}>
+            <select style={filterStyle(C)} value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)}>
+              <option value="all">{t.all} ({venuePool.length})</option>
+              {venueChoices.map((pr) => (
+                <option key={pr.code} value={pr.code}>
+                  {propName(pr.code, lang)} ({venuePool.filter((r) => r.property === pr.code).length})
+                </option>
+              ))}
             </select>
           </FilterField>
         )}

@@ -31,6 +31,25 @@ const STATUS = {
 }
 const stat = (s) => STATUS[s] || STATUS.open
 
+// The reporter's phone, kept off a page anyone can open.
+//
+// The public form appends its own block to the description — "Reported via
+// public link", then Name, Phone and Location. That was written for the admin
+// side, which is the only place a description was ever shown; this page listed
+// titles only, so the number was private by accident rather than by design.
+// Opening a card on tap turned that accident into every visitor being able to
+// read every reporter's number.
+//
+// The line is dropped rather than the whole block: the labels are ours, so
+// matching them is reliable, and Name and Location are worth keeping — the name
+// is already on the card as posted_by_name, and "Tech office" is half the point
+// of the report. Admins still see the number in full on the Task Board.
+// The trailing newline goes with the line, or removing the middle of the block
+// leaves a blank gap where the number used to be — which reads as something
+// withheld, and invites the question.
+const PHONE_LINE = /^[ \t]*(Phone|फ़ोन)[ \t]*:.*\r?\n?/gm
+const publicDesc = (text) => (text || '').replace(PHONE_LINE, '').trim()
+
 function readMine() {
   try { return new Set(JSON.parse(localStorage.getItem(MINE_KEY) || '[]')) } catch { return new Set() }
 }
@@ -88,11 +107,19 @@ export default function PublicFixRequest() {
   const shownRows = useMemo(() => {
     const byProp = propFilter === 'all' ? rows : rows.filter((r) => r.property === propFilter)
     const needle = query.trim().toLowerCase().replace(/^#/, '')
-    if (!needle) return byProp
-    return byProp.filter((r) => String(r.id) === needle
+    const matched = !needle ? byProp : byProp.filter((r) => String(r.id) === needle
       || `${r.title || ''} ${r.title_hi || ''} ${r.description || ''} ${r.description_hi || ''}`
         .toLowerCase().includes(needle))
-  }, [rows, propFilter, query])
+    // Yours at the top, in every tab. Somebody who has just sent a request had
+    // no way back to it except the ticket number, and only if they wrote it
+    // down — the page already knew which were theirs (`mine`, the ids kept in
+    // localStorage, drawn as the "You" chip), it simply never used that to put
+    // them anywhere findable. A sort rather than a filter or a tab of their own:
+    // it costs no control on a page that is mostly read on a phone, and it
+    // cannot hide anything.
+    // sort() is stable, so within each half the newest-first order survives.
+    return [...matched].sort((a, b) => (mine.has(b.id) ? 1 : 0) - (mine.has(a.id) ? 1 : 0))
+  }, [rows, propFilter, query, mine])
 
   const counts = useMemo(() => {
     const done = shownRows.filter((r) => ['completed', 'approved'].includes(r.status)).length
@@ -174,7 +201,19 @@ export default function PublicFixRequest() {
           <RequestForm
             C={C} hi={hi}
             onBack={() => setView('list')}
-            onSubmitted={(id) => { if (id) { addMine(id); setMine(readMine()) } load() }}
+            onSubmitted={(id) => {
+              if (id) {
+                addMine(id)
+                setMine(readMine())
+                // Clear the venue filter and the search on the way back: either
+                // could hide the request just sent, and a list that does not
+                // contain it reads as a save that failed.
+                setTab('all')
+                setPropFilter('all')
+                setQuery('')
+              }
+              load()
+            }}
           />
         ) : (
           <>
@@ -271,47 +310,96 @@ function StatTile({ C, label, value, tone }) {
 function RequestCard({ C, hi, r, isMine }) {
   const lang = hi ? 'hi' : 'en'
   const s = stat(r.status)
-  const [showWork, setShowWork] = useState(false)
+  const [open, setOpen] = useState(false)
   const done = ['completed', 'approved'].includes(r.status)
+
+  // What was reported. `photos` is emptied a day after a request is completed by
+  // the storage purge, so an old one opens with its words and no pictures —
+  // expected, not a fault.
+  const desc = publicDesc(hi && r.description_hi ? r.description_hi : r.description)
+  const shotPhotos = Array.isArray(r.photos) ? r.photos : []
+  // What was done about it.
   const workPhotos = Array.isArray(r.resolution_photos) ? r.resolution_photos : []
   const hasWork = done && (r.resolution_note || r.resolution_voice_url || workPhotos.length > 0)
+
+  // Only open if there is something inside. A card that answers a tap with
+  // nothing is worse than one that never invited the tap.
+  const hasDetail = !!(desc.trim() || r.voice_url || shotPhotos.length > 0 || hasWork)
+
+  const photoStrip = (urls) => (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {urls.map((u) => (
+        <a key={u} href={u} target="_blank" rel="noreferrer">
+          <img
+            src={u}
+            alt=""
+            style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 9, border: `1px solid ${C.border}` }}
+          />
+        </a>
+      ))}
+    </div>
+  )
+
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C[s.tone]}`, borderRadius: 14, padding: 14, boxShadow: C.shadow }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
-        <div style={{ minWidth: 0 }}>
-          {(r.category || 'other') === 'kitchen' && (
-            <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.accent, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px', marginBottom: 5 }}>
-              {hi ? 'रसोई / किचन' : 'Kitchen'}
-            </span>
-          )}
-          <div style={{ fontWeight: 700, fontSize: 16.5, wordBreak: 'break-word' }}>
-            {/* The row's own id. Quote it on the phone and an admin can find the
-                same request in one search. */}
-            {/* Already 15px and 700 from the title's container — only the
-                colour was keeping it quiet, and C.faint is the palest ink there
-                is. */}
-            <span style={{ color: C.text, fontVariantNumeric: 'tabular-nums', marginRight: 6 }}>
-              #{r.id}
-            </span>
-            {hi && r.title_hi ? r.title_hi : r.title}
-            {isMine && (
-              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>
-                {hi ? 'आपका' : 'You'}
+      {/* The head is the button, not the whole card: the panel below holds photo
+          links and an audio player, and a tap meant for those must not fold the
+          card shut under the finger. */}
+      <div
+        {...(hasDetail ? {
+          role: 'button',
+          tabIndex: 0,
+          'aria-expanded': open,
+          onClick: () => setOpen((v) => !v),
+          onKeyDown: (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v) }
+          },
+          style: { cursor: 'pointer' },
+        } : {})}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ minWidth: 0 }}>
+            {(r.category || 'other') === 'kitchen' && (
+              <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.accent, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px', marginBottom: 5 }}>
+                {hi ? 'रसोई / किचन' : 'Kitchen'}
               </span>
             )}
+            <div style={{ fontWeight: 700, fontSize: 16.5, wordBreak: 'break-word' }}>
+              {/* The row's own id. Quote it on the phone and an admin can find the
+                  same request in one search. */}
+              <span style={{ color: C.text, fontVariantNumeric: 'tabular-nums', marginRight: 6 }}>
+                #{r.id}
+              </span>
+              {hi && r.title_hi ? r.title_hi : r.title}
+              {isMine && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: C.maroon, background: C.maroonSoft, borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                  {hi ? 'आपका' : 'You'}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+              <Icon name="pin" size={13} color={C.faint} />
+              {propName(r.property, lang)}
+              {r.posted_by_name ? ` · ${r.posted_by_name}` : ''}
+              {' · '}{fmtDate(r.created_at)}
+            </div>
           </div>
-          <div style={{ fontSize: 12.5, color: C.tl, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-            <Icon name="pin" size={13} color={C.faint} />
-            {propName(r.property, lang)}
-            {r.posted_by_name ? ` · ${r.posted_by_name}` : ''}
-            {' · '}{fmtDate(r.created_at)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <Badge color={C[s.tone]} bg={C[s.bg]}>{hi ? s.hi : s.en}</Badge>
+            {hasDetail && (
+              <Icon
+                name="chevronRight"
+                size={16}
+                color={C.faint}
+                style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}
+              />
+            )}
           </div>
         </div>
-        <Badge color={C[s.tone]} bg={C[s.bg]}>{hi ? s.hi : s.en}</Badge>
-      </div>
 
-      <div style={{ marginTop: 10 }}>
-        <ProgressBar value={s.pct} tone={C[s.tone]} height={7} />
+        <div style={{ marginTop: 10 }}>
+          <ProgressBar value={s.pct} tone={C[s.tone]} height={7} />
+        </div>
       </div>
 
       {r.assigned_to_name && (
@@ -333,53 +421,47 @@ function RequestCard({ C, hi, r, isMine }) {
         </div>
       )}
 
-      {/* What was actually done. Folded away by default — several of these run to
-          a paragraph, and a dozen of them open at once is a wall to scroll past. */}
-      {hasWork && (
-        <div style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            onClick={() => setShowWork((v) => !v)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: 'transparent', border: 'none', padding: 0,
-              fontSize: 12.5, fontWeight: 700, color: C.maroon, cursor: 'pointer',
-            }}
-          >
-            <Icon
-              name="chevronRight"
-              size={14}
-              color={C.maroon}
-              style={{ transform: showWork ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}
-            />
-            {hi ? 'क्या किया गया' : 'What was done'}
-          </button>
-          {showWork && (
-            <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 11, marginTop: 7 }}>
+      {/* Everything about the request, folded away until asked for. Several run to
+          a paragraph and carry photos, and a dozen open at once is a wall to
+          scroll past — which is why the list stays a list until tapped.
+          "What was done" used to be its own toggle in here: two levels of fold on
+          one card, so it is now simply part of what opens. */}
+      {open && (
+        <div style={{ marginTop: 11, borderTop: `1px solid ${C.border}`, paddingTop: 11, display: 'grid', gap: 12 }}>
+          {(desc.trim() || r.voice_url || shotPhotos.length > 0) && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.tl, marginBottom: 6 }}>
+                {hi ? 'क्या बताया गया' : 'What was reported'}
+              </div>
+              {desc.trim() && (
+                <p style={{ fontSize: 13, color: C.text, lineHeight: 1.55, whiteSpace: 'pre-line', margin: 0 }}>
+                  {desc}
+                </p>
+              )}
+              {r.voice_url && (
+                <audio controls src={r.voice_url} style={{ width: '100%', marginTop: desc.trim() ? 9 : 0 }} />
+              )}
+              {shotPhotos.length > 0 && (
+                <div style={{ marginTop: (desc.trim() || r.voice_url) ? 9 : 0 }}>{photoStrip(shotPhotos)}</div>
+              )}
+            </div>
+          )}
+
+          {hasWork && (
+            <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 11 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.green, marginBottom: 6 }}>
+                {hi ? 'क्या किया गया' : 'What was done'}
+              </div>
               {r.resolution_note && (
                 <p style={{ fontSize: 13, color: C.text, lineHeight: 1.5, whiteSpace: 'pre-line', margin: 0 }}>
                   {r.resolution_note}
                 </p>
               )}
               {r.resolution_voice_url && (
-                <audio
-                  controls
-                  src={r.resolution_voice_url}
-                  style={{ width: '100%', marginTop: r.resolution_note ? 9 : 0 }}
-                />
+                <audio controls src={r.resolution_voice_url} style={{ width: '100%', marginTop: r.resolution_note ? 9 : 0 }} />
               )}
               {workPhotos.length > 0 && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: (r.resolution_note || r.resolution_voice_url) ? 9 : 0 }}>
-                  {workPhotos.map((u) => (
-                    <a key={u} href={u} target="_blank" rel="noreferrer">
-                      <img
-                        src={u}
-                        alt=""
-                        style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 9, border: `1px solid ${C.border}` }}
-                      />
-                    </a>
-                  ))}
-                </div>
+                <div style={{ marginTop: (r.resolution_note || r.resolution_voice_url) ? 9 : 0 }}>{photoStrip(workPhotos)}</div>
               )}
             </div>
           )}
@@ -550,9 +632,9 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
         <p style={{ fontSize: 14, color: C.tl, marginTop: 12, lineHeight: 1.55 }}>
           {ticket != null
             ? (hi
-                ? 'इसे नोट कर लें। इसी नंबर से आप नीचे सूची में अपना अनुरोध ढूँढ सकते हैं।'
-                : 'Note it down. You can find this request by searching that number in the list.')
-            : (hi ? 'धन्यवाद। आप नीचे सूची में इसका स्टेटस देख सकते हैं।' : 'Thank you. You can track its status in the list.')}
+                ? 'इसे नोट कर लें — फ़ोन पर बताने के काम आएगा। आपका अनुरोध सूची में सबसे ऊपर रहेगा, स्टेटस वहीं दिखता रहेगा।'
+                : 'Note it down — it is what you quote on the phone. Your request stays at the top of the list, and its status updates there.')
+            : (hi ? 'धन्यवाद। आपका अनुरोध सूची में सबसे ऊपर रहेगा।' : 'Thank you. Your request stays at the top of the list.')}
         </p>
         <button type="button" onClick={onBack} style={addBtn(C)}>
           <Icon name="chevronLeft" size={18} color="#fff" /> {hi ? 'सूची पर वापस जाएँ' : 'Back to list'}

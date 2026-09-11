@@ -46,16 +46,30 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
       const key = r.task.assignee_name || '_none'
       if (!byPerson.has(key)) {
         byPerson.set(key, {
-          key, name: r.task.assignee_name || t.unassigned,
+          // A phrase about the work, not a name. Called t.unassigned it sat in a
+          // list of staff reading as somebody called Unassigned — same problem
+          // the progress board had, same wording as the block there.
+          key, name: r.task.assignee_name || t.nobodyAssigned,
           unassigned: !r.task.assignee_name,
-          department: r.task.department, expected: 0, done: 0, missed: 0, tasks: [],
+          // Null when nobody is on it — same reason as StaffProgress: the
+          // department would be whichever task was counted first, and it gave
+          // the Unassigned row a coloured dot and a team name, so it read as a
+          // person. It is a bucket, not a member of staff.
+          department: r.task.assignee_name ? r.task.department : null,
+          expected: 0, done: 0, missed: 0, tasks: [],
         })
       }
       const p = byPerson.get(key)
       p.expected += r.expected; p.done += r.done; p.missed += r.missed
       p.tasks.push(r)
     })
-    const people = [...byPerson.values()].sort((a, b) => b.missed - a.missed || a.name.localeCompare(b.name))
+    const people = [...byPerson.values()].sort((a, b) => (
+      // Nobody-assigned last however bad its number is: the list is read as
+      // "who do I speak to", and it is not a person to speak to.
+      (a.unassigned !== b.unassigned)
+        ? (a.unassigned ? 1 : -1)
+        : (b.missed - a.missed || a.name.localeCompare(b.name))
+    ))
     return {
       key: band.key,
       people,
@@ -182,7 +196,11 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
                             {p.name}
                           </span>
                         </span>
-                        <span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 2, paddingLeft: 14 }}>
+                        {/* The indent lines this up under the name, past the
+                            department dot. No dot on the unassigned row, so no
+                            indent either — otherwise it sits adrift of the name
+                            above it. */}
+                        <span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 2, paddingLeft: p.department ? 14 : 0 }}>
                           {p.tasks.length} {hi ? 'काम' : (p.tasks.length === 1 ? 'job' : 'jobs')}
                           {p.department ? ` · ${deptName(p.department, lang)}` : ''}
                         </span>

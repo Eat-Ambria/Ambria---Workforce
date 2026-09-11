@@ -56,21 +56,35 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [load])
 
-  const { people, totals } = useMemo(() => {
+  const { people, orphans, totals } = useMemo(() => {
     const due = rows.filter((r) => isDueToday(r))
     const by = new Map()
     const sum = { total: 0, done: 0, doing: 0, todo: 0 }
+    // Work with nobody's name on it. Counted in the totals like everything else
+    // — it is still the venue's work — but kept OUT of `by`, because this is a
+    // board about people and a bucket in the people list read as a member of
+    // staff called "Unassigned", complete with a department dot. It gets its own
+    // block under the list instead: same jobs, named as jobs.
+    const none = { total: 0, done: 0, doing: 0, todo: 0, tasks: [] }
 
     due.forEach((r) => {
-      const key = r.assigned_to || '_none'
+      if (!r.assigned_to) {
+        none.tasks.push(r)
+        none.total += 1; sum.total += 1
+        if (r.status === TASK_STATUS.COMPLETED) { none.done += 1; sum.done += 1 }
+        else if (r.status === TASK_STATUS.IN_PROGRESS) { none.doing += 1; sum.doing += 1 }
+        else { none.todo += 1; sum.todo += 1 }
+        return
+      }
+      const key = r.assigned_to
       if (!by.has(key)) {
         by.set(key, {
           id: key,
-          name: r.assigned_to
-            ? (personName(members.find((m) => m.id === r.assigned_to) || {}, lang) || r.assignee_name || r.assigned_to)
-            : t.unassigned,
+          // The live user first, so a rename shows here; the name stored on the
+          // task next, for somebody no longer on the list; the id last, which is
+          // ugly but is never a blank row.
+          name: personName(members.find((m) => m.id === r.assigned_to) || {}, lang) || r.assignee_name || r.assigned_to,
           department: r.department,
-          unassigned: !r.assigned_to,
           total: 0, done: 0, doing: 0, todo: 0, tasks: [],
         })
       }
@@ -106,7 +120,6 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     }
 
     const list = [...by.values()].sort((a, b) => {
-      if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1   // nobody-yet last
       const ad = deptRank(a.department)
       const bd = deptRank(b.department)
       if (ad !== bd) return ad - bd                                     // Admin, then the rest
@@ -115,8 +128,14 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       if (ap !== bp) return ap - bp                                     // furthest behind first
       return a.name.localeCompare(b.name)
     })
-    return { people: memberFilter === 'all' ? list : list.filter((p) => p.id === memberFilter), totals: sum }
-  }, [rows, members, lang, t, memberFilter])
+    return {
+      people: memberFilter === 'all' ? list : list.filter((p) => p.id === memberFilter),
+      // Picking one person out of the list is a question about that person, so
+      // the nobody-assigned block does not belong in the answer.
+      orphans: memberFilter === 'all' ? none : { total: 0, done: 0, doing: 0, todo: 0, tasks: [] },
+      totals: sum,
+    }
+  }, [rows, members, lang, memberFilter])
 
   // This table IS the page now — silently rendering nothing when a filter
   // matches no work would look like a broken screen, not an empty one.
@@ -157,25 +176,18 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       {people.map((p, i) => {
         const open = openId === p.id
         const dp = pct(p.done, p.total)
-        const tone = dp === 100 ? C.green : (p.unassigned ? C.tl : C.maroon)
+        const tone = dp === 100 ? C.green : C.maroon
         // A band at the top of each team. The rows were already grouped by the
         // sort, but the only thing naming the team was the small grey line under
         // each person — so the grouping was there and had to be worked out.
         //
-        // Keyed on `unassigned` as well as the department: that bucket sorts
-        // last whatever department its tasks carry, so keying on the code alone
-        // would file it under whichever team happened to come before it.
         const prev = people[i - 1]
-        const groupKey = p.unassigned ? '_none' : (p.department || '_blank')
-        const prevKey = !prev ? null : (prev.unassigned ? '_none' : (prev.department || '_blank'))
+        const groupKey = p.department || '_blank'
+        const prevKey = !prev ? null : (prev.department || '_blank')
         const newGroup = groupKey !== prevKey
         const dept = DEPARTMENT_MAP[p.department]
         return (
           <div key={p.id}>
-            {/* No label on the unassigned bucket — the row underneath is already
-                called Unassigned, and repeating it would be the same word twice.
-                It still gets the band, so it does not read as part of the team
-                above it. */}
             {newGroup && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
@@ -198,18 +210,14 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                   padding: '3px 9px', borderRadius: 6,
                   fontSize: 11, fontWeight: 800, letterSpacing: '0.07em',
                   textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  ...(p.unassigned
-                    // No department, so no colour to claim. A bordered chip keeps
-                    // it the same kind of element without inventing an identity.
-                    ? { color: C.tl, background: 'transparent', border: `1px solid ${C.borderStrong}` }
-                    : { color: '#fff', background: dept?.color || C.tl }),
+                  color: '#fff', background: dept?.color || C.tl,
                 }}>
-                  {p.unassigned ? t.unassigned : deptName(p.department, lang)}
+                  {deptName(p.department, lang)}
                 </span>
                 {/* how many people are in this team today, so a one-person team
                     is visibly a one-person team */}
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
-                  {people.filter((x) => (x.unassigned ? '_none' : (x.department || '_blank')) === groupKey).length}
+                  {people.filter((x) => (x.department || '_blank') === groupKey).length}
                 </span>
               </div>
             )}
@@ -232,7 +240,7 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                     {p.department && (
                       <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: DEPARTMENT_MAP[p.department]?.color || C.tl }} />
                     )}
-                    <span style={{ fontSize: 15, fontWeight: 700, color: p.unassigned ? C.tl : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}
                     </span>
                   </span>
@@ -286,6 +294,59 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
           </div>
         )
       })}
+
+      {/* Jobs nobody is on. Deliberately NOT a row in the list above: with a
+          name, a dot and a department it read as a member of staff called
+          Unassigned. Here it is what it actually is — a short list of work
+          waiting for somebody, under a heading that says so.
+          Always expanded, no chevron: this is the exception state, it should be
+          small, and hiding it behind a tap is how it stops being noticed. */}
+      {orphans.total > 0 && (
+        <div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 16px 7px',
+            background: C.cardAlt,
+            borderTop: `1px solid ${C.borderStrong}`,
+            borderBottom: `1px solid ${C.border}`,
+          }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '3px 9px', borderRadius: 6,
+              fontSize: 11, fontWeight: 800, letterSpacing: '0.07em',
+              textTransform: 'uppercase', whiteSpace: 'nowrap',
+              // Outlined, not filled: there is no department here, so there is
+              // no colour it can honestly claim.
+              color: C.tl, background: 'transparent', border: `1px solid ${C.borderStrong}`,
+            }}>
+              {t.nobodyAssigned}
+            </span>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
+              {orphans.done}/{orphans.total}
+            </span>
+          </div>
+
+          <div style={{ padding: '12px 16px 14px', display: 'grid', gap: 14 }}>
+            {groupByBand(orphans.tasks).map(({ band, tasks }) => (
+              <div key={band} style={{ display: 'grid', gap: 8 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
+                  textTransform: 'uppercase', color: (FREQUENCY_MAP[band] || {}).ink || C.tl,
+                }}>
+                  {frequencyLabel(band, lang)}
+                  <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
+                </div>
+                {groupByJob(tasks).map(({ key, rows: jr }) => (
+                  jr.length === 1
+                    ? <TaskLine key={jr[0].id} C={C} t={t} lang={lang} task={jr[0]} onOpen={onOpenTask} />
+                    : <TaskLineGroup key={key} C={C} t={t} lang={lang} rows={jr} onOpen={onOpenTask} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
