@@ -8,6 +8,8 @@ import { Spinner, inputStyle } from '../components/common/UI'
 import PoweredBy from '../components/common/PoweredBy'
 import Icon from '../components/common/Icon'
 
+const LOGIN_MODE_KEY = 'ambria_login_keyboard'
+
 export default function Login() {
   const C = useColors()
   const t = useT()
@@ -30,6 +32,31 @@ export default function Login() {
   // rule would lock out every non-numeric login.
   const looksLikePhone = /^\d+$/.test(username.trim())
   const phoneIncomplete = looksLikePhone && username.trim().length !== 10
+
+  // Which keyboard this field asks for. Read ONCE, on mount, and never changed
+  // while the page is open.
+  //
+  // It used to be derived from what had been typed so far — `looksLikePhone ?
+  // 'numeric' : 'text'`. An empty field is not all digits, so it opened as text;
+  // the first digit flipped it to numeric. Changing inputMode on a focused input
+  // makes the phone tear the keyboard down and put a different one up, so the
+  // keypad jumped under the finger after the first character and sometimes took
+  // that character with it. Typing a letter later flipped it back and did it
+  // again.
+  //
+  // Remembered per device instead of guessed, because the field takes a username
+  // OR a phone and there is no keyboard that is right for both: staff log in with
+  // ten digits and want the keypad, admins type a name and need letters. A device
+  // does the same one nearly every time, so the answer is whatever worked here
+  // last. Text until it knows — letters are a keypad away, but digits are not
+  // reachable at all from a numeric keyboard.
+  const [keyboard] = useState(() => {
+    try {
+      return localStorage.getItem(LOGIN_MODE_KEY) === 'numeric' ? 'numeric' : 'text'
+    } catch {
+      return 'text'
+    }
+  })
   const canSubmit = !!username && !!password && !phoneIncomplete && !busy
   const gradient = `linear-gradient(150deg, ${C.brandBg} 0%, ${C.maroonDark} 100%)`
 
@@ -39,7 +66,14 @@ export default function Login() {
     setBusy(true)
     const res = await login(username, password)
     setBusy(false)
-    if (res.ok) navigate('/dashboard', { replace: true })
+    if (res.ok) {
+      // Learn for next time on this device. Only on success: a failed attempt
+      // says nothing about how they meant to sign in.
+      try {
+        localStorage.setItem(LOGIN_MODE_KEY, looksLikePhone ? 'numeric' : 'text')
+      } catch { /* private mode — the default is fine */ }
+      navigate('/dashboard', { replace: true })
+    }
     else if (res.reason === 'inactive') setError(t.accountInactive)
     else if (res.reason === 'error') setError(hi ? 'कनेक्शन त्रुटि। इंटरनेट/सर्वर जाँचें।' : 'Connection error. Check internet / Supabase config.')
     else setError(t.invalidLogin)
@@ -101,9 +135,7 @@ export default function Login() {
               value={username}
               autoCapitalize="none"
               autoCorrect="off"
-              // Digits only: a phone keyboard on a phone, letters still typeable
-              // on a keyboard, because this field takes usernames too.
-              inputMode={looksLikePhone ? 'numeric' : 'text'}
+              inputMode={keyboard}
               onChange={(e) => setUsername(e.target.value)}
             />
           </div>
