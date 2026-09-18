@@ -437,15 +437,44 @@ function UserModal({ record, currentUserId, onClose, onSaved }) {
       ;({ error } = await supabase.from('users').update({ ...base, password: form.password }).eq('id', record.id))
     }
 
-    setBusy(false)
     if (error) {
+      setBusy(false)
       const m = error.message || ''
       if (/(duplicate|unique)/i.test(m) && /phone/i.test(m)) setErr(t.phoneInUse || 'That phone number is already in use')
       else if (/(duplicate|unique)/i.test(m)) setErr('That username is already taken')
       else setErr(m)
       return
     }
-    onSaved()
+
+    // Switching an account off leaves its roster work ON it. The morning reset
+    // re-serves those jobs every day and nobody can open them, because that
+    // login is closed — six retired accounts had quietly accumulated 45 such
+    // jobs, and the progress board listed them as people at 0/9 who simply
+    // never started. Two of them carried the same NAME as a live colleague, so
+    // the board showed one person twice with different numbers.
+    //
+    // The job itself has not gone away, only the person, so the work is handed
+    // back rather than deleted: unassigned is exactly "this still needs doing,
+    // by somebody yet to be chosen", and it lands in the board's nobody-assigned
+    // block where an admin can restaff it.
+    //
+    // Their name stays on the history either way — task_completions keeps a copy
+    // of it at completion time, which is what it is for.
+    let freed = 0
+    const justDeactivated = !isNew && record.is_active !== false && form.is_active === false
+    if (justDeactivated) {
+      const { data: cleared } = await supabase
+        .from('tasks')
+        .update({ assigned_to: null, assignee_name: null })
+        .eq('assigned_to', record.id)
+        .select('id')
+      freed = cleared?.length || 0
+    }
+
+    setBusy(false)
+    onSaved(freed
+      ? t.staffOffJobsFreed.replace('{name}', form.name.trim()).replace('{n}', String(freed))
+      : undefined)
   }
 
   return (

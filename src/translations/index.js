@@ -376,6 +376,9 @@ export const T = {
     deleteUserHint: 'Removes the account and every reference to it. Their completed work stays in the records under their name. This cannot be undone.',
     deleteUserConfirm: 'Permanently delete {name}? Their login and personal records go for good. Completed work stays in the records. This cannot be undone.',
     deleteUserDone: '{name} deleted',
+    // said out loud, because unassigning somebody's jobs behind their back is
+    // the kind of quiet change an admin should not discover later
+    staffOffJobsFreed: '{name} switched off. {n} roster jobs are now unassigned — reassign them in the Roster.',
     deleteUserActive: 'This account is still enabled. Turn off "Can log in", save, then delete.',
     deleteUserMissing: 'Deleting needs SUPABASE-MIGRATION-DELETE-USER.sql to be run in the Supabase SQL Editor first.',
     visibleTabs: 'Visible tabs',
@@ -956,6 +959,7 @@ export const T = {
     deleteUserHint: 'खाता और उससे जुड़ा हर संदर्भ हट जाएगा। इनका पूरा किया गया काम रिकॉर्ड में इन्हीं के नाम से रहेगा। यह वापस नहीं हो सकता।',
     deleteUserConfirm: '{name} को हमेशा के लिए हटाएँ? इनका लॉगिन और निजी रिकॉर्ड पूरी तरह चले जाएंगे। पूरा किया गया काम रिकॉर्ड में रहेगा। यह वापस नहीं हो सकता।',
     deleteUserDone: '{name} हटा दिए गए',
+    staffOffJobsFreed: '{name} बंद कर दिए गए। {n} काम अब किसी को नहीं दिए — Roster में दोबारा सौंपें।',
     deleteUserActive: 'यह खाता अभी चालू है। पहले "लॉग इन कर सकते हैं" बंद करें, सेव करें, फिर हटाएँ।',
     deleteUserMissing: 'हटाने के लिए पहले Supabase SQL Editor में SUPABASE-MIGRATION-DELETE-USER.sql चलाना ज़रूरी है।',
     visibleTabs: 'दिखने वाले टैब',

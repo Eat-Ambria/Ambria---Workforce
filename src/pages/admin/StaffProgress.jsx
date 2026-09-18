@@ -78,12 +78,23 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       }
       const key = r.assigned_to
       if (!by.has(key)) {
+        // `members` is the ACTIVE staff. Not finding the assignee there means
+        // the account has been switched off while its roster work stayed on it —
+        // the tasks are still served every morning and nobody can open them,
+        // because that login no longer works.
+        //
+        // Worth saying out loud on the row. Two accounts have been created for
+        // the same person before, one later deactivated, and the board then
+        // showed the name twice with nothing to tell them apart: same name, same
+        // team, two different sets of numbers.
+        const member = members.find((m) => m.id === r.assigned_to)
         by.set(key, {
           id: key,
           // The live user first, so a rename shows here; the name stored on the
           // task next, for somebody no longer on the list; the id last, which is
           // ugly but is never a blank row.
-          name: personName(members.find((m) => m.id === r.assigned_to) || {}, lang) || r.assignee_name || r.assigned_to,
+          name: personName(member || {}, lang) || r.assignee_name || r.assigned_to,
+          inactive: !member,
           department: r.department,
           total: 0, done: 0, doing: 0, todo: 0, tasks: [],
         })
@@ -240,9 +251,21 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                     {p.department && (
                       <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: DEPARTMENT_MAP[p.department]?.color || C.tl }} />
                     )}
-                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: p.inactive ? C.tl : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}
                     </span>
+                    {/* Their login is closed but the work is still on them, so
+                        the row has to stay — it is real outstanding work. The
+                        chip is what stops it reading as a second live person. */}
+                    {p.inactive && (
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase',
+                        color: C.red, background: C.rBg, border: `1px solid ${C.red}33`,
+                        borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
+                      }}>
+                        {t.inactive}
+                      </span>
+                    )}
                   </span>
                   {p.department && (
                     <span style={{ display: 'block', fontSize: 12, color: C.tl, marginTop: 2, paddingLeft: 16 }}>
