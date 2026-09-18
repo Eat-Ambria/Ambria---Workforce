@@ -1975,6 +1975,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                     )
                   })()}
                   <PeoplePicker
+                    // Per job, so moving straight from one row's picker to
+                    // another's starts the list fresh. The panel unmounts when it
+                    // closes, but opening a second row without closing the first
+                    // keeps this component alive — and it holds the order it
+                    // opened with, which would then be the wrong job's.
+                    key={ag.key}
                     C={C}
                     t={t}
                     lang={lang}
@@ -2454,16 +2460,33 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   useEffect(() => {
     if (autoFocus) search.current?.focus({ preventScroll: true })
   }, [autoFocus])
+
+  // Who was on the job when this panel opened — and the ONLY thing the order is
+  // built from while it stays open.
+  //
+  // Ordering off the live ticks meant the list rearranged itself under the
+  // finger: tick a name and it left the alphabet for the block of people on the
+  // job at the top, taking every name below it up a line. The next name you
+  // meant to tick had moved, and on a list of thirty-five that is a mis-tap
+  // waiting to happen.
+  //
+  // Frozen until the panel is closed and opened again, at which point the people
+  // now on the job lead — which is the arrangement that is useful to arrive at,
+  // just not to watch happen mid-edit.
+  const openedWith = useRef(null)
+  if (openedWith.current === null) openedWith.current = new Set(chosen)
+  const wasOnJob = openedWith.current
+
   const needle = q.trim().toLowerCase()
   // Nothing is listed until something is typed. Forty names on screen is a wall
   // to read past; the people already picked stay, because that is the one thing
   // you must be able to see without searching for it.
   const matches = needle
-    ? staff.filter((m) => !chosen.includes(m.id)
+    ? staff.filter((m) => !wasOnJob.has(m.id)
         && `${m.name || ''} ${m.name_hi || ''} ${deptName(m.department, 'en')} ${propName(m.property, 'en')}`
           .toLowerCase().includes(needle))
     : []
-  const picked = staff.filter((m) => chosen.includes(m.id))
+  const picked = staff.filter((m) => wasOnJob.has(m.id))
   // Any department can run a day/night split, so anyone can be asked.
   const canSetShift = typeof shiftOf === 'function'
   const mineShift = (m) => (canSetShift ? shiftOf(m) : '')
@@ -2475,7 +2498,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   // show, but nobody would be assigning them.
   const byName = (a, b) => (a.name || '').localeCompare(b.name || '')
   const everyone = [...staff]
-    .filter((m) => !m.inactive || chosen.includes(m.id))
+    .filter((m) => !m.inactive || wasOnJob.has(m.id))
     .sort(byName)
   // The people on the job lead, then everybody else. Opening on the plain
   // alphabet buried them: five names among thirty-five, each two lines tall now
@@ -2484,7 +2507,7 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
   const onTheJob = [...picked].sort(byName)
   const suggested = needle
     ? []
-    : [...onTheJob, ...everyone.filter((m) => !chosen.includes(m.id))]
+    : [...onTheJob, ...everyone.filter((m) => !wasOnJob.has(m.id))]
   // Under a search the ticked names lead, because there they can scroll out of
   // sight — which is the one thing that must not happen to a selection.
   const shown = needle ? [...picked, ...[...matches].sort(byName)] : suggested
