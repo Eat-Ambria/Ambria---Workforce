@@ -478,13 +478,27 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const barRef = useRef(null)
   useEffect(() => {
     // the app header plus the tab row above us — both stick, so both count
+    const header = document.querySelector('header')
+    const tabs = document.querySelector('[data-tabs-bar]')
     const measure = () => setHeaderH(
-      (document.querySelector('header')?.offsetHeight || 0)
-      + (document.querySelector('[data-tabs-bar]')?.offsetHeight || 0)
+      (header?.offsetHeight || 0) + (tabs?.offsetHeight || 0)
     )
     measure()
+    // Watched, not measured once. Either bar changes height on its own — a web
+    // font landing, the tab row wrapping to two lines on a narrow screen, the
+    // issue chips appearing — and each time this number went stale the filter
+    // bar stayed pinned at the old offset. A few pixels of daylight opened
+    // above it and the rows scrolled through the gap.
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null
+    if (ro) {
+      if (header) ro.observe(header)
+      if (tabs) ro.observe(tabs)
+    }
     window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
+    return () => {
+      ro?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
   }, [])
   // Which department bands are shut. A 121-row sheet is mostly rows you are not
   // looking at right now.
@@ -790,13 +804,24 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // copy nobody is assigned to yet.
       venuesAt: [...new Set(g.rows.map((r) => r.property))],
       people: [...new Set(g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to))],
-      // Rows with nobody on them. `people` filters these out, and until this was
-      // carried through, a group could hold three rows assigned to no one and
-      // the sheet would still read as fully staffed — which is how three copies
-      // of "Saturday: Sunday Readiness Check" sat unnoticed behind an identical
-      // job that WAS assigned. Two rows at one venue is normal (two guards on a
-      // round); a row with nobody on it is not.
-      unmanned: [...new Set(g.rows.filter((r) => !r.assigned_to).map((r) => r.property))],
+      // Every venue in scope where nobody is on this job.
+      //
+      // Read against the five venues, not against the lines the job happens to
+      // have. Whether a line exists at Janakpuri is how the roster stores
+      // things; "nobody is doing this at Janakpuri" is true either way, and that
+      // is the question being asked of this screen.
+      //
+      // The progress board computes the identical thing from the identical
+      // inputs, deliberately — the two screens disagreeing about the same job is
+      // what made this so hard to read.
+      //
+      // A venue that HAS somebody is never listed, even if a spare empty line
+      // sits beside them: the row used to announce "nobody on: Exotica" directly
+      // over Mahesh's own name.
+      unmanned: (() => {
+        const staffed = new Set(g.rows.filter((r) => r.assigned_to).map((r) => r.property))
+        return props.filter((p) => !staffed.has(p))
+      })(),
     })))
     setLoading(false)
   }, [props])
@@ -1766,7 +1791,12 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
           padding: '10px 12px',
           margin: '0 -12px 10px',
           borderBottom: `1px solid ${C.borderStrong}`,
-          boxShadow: '0 6px 12px -8px rgba(15,23,42,0.18)',
+          // The first shadow is solid card colour painted UPWARD, covering the
+          // sliver that opens above this bar while the offset above is being
+          // re-measured — a sub-pixel seam is enough to show a moving row
+          // through it, and a row half-drawn above a toolbar reads as a broken
+          // screen. It sits under the tab row, which is opaque and above this.
+          boxShadow: `0 -14px 0 0 ${C.card}, 0 6px 12px -8px rgba(15,23,42,0.18)`,
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2282,14 +2312,17 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             {names.length > 0 && g.unmanned?.length > 0 && (
                               <span style={{ display: 'flex', justifyContent: 'center', marginTop: 3 }}>
                                 <span
-                                  title={lang === 'hi'
-                                    ? 'इन जगहों की एक और कॉपी है जिस पर कोई नहीं है'
-                                    : 'a second copy at these venues has nobody on it'}
                                   style={{
                                     fontSize: 10.5, fontWeight: 700, letterSpacing: '0.03em',
                                     color: C.yellow, background: C.yBg,
                                     border: `1px solid ${C.yellow}55`,
-                                    borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap',
+                                    borderRadius: 9, padding: '2px 8px',
+                                    // Wraps rather than truncating. It was cut to
+                                    // two names and a "+2", which kept the row
+                                    // short but hid the very thing the pill is
+                                    // for — a second line costs less than a
+                                    // venue nobody can see.
+                                    lineHeight: 1.4, textAlign: 'center',
                                   }}
                                 >
                                   {lang === 'hi' ? 'बिना किसी के: ' : 'nobody on: '}
@@ -2550,11 +2583,18 @@ function PeoplePicker({ C, t, lang, staff, chosen, onToggle, isVisiting, autoFoc
           }
           const askVenue = typeof onToggleVenue === 'function' && (venues || []).length > 1
           const theirs = askVenue ? (venuesFor(m.id) || []) : []
-          // Every name carries its venues, so the choice is there before the
-          // tick rather than appearing after it. Only a name that is ON the job
-          // is drawn as a block — that is what separates a decision already
-          // made from a row you are still reading past.
-          const showVenues = askVenue
+          // Venues only once the NAME is on the job.
+          //
+          // They used to show against every name in the list, so the choice was
+          // there before the tick. The trouble is what a venue tick MEANS: save()
+          // gives that venue a copy of the job, creating one where the job has
+          // never run. On a list of thirty-five names, each carrying five
+          // tappable venues, a stray tap while scrolling silently schedules work
+          // at a venue nobody chose — and nothing on screen says it happened.
+          //
+          // Assigning is the name's job; the venues only say WHERE somebody
+          // already being assigned does it. Tick the name, then pick the venue.
+          const showVenues = askVenue && on
           return (
             <div
               key={m.id}

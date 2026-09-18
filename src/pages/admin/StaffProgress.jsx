@@ -56,8 +56,25 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [load])
 
-  const { people, orphans, totals } = useMemo(() => {
+  // Venues in play on this screen. A property filter narrows it to one, so an
+  // admin looking at Restro is never told about four venues they cannot staff.
+  const venueScope = useMemo(
+    () => (propFilter === 'all' ? PROPERTIES.map((p) => p.code) : [propFilter]),
+    [propFilter]
+  )
+
+  const { people, orphans, totals, staffedByJob } = useMemo(() => {
     const due = rows.filter((r) => isDueToday(r))
+    // Where each job already has somebody today. Keyed exactly as groupByJob
+    // keys, so the nobody-assigned block can ask "which venues is this job NOT
+    // covered at" and get the same answer the roster gives.
+    const staffedBy = new Map()
+    due.forEach((r) => {
+      if (!r.assigned_to) return
+      const k = `${(r.title || '').trim().toLowerCase()}|${windowKey(r.time_block)}`
+      if (!staffedBy.has(k)) staffedBy.set(k, new Set())
+      staffedBy.get(k).add(r.property)
+    })
     const by = new Map()
     const sum = { total: 0, done: 0, doing: 0, todo: 0 }
     // Work with nobody's name on it. Counted in the totals like everything else
@@ -145,6 +162,7 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       // the nobody-assigned block does not belong in the answer.
       orphans: memberFilter === 'all' ? none : { total: 0, done: 0, doing: 0, todo: 0, tasks: [] },
       totals: sum,
+      staffedByJob: staffedBy,
     }
   }, [rows, members, lang, memberFilter])
 
@@ -360,11 +378,25 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                   {frequencyLabel(band, lang)}
                   <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
                 </div>
-                {groupByJob(tasks).map(({ key, rows: jr }) => (
-                  jr.length === 1
-                    ? <TaskLine key={jr[0].id} C={C} t={t} lang={lang} task={jr[0]} onOpen={onOpenTask} />
-                    : <TaskLineGroup key={key} C={C} t={t} lang={lang} rows={jr} onOpen={onOpenTask} />
-                ))}
+                {groupByJob(tasks).map(({ key, rows: jr }) => {
+                  // Every venue with nobody on this job — not only the ones that
+                  // happen to hold an empty line. Same computation as the
+                  // roster's "nobody on" pill, from the same inputs, so the two
+                  // screens cannot drift apart on the same job.
+                  const staffed = staffedByJob.get(key) || new Set()
+                  const need = venueScope.filter((c) => !staffed.has(c))
+                  // No onOpen: these chips are a statement, not a way in. Half of
+                  // them have no task behind them at all, and the ones that do
+                  // opened a panel offering Mark done / Edit / Delete on work
+                  // nobody is holding — which is not what "nobody is on this at
+                  // Restro" invites you to do. Staffing happens in the Roster.
+                  return (
+                    <TaskLineGroup
+                      key={key} C={C} t={t} lang={lang} rows={jr}
+                      venues={need}
+                    />
+                  )
+                })}
               </div>
             ))}
           </div>
@@ -498,6 +530,17 @@ const windowKey = (tb) => {
   return /\d/.test(s) ? s : ''
 }
 
+// Rows of one job gathered by venue, keeping the order they arrived in — which
+// groupByJob has already sorted into property order.
+function byVenue(rows) {
+  const by = new Map()
+  for (const task of rows) {
+    if (!by.has(task.property)) by.set(task.property, [])
+    by.get(task.property).push(task)
+  }
+  return [...by.entries()].map(([property, tasks]) => ({ property, tasks }))
+}
+
 function groupByJob(tasks) {
   const by = new Map()
   const order = []
@@ -531,33 +574,42 @@ const timeOf = (rows) => (rows.find((r) => (r.time_block || '').trim()) || {}).t
 
 // One job, several venues: the title and its time stated once, then a chip per
 // venue carrying that venue's own state and its own way in.
-function TaskLineGroup({ C, t, lang, rows, onOpen }) {
+function TaskLineGroup({ C, t, lang, rows, venues, onOpen }) {
   const first = rows[0]
   const done = rows.filter((r) => r.status === TASK_STATUS.COMPLETED).length
   const doing = rows.some((r) => r.status === TASK_STATUS.IN_PROGRESS)
   const allDone = done === rows.length
-  const tone = allDone ? C.green : doing ? C.yellow : C.tl
+  // `venues` is only passed by the nobody-assigned block, where the chips are
+  // venues that need somebody rather than lines of work. There the count and the
+  // status mean nothing and actively mislead: a job with one empty line at
+  // Restro and no line at all at Janakpuri read "0/1" above two chips, and
+  // Restro wore an in-progress ring because the person removed from it had
+  // started before they went. Nobody is on it — that is the whole statement.
+  const needsStaff = !!venues
+  const tone = needsStaff ? C.tl : allDone ? C.green : doing ? C.yellow : C.tl
 
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.45 }}>
       {/* The same three icons a single line uses, read across the set: every
           venue done, someone mid-job, or nothing started. */}
       <span style={{ marginTop: 1, flexShrink: 0 }}>
-        <Icon name={allDone ? 'check' : doing ? 'clock' : 'inbox'} size={16} color={tone} />
+        <Icon name={needsStaff ? 'inbox' : allDone ? 'check' : doing ? 'clock' : 'inbox'} size={16} color={tone} />
       </span>
 
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: allDone ? C.tl : C.text, textDecoration: allDone ? 'line-through' : 'none' }}>
+          <span style={{ color: !needsStaff && allDone ? C.tl : C.text, textDecoration: !needsStaff && allDone ? 'line-through' : 'none' }}>
             {lang === 'hi' && first.title_hi ? first.title_hi : first.title}
           </span>
           {/* How far through the set, before reading which venues. */}
-          <span style={{
-            fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
-            color: allDone ? C.green : C.tl, fontVariantNumeric: 'tabular-nums',
-          }}>
-            {done}/{rows.length}
-          </span>
+          {!needsStaff && (
+            <span style={{
+              fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
+              color: allDone ? C.green : C.tl, fontVariantNumeric: 'tabular-nums',
+            }}>
+              {done}/{rows.length}
+            </span>
+          )}
         </span>
 
         {/* Not first.time_block: the rows are ordered by venue, so the first one
@@ -570,24 +622,53 @@ function TaskLineGroup({ C, t, lang, rows, onOpen }) {
           </span>
         )}
 
-        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
-          {rows.map((task) => {
-            const isDone = task.status === TASK_STATUS.COMPLETED
-            const isDoing = task.status === TASK_STATUS.IN_PROGRESS
+        {/* One chip per VENUE, not per row.
+            A row is one job at one venue for one PERSON, so a job three people
+            share at the same venue is three rows — and the chip says only where,
+            never who. Under a person's own name that never shows, because every
+            row there is theirs. Pooled together in the nobody-assigned block it
+            did: "Pushpanjali, Pushpanjali, Pushpanjali", three identical chips
+            that read like a bug.
+            Collapsed to the venue and nothing else: how many separate lines a
+            venue happens to hold is how the roster stores things, not a fact
+            about the work. "Pushpanjali 0/3" invited the question "why three?"
+            on a board whose answer is simply "nobody is on this at Pushpanjali".
+            The chip opens the first slot that is not finished — the others are
+            the same job at the same venue, so there is nothing else to see. */}
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: needsStaff ? 8 : 6, marginTop: 5 }}>
+          {(venues ? venues.map((c) => ({
+            property: c,
+            // A venue with no line of its own still needs somebody; there is
+            // simply no task to open, so the chip carries none.
+            tasks: rows.filter((r) => r.property === c),
+          })) : byVenue(rows)).map(({ property, tasks }) => {
+            const doneN = tasks.filter((x) => x.status === TASK_STATUS.COMPLETED).length
+            const isDone = !needsStaff && tasks.length > 0 && doneN === tasks.length
+            const isDoing = !needsStaff && !isDone && tasks.some((x) => x.status === TASK_STATUS.IN_PROGRESS)
             const ink = isDone ? C.green : isDoing ? C.yellow : C.tl
+            const task = tasks.find((x) => x.status !== TASK_STATUS.COMPLETED) || tasks[0]
             return (
               <button
-                key={task.id}
+                key={property}
                 type="button"
-                onClick={onOpen ? (e) => { e.stopPropagation(); onOpen(task) } : undefined}
-                disabled={!onOpen}
-                title={`${propName(task.property, lang)} · ${isDone ? t.completed : isDoing ? t.inProgress : t.pending}`}
+                onClick={onOpen && task ? (e) => { e.stopPropagation(); onOpen(task) } : undefined}
+                disabled={!onOpen || !task}
+                title={needsStaff
+                  ? `${propName(property, lang)} · ${t.nobodyAssigned}`
+                  : `${propName(property, lang)} · ${doneN}/${tasks.length} · ${isDone ? t.completed : isDoing ? t.inProgress : t.pending}`}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
                   padding: '3px 9px 3px 5px', borderRadius: 999,
                   background: isDone ? `${C.green}14` : 'transparent',
                   border: `1px solid ${isDone ? C.green : isDoing ? `${C.yellow}88` : C.border}`,
                   cursor: onOpen ? 'pointer' : 'default', whiteSpace: 'nowrap',
+                  // One width for every venue in the nobody-assigned block, so the
+                  // chips line up down the list. Their labels differ in length —
+                  // Pushpanjali against Restro — and each job is missing a
+                  // different set, so ragged chips put the second venue of one
+                  // job under the third of the next and the column read as a
+                  // jumble. Wide enough for the longest name.
+                  ...(needsStaff ? { minWidth: 112, justifyContent: 'flex-start' } : null),
                 }}
               >
                 {/* Filled once that venue is done, hollow while it is not —
@@ -601,7 +682,7 @@ function TaskLineGroup({ C, t, lang, rows, onOpen }) {
                   {isDone && <Icon name="check" size={9} color="#fff" />}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: ink }}>
-                  {propName(task.property, lang)}
+                  {propName(property, lang)}
                 </span>
               </button>
             )
