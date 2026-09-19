@@ -9,6 +9,7 @@ import { LangProvider } from './context/LangContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ConfirmProvider } from './components/common/ConfirmDialog.jsx'
 import { captureNotificationParam } from './lib/pendingNotification'
+import { startRipples } from './lib/ripple'
 import './index.css'
 
 // ---------------------------------------------------------------------------
@@ -21,50 +22,86 @@ import './index.css'
 // Two halves fix that:
 //   1. ask the worker to check periodically, and whenever the app is brought
 //      back to the foreground;
-//   2. when a new worker takes over, reload — but never while someone is
-//      mid-sentence. Typing in a field or having a dialog open defers the
-//      reload until the app is next backgrounded, so a half-written repair
-//      request with a voice note is not thrown away.
+//   2. apply what it finds only once the app is out of sight, so the reload is
+//      never something anybody watches happen.
+//
+// NOBODY SHOULD EVER SEE A REFRESH. Two separate things used to cause one:
+//
+//   * vite-plugin-pwa's own 'autoUpdate' listener reloaded on the worker
+//     activating, and this file reloaded on the same event, so a new build
+//     refreshed the page TWICE. The plugin is configured 'prompt' now, which
+//     installs no reload of its own and hands the waiting worker over instead.
+//
+//   * The remaining reload then fired at launch — which is exactly when the
+//     worker gets to check for a new build — so opening the app made it
+//     restart under the person who had just opened it.
+//
+// Both are the same mistake: reloading at the one moment somebody is looking.
 // ---------------------------------------------------------------------------
 const UPDATE_CHECK_MS = 60 * 1000
 
-let pendingReload = false
+// Set once a new build is waiting. Calling it applies the update and reloads.
+// Its presence IS the "something is pending" flag — a separate one would only
+// be a second thing to keep in step with it.
+let applyUpdate = null
+
 const busyOnScreen = () => {
   const el = document.activeElement
   const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
   const dialogOpen = !!document.querySelector('.modal-scroll')
   return typing || dialogOpen
 }
-const reloadWhenSafe = () => {
-  if (document.hidden || !busyOnScreen()) { window.location.reload(); return }
-  pendingReload = true   // try again when they put the app down
+
+// Apply ONLY while the app is out of sight.
+//
+// A new build is usually found the moment the app is opened — that is when the
+// worker gets to check — and applying it there reloads the page under somebody
+// who has just launched it and is watching. It looks like the app restarting on
+// its own, which is what was reported.
+//
+// Held until they put it down instead, so the refresh happens with nobody
+// watching and the next launch is simply already on the new version. Nothing is
+// lost if they close it outright: an unapplied worker activates by itself once
+// no tab is left holding the old one.
+const applyWhenSafe = () => {
+  if (!applyUpdate) return
+  if (!document.hidden || busyOnScreen()) return   // wait until they put it down
+  const go = applyUpdate
+  applyUpdate = null        // one update, one reload, whatever calls this twice
+  go(true)                  // skip waiting, then reload
 }
 
-if ('serviceWorker' in navigator) {
-  let reloading = false
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) return
-    reloading = true
-    reloadWhenSafe()
-  })
-}
+let registration = null
+
 document.addEventListener('visibilitychange', () => {
-  if (pendingReload && document.hidden) window.location.reload()
+  // Put down: the only moment an update is applied. A no-op when none is
+  // waiting, so it costs nothing to try on every one.
+  if (document.hidden) { applyWhenSafe(); return }
+  // Picked back up: look for a new build, to be applied when they next stop.
+  registration?.update().catch(() => {})
 })
 
-registerSW({
+const updateSW = registerSW({
   immediate: true,
-  onRegisteredSW(_url, registration) {
-    if (!registration) return
-    setInterval(() => { registration.update().catch(() => {}) }, UPDATE_CHECK_MS)
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) registration.update().catch(() => {})
-    })
+  // Prompt mode hands the waiting worker over instead of reloading behind our
+  // back. Nothing is actually prompted — the app decides for itself, above.
+  onNeedRefresh() {
+    applyUpdate = updateSW
+    applyWhenSafe()
+  },
+  onRegisteredSW(_url, reg) {
+    if (!reg) return
+    registration = reg
+    setInterval(() => { reg.update().catch(() => {}) }, UPDATE_CHECK_MS)
   },
 })
 
 // base path for GitHub Pages (must match vite.config base)
 const BASENAME = '/Ambria---Workforce'
+
+// One delegated listener for the whole app — every button, including ones not
+// written yet. See the module.
+startRipples()
 
 // A tapped push opened us at ?n=<id>. Taken now, before createRoot, because a
 // redirect during auth would rewrite the url and lose it — see the module.

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import { useColors } from './context/ThemeContext'
@@ -11,17 +11,70 @@ import Login from './pages/Login'
 
 // Everything else is code-split: each page downloads only when its route is
 // visited, keeping the initial bundle small.
-const PublicFixRequest = lazy(() => import('./pages/PublicFixRequest'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const MyTasks = lazy(() => import('./pages/employee/MyTasks'))
-const AdminTasks = lazy(() => import('./pages/admin/AdminTasks'))
-const TaskBoard = lazy(() => import('./pages/shared/TaskBoard'))
-const Training = lazy(() => import('./pages/shared/Training'))
-const Valet = lazy(() => import('./pages/admin/Valet'))
-const Vendors = lazy(() => import('./pages/admin/Vendors'))
-const Users = lazy(() => import('./pages/admin/Users'))
-const Analytics = lazy(() => import('./pages/admin/Analytics'))
-const Account = lazy(() => import('./pages/Account'))
+//
+// The import functions are named rather than written inline so the same ones can
+// be WARMED after the app settles — see the effect below. Split alone, every tab
+// paid for its own chunk the first time it was opened, and on an old phone that
+// is a visible spinner between the tap and the page.
+const page = {
+  publicFixRequest: () => import('./pages/PublicFixRequest'),
+  dashboard: () => import('./pages/Dashboard'),
+  myTasks: () => import('./pages/employee/MyTasks'),
+  adminTasks: () => import('./pages/admin/AdminTasks'),
+  taskBoard: () => import('./pages/shared/TaskBoard'),
+  training: () => import('./pages/shared/Training'),
+  valet: () => import('./pages/admin/Valet'),
+  vendors: () => import('./pages/admin/Vendors'),
+  users: () => import('./pages/admin/Users'),
+  analytics: () => import('./pages/admin/Analytics'),
+  account: () => import('./pages/Account'),
+}
+
+const PublicFixRequest = lazy(page.publicFixRequest)
+const Dashboard = lazy(page.dashboard)
+const MyTasks = lazy(page.myTasks)
+const AdminTasks = lazy(page.adminTasks)
+const TaskBoard = lazy(page.taskBoard)
+const Training = lazy(page.training)
+const Valet = lazy(page.valet)
+const Vendors = lazy(page.vendors)
+const Users = lazy(page.users)
+const Analytics = lazy(page.analytics)
+const Account = lazy(page.account)
+
+// The pages a signed-in person can reach from the sidebar, in the order they are
+// most likely to want them. The public repair page is left out: whoever is
+// signed in is not about to open it, and it is the one route reached by a link
+// from outside rather than by a tap in here.
+const WARM = [
+  page.dashboard, page.adminTasks, page.myTasks, page.taskBoard,
+  page.account, page.valet, page.vendors, page.training,
+  page.users, page.analytics,
+]
+
+/**
+ * Fetch the route chunks in the background, one at a time, once the app has
+ * gone quiet.
+ *
+ * The chunk is in the service worker's cache already — it is precached — so this
+ * is rarely a download. What it buys is the PARSE: a phone that takes a moment
+ * to compile 110 KB of Training does it while nobody is waiting, instead of
+ * between a tap and the screen.
+ *
+ * One at a time and only when idle, so it never competes with the page somebody
+ * is actually on. A failure is ignored: this is a head start, not a dependency —
+ * the route still imports normally when it is opened.
+ */
+function warmRoutes() {
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300))
+  let i = 0
+  const next = () => {
+    if (i >= WARM.length) return
+    const load = WARM[i++]
+    load().catch(() => {}).finally(() => idle(next))
+  }
+  idle(next)
+}
 
 // redirect to /login when not authenticated
 function RequireAuth({ children }) {
@@ -46,6 +99,13 @@ function RoleRoute({ allow, children }) {
 export default function App() {
   const { isAuthed } = useAuth()
   const C = useColors()
+
+  // Only once somebody is in. A signed-out visitor is looking at the login form
+  // or the public repair page, and pulling ten admin screens behind that would
+  // be spending their data on pages they cannot open.
+  useEffect(() => {
+    if (isAuthed) warmRoutes()
+  }, [isAuthed])
 
   return (
     <Suspense fallback={<div style={{ background: C.bg, minHeight: '100vh' }}><Loader /></div>}>

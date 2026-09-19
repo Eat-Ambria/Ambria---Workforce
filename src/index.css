@@ -100,6 +100,40 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 .overlay-in { animation: overlayIn 0.18s ease; }
 
+/* Tap ripple.
+   Drawn in a throwaway layer pinned over the button rather than inside it: the
+   app styles buttons inline all over the place, and a ripple that lived in the
+   button would need `position: relative; overflow: hidden` forced onto every one
+   of them — which would clip the things that deliberately hang outside, like the
+   notification count on the bell. Nothing existing is touched this way.
+   `currentColor` so it reads on maroon, on white and in dark alike: the button's
+   own ink, at an alpha low enough to tint rather than cover. */
+.ripple-layer {
+  position: fixed;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 9999;
+  contain: strict;
+}
+.ripple-layer span {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.28;
+  transform: scale(0);
+  animation: rippleOut 480ms cubic-bezier(0.2, 0.6, 0.35, 1) forwards;
+}
+@keyframes rippleOut {
+  to { transform: scale(1); opacity: 0; }
+}
+
+/* Somebody who has asked their device for less motion gets none of this — and
+   the press still reads, because the scale on button:active is dropped too. */
+@media (prefers-reduced-motion: reduce) {
+  .ripple-layer { display: none; }
+  button:active { transform: none; }
+}
+
 /* interactive card hover */
 .hoverable { transition: transform .16s ease, box-shadow .16s ease; }
 .hoverable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,24,40,0.10); }

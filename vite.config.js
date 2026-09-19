@@ -21,7 +21,17 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate' — and the app applies the update itself.
+      //
+      // autoUpdate installs its own listener that reloads the moment a new
+      // worker activates. main.jsx already reloads on the same event, except it
+      // holds off while somebody is typing or has a dialog open. Both fired for
+      // one update, so every new build refreshed the page TWICE, and the second
+      // one landed without the "are they mid-sentence" check.
+      //
+      // In prompt mode nothing reloads on its own: main.jsx is handed the update
+      // and decides when to apply it. See the block at the top of that file.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
         // stated rather than inferred from start_url: the public repair page
