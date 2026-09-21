@@ -327,22 +327,6 @@ export default function TaskBoard() {
     [scopedRows, byVenue, byCat, byPrio, bySearch]
   )
 
-  // Each filter counts with the OTHERS already applied — including the status
-  // tab — so a number always says what clicking it returns. Counting from
-  // scopedRows is how a chip ends up promising 28 above a list of 3.
-  //
-  // The tab was the one that got missed. A category whose every request is
-  // finished still read "Carpenter (2)" while sitting on the Open tab, and
-  // clicking it gave nothing back: the count was answering a question about the
-  // whole board while the list underneath was answering one about Open.
-  const onTab = useCallback((list) => list.filter((r) => inTab(r, tab)), [inTab, tab])
-  const catPool = useMemo(() => onTab(byPrio(byVenue(scopedRows))), [onTab, scopedRows, byVenue, byPrio])
-  const prioPool = useMemo(() => onTab(byCat(byVenue(scopedRows))), [onTab, scopedRows, byVenue, byCat])
-  // The venue counts are the only ones NOT narrowed by their own filter — they
-  // are narrowed by the others, so each reads "how many I would get if I picked
-  // this venue instead", which is the question somebody about to switch has.
-  const venuePool = useMemo(() => onTab(byPrio(byCat(scopedRows))), [onTab, scopedRows, byCat, byPrio])
-
   // repair rows keep the assignee name from assignment time; swap in the Hindi
   // name when the UI is Hindi and we know the person
   const nameOf = useCallback((id, stored) => {
@@ -406,6 +390,22 @@ export default function TaskBoard() {
       default: return true
     }
   }, [today, showAllDone, user.id, cutoff])
+
+  // Each filter counts with the OTHERS already applied — including the status
+  // tab — so a number always says what clicking it returns. Counting from
+  // scopedRows is how a chip ends up promising 28 above a list of 3.
+  //
+  // The tab was the one that got missed. A category whose every request is
+  // finished still read "Carpenter (2)" while sitting on the Open tab, and
+  // clicking it gave nothing back: the count was answering a question about the
+  // whole board while the list underneath was answering one about Open.
+  const onTab = useCallback((list) => list.filter((r) => inTab(r, tab)), [inTab, tab])
+  const catPool = useMemo(() => onTab(byPrio(byVenue(scopedRows))), [onTab, scopedRows, byVenue, byPrio])
+  const prioPool = useMemo(() => onTab(byCat(byVenue(scopedRows))), [onTab, scopedRows, byVenue, byCat])
+  // The venue counts are the only ones NOT narrowed by their own filter — they
+  // are narrowed by the others, so each reads "how many I would get if I picked
+  // this venue instead", which is the question somebody about to switch has.
+  const venuePool = useMemo(() => onTab(byPrio(byCat(scopedRows))), [onTab, scopedRows, byCat, byPrio])
 
   const groups = useMemo(() => {
     const of = (key) => visibleRows.filter((r) => inTab(r, key))
