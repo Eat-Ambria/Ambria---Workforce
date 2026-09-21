@@ -56,43 +56,21 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [load])
 
-  // Venues in play on this screen. A property filter narrows it to one, so an
-  // admin looking at Restro is never told about four venues they cannot staff.
-  const venueScope = useMemo(
-    () => (propFilter === 'all' ? PROPERTIES.map((p) => p.code) : [propFilter]),
-    [propFilter]
-  )
-
-  const { people, orphans, totals, staffedByJob } = useMemo(() => {
-    const due = rows.filter((r) => isDueToday(r))
-    // Where each job already has somebody today. Keyed exactly as groupByJob
-    // keys, so the nobody-assigned block can ask "which venues is this job NOT
-    // covered at" and get the same answer the roster gives.
-    const staffedBy = new Map()
-    due.forEach((r) => {
-      if (!r.assigned_to) return
-      const k = `${(r.title || '').trim().toLowerCase()}|${windowKey(r.time_block)}`
-      if (!staffedBy.has(k)) staffedBy.set(k, new Set())
-      staffedBy.get(k).add(r.property)
-    })
+  const { people, totals } = useMemo(() => {
+    // Only work that has somebody's name on it. This board answers "how far
+    // along is each person today", and a job nobody holds has no answer to give
+    // — it is not a slow start, it is an empty slot.
+    //
+    // It used to be listed here, in a block of its own under the names. That
+    // came off: the Roster says the same thing per job, in the place where it
+    // can be acted on, and thirty-nine jobs restated under a progress table
+    // buried the thing the table is for. Counted out of the totals as well, so
+    // the header still adds up to the rows below it.
+    const due = rows.filter((r) => isDueToday(r) && r.assigned_to)
     const by = new Map()
     const sum = { total: 0, done: 0, doing: 0, todo: 0 }
-    // Work with nobody's name on it. Counted in the totals like everything else
-    // — it is still the venue's work — but kept OUT of `by`, because this is a
-    // board about people and a bucket in the people list read as a member of
-    // staff called "Unassigned", complete with a department dot. It gets its own
-    // block under the list instead: same jobs, named as jobs.
-    const none = { total: 0, done: 0, doing: 0, todo: 0, tasks: [] }
 
     due.forEach((r) => {
-      if (!r.assigned_to) {
-        none.tasks.push(r)
-        none.total += 1; sum.total += 1
-        if (r.status === TASK_STATUS.COMPLETED) { none.done += 1; sum.done += 1 }
-        else if (r.status === TASK_STATUS.IN_PROGRESS) { none.doing += 1; sum.doing += 1 }
-        else { none.todo += 1; sum.todo += 1 }
-        return
-      }
       const key = r.assigned_to
       if (!by.has(key)) {
         // `members` is the ACTIVE staff. Not finding the assignee there means
@@ -158,11 +136,7 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     })
     return {
       people: memberFilter === 'all' ? list : list.filter((p) => p.id === memberFilter),
-      // Picking one person out of the list is a question about that person, so
-      // the nobody-assigned block does not belong in the answer.
-      orphans: memberFilter === 'all' ? none : { total: 0, done: 0, doing: 0, todo: 0, tasks: [] },
       totals: sum,
-      staffedByJob: staffedBy,
     }
   }, [rows, members, lang, memberFilter])
 
@@ -336,72 +310,6 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
         )
       })}
 
-      {/* Jobs nobody is on. Deliberately NOT a row in the list above: with a
-          name, a dot and a department it read as a member of staff called
-          Unassigned. Here it is what it actually is — a short list of work
-          waiting for somebody, under a heading that says so.
-          Always expanded, no chevron: this is the exception state, it should be
-          small, and hiding it behind a tap is how it stops being noticed. */}
-      {orphans.total > 0 && (
-        <div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 16px 7px',
-            background: C.cardAlt,
-            borderTop: `1px solid ${C.borderStrong}`,
-            borderBottom: `1px solid ${C.border}`,
-          }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '3px 9px', borderRadius: 6,
-              fontSize: 11, fontWeight: 800, letterSpacing: '0.07em',
-              textTransform: 'uppercase', whiteSpace: 'nowrap',
-              // Outlined, not filled: there is no department here, so there is
-              // no colour it can honestly claim.
-              color: C.tl, background: 'transparent', border: `1px solid ${C.borderStrong}`,
-            }}>
-              {t.nobodyAssigned}
-            </span>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
-              {orphans.done}/{orphans.total}
-            </span>
-          </div>
-
-          <div style={{ padding: '12px 16px 14px', display: 'grid', gap: 14 }}>
-            {groupByBand(orphans.tasks).map(({ band, tasks }) => (
-              <div key={band} style={{ display: 'grid', gap: 8 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 7,
-                  fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
-                  textTransform: 'uppercase', color: (FREQUENCY_MAP[band] || {}).ink || C.tl,
-                }}>
-                  {frequencyLabel(band, lang)}
-                  <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
-                </div>
-                {groupByJob(tasks).map(({ key, rows: jr }) => {
-                  // Every venue with nobody on this job — not only the ones that
-                  // happen to hold an empty line. Same computation as the
-                  // roster's "nobody on" pill, from the same inputs, so the two
-                  // screens cannot drift apart on the same job.
-                  const staffed = staffedByJob.get(key) || new Set()
-                  const need = venueScope.filter((c) => !staffed.has(c))
-                  // No onOpen: these chips are a statement, not a way in. Half of
-                  // them have no task behind them at all, and the ones that do
-                  // opened a panel offering Mark done / Edit / Delete on work
-                  // nobody is holding — which is not what "nobody is on this at
-                  // Restro" invites you to do. Staffing happens in the Roster.
-                  return (
-                    <TaskLineGroup
-                      key={key} C={C} t={t} lang={lang} rows={jr}
-                      venues={need}
-                    />
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </Card>
   )
 }
@@ -574,42 +482,33 @@ const timeOf = (rows) => (rows.find((r) => (r.time_block || '').trim()) || {}).t
 
 // One job, several venues: the title and its time stated once, then a chip per
 // venue carrying that venue's own state and its own way in.
-function TaskLineGroup({ C, t, lang, rows, venues, onOpen }) {
+function TaskLineGroup({ C, t, lang, rows, onOpen }) {
   const first = rows[0]
   const done = rows.filter((r) => r.status === TASK_STATUS.COMPLETED).length
   const doing = rows.some((r) => r.status === TASK_STATUS.IN_PROGRESS)
   const allDone = done === rows.length
-  // `venues` is only passed by the nobody-assigned block, where the chips are
-  // venues that need somebody rather than lines of work. There the count and the
-  // status mean nothing and actively mislead: a job with one empty line at
-  // Restro and no line at all at Janakpuri read "0/1" above two chips, and
-  // Restro wore an in-progress ring because the person removed from it had
-  // started before they went. Nobody is on it — that is the whole statement.
-  const needsStaff = !!venues
-  const tone = needsStaff ? C.tl : allDone ? C.green : doing ? C.yellow : C.tl
+  const tone = allDone ? C.green : doing ? C.yellow : C.tl
 
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.45 }}>
       {/* The same three icons a single line uses, read across the set: every
           venue done, someone mid-job, or nothing started. */}
       <span style={{ marginTop: 1, flexShrink: 0 }}>
-        <Icon name={needsStaff ? 'inbox' : allDone ? 'check' : doing ? 'clock' : 'inbox'} size={16} color={tone} />
+        <Icon name={allDone ? 'check' : doing ? 'clock' : 'inbox'} size={16} color={tone} />
       </span>
 
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: !needsStaff && allDone ? C.tl : C.text, textDecoration: !needsStaff && allDone ? 'line-through' : 'none' }}>
+          <span style={{ color: allDone ? C.tl : C.text, textDecoration: allDone ? 'line-through' : 'none' }}>
             {lang === 'hi' && first.title_hi ? first.title_hi : first.title}
           </span>
           {/* How far through the set, before reading which venues. */}
-          {!needsStaff && (
-            <span style={{
-              fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
-              color: allDone ? C.green : C.tl, fontVariantNumeric: 'tabular-nums',
-            }}>
-              {done}/{rows.length}
-            </span>
-          )}
+          <span style={{
+            fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
+            color: allDone ? C.green : C.tl, fontVariantNumeric: 'tabular-nums',
+          }}>
+            {done}/{rows.length}
+          </span>
         </span>
 
         {/* Not first.time_block: the rows are ordered by venue, so the first one
@@ -622,53 +521,31 @@ function TaskLineGroup({ C, t, lang, rows, venues, onOpen }) {
           </span>
         )}
 
-        {/* One chip per VENUE, not per row.
-            A row is one job at one venue for one PERSON, so a job three people
-            share at the same venue is three rows — and the chip says only where,
-            never who. Under a person's own name that never shows, because every
-            row there is theirs. Pooled together in the nobody-assigned block it
-            did: "Pushpanjali, Pushpanjali, Pushpanjali", three identical chips
-            that read like a bug.
-            Collapsed to the venue and nothing else: how many separate lines a
-            venue happens to hold is how the roster stores things, not a fact
-            about the work. "Pushpanjali 0/3" invited the question "why three?"
-            on a board whose answer is simply "nobody is on this at Pushpanjali".
-            The chip opens the first slot that is not finished — the others are
-            the same job at the same venue, so there is nothing else to see. */}
-        <span style={{ display: 'flex', flexWrap: 'wrap', gap: needsStaff ? 8 : 6, marginTop: 5 }}>
-          {(venues ? venues.map((c) => ({
-            property: c,
-            // A venue with no line of its own still needs somebody; there is
-            // simply no task to open, so the chip carries none.
-            tasks: rows.filter((r) => r.property === c),
-          })) : byVenue(rows)).map(({ property, tasks }) => {
+        {/* One chip per VENUE, not per row. A row is one job at one venue for
+            one PERSON, so somebody carrying the same job at two venues has two
+            rows — and the chip says only where. Collapsed by venue so a venue
+            holding more than one of their rows still draws once, and the chip
+            opens the first of them that is not finished. */}
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+          {byVenue(rows).map(({ property, tasks }) => {
             const doneN = tasks.filter((x) => x.status === TASK_STATUS.COMPLETED).length
-            const isDone = !needsStaff && tasks.length > 0 && doneN === tasks.length
-            const isDoing = !needsStaff && !isDone && tasks.some((x) => x.status === TASK_STATUS.IN_PROGRESS)
+            const isDone = doneN === tasks.length
+            const isDoing = !isDone && tasks.some((x) => x.status === TASK_STATUS.IN_PROGRESS)
             const ink = isDone ? C.green : isDoing ? C.yellow : C.tl
             const task = tasks.find((x) => x.status !== TASK_STATUS.COMPLETED) || tasks[0]
             return (
               <button
                 key={property}
                 type="button"
-                onClick={onOpen && task ? (e) => { e.stopPropagation(); onOpen(task) } : undefined}
-                disabled={!onOpen || !task}
-                title={needsStaff
-                  ? `${propName(property, lang)} · ${t.nobodyAssigned}`
-                  : `${propName(property, lang)} · ${doneN}/${tasks.length} · ${isDone ? t.completed : isDoing ? t.inProgress : t.pending}`}
+                onClick={onOpen ? (e) => { e.stopPropagation(); onOpen(task) } : undefined}
+                disabled={!onOpen}
+                title={`${propName(property, lang)} · ${doneN}/${tasks.length} · ${isDone ? t.completed : isDoing ? t.inProgress : t.pending}`}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
                   padding: '3px 9px 3px 5px', borderRadius: 999,
                   background: isDone ? `${C.green}14` : 'transparent',
                   border: `1px solid ${isDone ? C.green : isDoing ? `${C.yellow}88` : C.border}`,
                   cursor: onOpen ? 'pointer' : 'default', whiteSpace: 'nowrap',
-                  // One width for every venue in the nobody-assigned block, so the
-                  // chips line up down the list. Their labels differ in length —
-                  // Pushpanjali against Restro — and each job is missing a
-                  // different set, so ragged chips put the second venue of one
-                  // job under the third of the next and the column read as a
-                  // jumble. Wide enough for the longest name.
-                  ...(needsStaff ? { minWidth: 112, justifyContent: 'flex-start' } : null),
                 }}
               >
                 {/* Filled once that venue is done, hollow while it is not —

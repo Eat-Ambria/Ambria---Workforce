@@ -804,24 +804,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
       // copy nobody is assigned to yet.
       venuesAt: [...new Set(g.rows.map((r) => r.property))],
       people: [...new Set(g.rows.filter((r) => r.assigned_to).map((r) => r.assigned_to))],
-      // Every venue in scope where nobody is on this job.
-      //
-      // Read against the five venues, not against the lines the job happens to
-      // have. Whether a line exists at Janakpuri is how the roster stores
-      // things; "nobody is doing this at Janakpuri" is true either way, and that
-      // is the question being asked of this screen.
-      //
-      // The progress board computes the identical thing from the identical
-      // inputs, deliberately — the two screens disagreeing about the same job is
-      // what made this so hard to read.
-      //
-      // A venue that HAS somebody is never listed, even if a spare empty line
-      // sits beside them: the row used to announce "nobody on: Exotica" directly
-      // over Mahesh's own name.
-      unmanned: (() => {
-        const staffed = new Set(g.rows.filter((r) => r.assigned_to).map((r) => r.property))
-        return props.filter((p) => !staffed.has(p))
-      })(),
     })))
     setLoading(false)
   }, [props])
@@ -2311,31 +2293,6 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                             >
                               {names.length ? names.join(', ') : `+ ${t.assign}`}
                             </button>
-                            {/* Only when the job has people on it AND rows that
-                                have none — a job nobody is on at all already
-                                reads "+ Assign" above, and saying it twice would
-                                be noise. */}
-                            {names.length > 0 && g.unmanned?.length > 0 && (
-                              <span style={{ display: 'flex', justifyContent: 'center', marginTop: 3 }}>
-                                <span
-                                  style={{
-                                    fontSize: 10.5, fontWeight: 700, letterSpacing: '0.03em',
-                                    color: C.yellow, background: C.yBg,
-                                    border: `1px solid ${C.yellow}55`,
-                                    borderRadius: 9, padding: '2px 8px',
-                                    // Wraps rather than truncating. It was cut to
-                                    // two names and a "+2", which kept the row
-                                    // short but hid the very thing the pill is
-                                    // for — a second line costs less than a
-                                    // venue nobody can see.
-                                    lineHeight: 1.4, textAlign: 'center',
-                                  }}
-                                >
-                                  {lang === 'hi' ? 'बिना किसी के: ' : 'nobody on: '}
-                                  {g.unmanned.map((c) => propName(c, lang)).join(', ')}
-                                </span>
-                              </span>
-                            )}
                             {/* A pill, so it does not read as one more name on
                                 the end of the list. */}
                             {g.staffing && (
