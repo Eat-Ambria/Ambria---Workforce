@@ -327,15 +327,21 @@ export default function TaskBoard() {
     [scopedRows, byVenue, byCat, byPrio, bySearch]
   )
 
-  // Each filter counts with the OTHER already applied, so a number always says
-  // what clicking it returns. Counting both from scopedRows is how a chip ends
-  // up promising 28 above a list of 3.
-  const catPool = useMemo(() => byPrio(byVenue(scopedRows)), [scopedRows, byVenue, byPrio])
-  const prioPool = useMemo(() => byCat(byVenue(scopedRows)), [scopedRows, byVenue, byCat])
+  // Each filter counts with the OTHERS already applied — including the status
+  // tab — so a number always says what clicking it returns. Counting from
+  // scopedRows is how a chip ends up promising 28 above a list of 3.
+  //
+  // The tab was the one that got missed. A category whose every request is
+  // finished still read "Carpenter (2)" while sitting on the Open tab, and
+  // clicking it gave nothing back: the count was answering a question about the
+  // whole board while the list underneath was answering one about Open.
+  const onTab = useCallback((list) => list.filter((r) => inTab(r, tab)), [inTab, tab])
+  const catPool = useMemo(() => onTab(byPrio(byVenue(scopedRows))), [onTab, scopedRows, byVenue, byPrio])
+  const prioPool = useMemo(() => onTab(byCat(byVenue(scopedRows))), [onTab, scopedRows, byVenue, byCat])
   // The venue counts are the only ones NOT narrowed by their own filter — they
   // are narrowed by the others, so each reads "how many I would get if I picked
   // this venue instead", which is the question somebody about to switch has.
-  const venuePool = useMemo(() => byPrio(byCat(scopedRows)), [scopedRows, byCat, byPrio])
+  const venuePool = useMemo(() => onTab(byPrio(byCat(scopedRows))), [onTab, scopedRows, byCat, byPrio])
 
   // repair rows keep the assignee name from assignment time; swap in the Hindi
   // name when the UI is Hindi and we know the person
@@ -366,25 +372,54 @@ export default function TaskBoard() {
     return loggedRows.filter((r) => (r.resolved_at || r.created_at || '') >= cutoff)
   }, [loggedRows])
 
-  const groups = useMemo(() => {
-    // finished repairs older than the window are hidden, not deleted — keep "All"
-    // consistent with the Completed tab instead of resurrecting them here
-    const shown = new Set((showAllDone ? doneAll : doneRecent).map((r) => r.id))
-    const isDone = (r) => ['approved', 'completed'].includes(r.status)
-    return {
-      all: requestRows.filter((r) => !isDone(r) || shown.has(r.id)),
-      // overdue = past its due date and not yet finished (cross-cuts open/in-progress)
-      overdue: requestRows.filter((r) => r.due_date && r.due_date < today && !isDone(r)),
-      open: requestRows.filter((r) => ['open', 'assigned'].includes(r.status)),
-      in_progress: requestRows.filter((r) => r.status === 'in_progress'),
-      review: requestRows.filter((r) => r.status === 'approval_requested'),
+  // Does this row belong on that tab? One definition, used both to build the
+  // tabs and to count the chips above them — see catPool. Written as a
+  // predicate rather than eight filters so the two can never drift: a chip that
+  // counts by one rule over a list built by another is how "Carpenter (2)"
+  // came to sit above an empty Open tab.
+  // The cutoff is worked out once per render, not once per row: this runs over
+  // every row for every tab, and building a Date to throw away each time is the
+  // kind of thing an old phone notices.
+  const cutoff = useMemo(() => recentCutoff(), [])
+  const inTab = useCallback((r, key) => {
+    const isDone = ['approved', 'completed'].includes(r.status)
+    // Finished work drops out of sight after a while. Hidden, not deleted —
+    // "All" stays consistent with the Completed tab rather than resurrecting it.
+    const inWindow = showAllDone || (r.resolved_at || r.created_at || '') >= cutoff
+
+    // Work logged after the fact was never open, so it lives on its own tab and
+    // must not swell any of the others.
+    if (r.logged_direct) return key === 'logged' && inWindow
+    if (key === 'logged') return false
+
+    switch (key) {
+      case 'all': return !isDone || inWindow
+      // past its due date and not yet finished — cross-cuts open and in-progress
+      case 'overdue': return !!r.due_date && r.due_date < today && !isDone
+      case 'open': return ['open', 'assigned'].includes(r.status)
+      case 'in_progress': return r.status === 'in_progress'
+      case 'review': return r.status === 'approval_requested'
       // Unfinished work that is on me. A completed repair is not on anyone's
       // plate, and including it would make this a list you filter in your head.
-      mine: requestRows.filter((r) => r.assigned_to === user.id && !isDone(r)),
-      completed: showAllDone ? doneAll : doneRecent,
-      logged: showAllDone ? loggedRows : loggedRecent,
+      case 'mine': return r.assigned_to === user.id && !isDone
+      case 'completed': return isDone && inWindow
+      default: return true
     }
-  }, [requestRows, loggedRows, loggedRecent, today, doneAll, doneRecent, showAllDone])
+  }, [today, showAllDone, user.id, cutoff])
+
+  const groups = useMemo(() => {
+    const of = (key) => visibleRows.filter((r) => inTab(r, key))
+    return {
+      all: of('all'),
+      overdue: of('overdue'),
+      open: of('open'),
+      in_progress: of('in_progress'),
+      review: of('review'),
+      mine: of('mine'),
+      completed: of('completed'),
+      logged: of('logged'),
+    }
+  }, [visibleRows, inTab])
 
   const hiddenDone = tab === 'logged'
     ? loggedRows.length - loggedRecent.length
