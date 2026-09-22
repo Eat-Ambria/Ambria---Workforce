@@ -103,7 +103,7 @@ function AdminDashboard({ user }) {
       taskRows,
       bOpen, bProg, bDone, bUrgent, bHigh,
       vendors, videos, fireR, chemR, boardOverdue,
-      myTasks, myFixes,
+      myTasks, myFixes, wifiR,
     ] = await Promise.all([
       taskRowsQ,
       boardBase().in('status', ['open', 'assigned']),
@@ -121,6 +121,10 @@ function AdminDashboard({ user }) {
       boardBase().lt('due_date', today).neq('status', 'approved').neq('status', 'completed'),
       myTasksQ,
       myFixesQ,
+      // Wifi bills. Rows, not a count: the reminder names the connection and the
+      // day, and a number on its own would send an admin hunting through the
+      // register for which of ten it meant.
+      scopedRows('wifi_services', 'id, wifi_name, wifi_name_hi, property, due_date', false),
     ])
 
     const cnt = (r) => r.count || 0
@@ -145,6 +149,20 @@ function AdminDashboard({ user }) {
     })
     const chemRows = chemR.data || []
 
+    // Bills falling due inside the next two days, and any already past. Two days
+    // because that is the notice somebody needs to actually pay one — the day
+    // itself is too late to arrange anything, and a week out it is noise that
+    // gets scrolled past until it stops being read.
+    //
+    // The nightly roll-over moves a date on to next month once it has passed
+    // (SUPABASE-MIGRATION-WIFI-DUE-ROLLOVER.sql), so "overdue" here means today
+    // only — a bill that went unpaid does not accumulate on this tile.
+    const wifiSoon = (wifiR.data || [])
+      .filter((r) => r.due_date)
+      .map((r) => ({ ...r, days: Math.ceil((new Date(r.due_date) - new Date(today)) / 86400000) }))
+      .filter((r) => r.days <= 2)
+      .sort((a, b) => a.days - b.days)
+
     setD({
       task: {
         total: due.length,
@@ -167,6 +185,7 @@ function AdminDashboard({ user }) {
       mine: { tasks: cnt(myTasks), fixes: cnt(myFixes) },
       vendors: cnt(vendors),
       fire: fireStat,
+      wifiSoon,
       chem: { entries: chemRows.length, total: chemRows.reduce((s, r) => s + Number(r.quantity || 0), 0) },
       videos: cnt(videos),
     })
@@ -349,6 +368,34 @@ function AdminDashboard({ user }) {
           <Row C={C} label={t.fsExpiring} value={d.fire.expiring} tone={C.yellow} />
           <Row C={C} label={t.fsExpired} value={d.fire.expired} tone={C.red} danger={d.fire.expired > 0} />
         </Widget>
+
+        {/* Only when a bill is actually near. A wifi tile that says "nothing due"
+            eleven months of the year teaches the eye to skip the twelfth. */}
+        {d.wifiSoon.length > 0 && (
+          <Widget C={C} icon="globe" title={t.wifiBills}
+                  onView={() => navigate('/training', { state: { tab: 'wifi' } })}>
+            {d.wifiSoon.map((w) => {
+              // Today and overdue read the same here: both mean pay it now. The
+              // register itself still counts the days, which is where somebody
+              // goes once this has got their attention.
+              const late = w.days <= 0
+              const label = late
+                ? (lang === 'hi' ? 'आज देय' : 'Due today')
+                : (lang === 'hi' ? `${w.days} दिन में` : `In ${w.days} day${w.days === 1 ? '' : 's'}`)
+              return (
+                <Row
+                  key={w.id}
+                  C={C}
+                  label={`${lang === 'hi' && w.wifi_name_hi ? w.wifi_name_hi : w.wifi_name} · ${propName(w.property, lang)}`}
+                  value={label}
+                  tone={late ? C.red : C.yellow}
+                  danger={late}
+                  onClick={() => navigate('/training', { state: { tab: 'wifi' } })}
+                />
+              )
+            })}
+          </Widget>
+        )}
 
         <Widget C={C} icon="vendors" title={t.vendors} onView={() => navigate('/vendors')}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
