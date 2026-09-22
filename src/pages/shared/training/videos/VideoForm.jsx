@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../../lib/supabase'
-import { extractYTId, ytThumb } from '../../../../lib/youtube'
+import { extractYTId, ytThumb, isEmbedUrl } from '../../../../lib/youtube'
 import { translateToHindi } from '../../../../lib/translate'
 import { useColors } from '../../../../context/ThemeContext'
 import { useT, useLang } from '../../../../context/LangContext'
@@ -56,6 +56,10 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
   async function save() {
     if (!form.topic.trim()) { setErr(`${t.topicEn} ${t.isRequired}`); return }
     if (!form.youtube_url.trim()) { setErr(`${t.videoUrl} ${t.isRequired}`); return }
+    // A title typed into this box used to save fine and then load the app
+    // itself inside the player, because a relative iframe src resolves against
+    // the page. Caught here, where it can still be corrected.
+    if (!ytId && !isEmbedUrl(form.youtube_url)) { setErr(t.videoUrlInvalid); return }
     setBusy(true); setErr('')
     const payload = {
       topic: form.topic.trim(),
@@ -125,8 +129,10 @@ export default function VideoForm({ video, user, defaultDepartment, onClose, onS
       </Field>
       {ytId ? (
         <img src={ytThumb(ytId)} alt="" style={{ width: '100%', borderRadius: 10, border: `1px solid ${C.border}` }} />
-      ) : form.youtube_url.trim() ? (
+      ) : isEmbedUrl(form.youtube_url) ? (
         <div style={{ fontSize: 12.5, color: C.tl }}>Embed URL will play directly in the player.</div>
+      ) : form.youtube_url.trim() ? (
+        <div style={{ fontSize: 12.5, color: C.red }}>{t.videoUrlInvalid}</div>
       ) : null}
       {err && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
     </Modal>

@@ -8,6 +8,7 @@ import { Button, Loader } from '../../../../components/common/UI'
 import Modal from '../../../../components/common/Modal'
 import Icon from '../../../../components/common/Icon'
 import YTPlayer from './YTPlayer'
+import { isEmbedUrl } from '../../../../lib/youtube'
 
 const PASS_PCT = 0.6
 const WATCH_PCT = 0.9 // must watch at least this much of the video to unlock the assessment
@@ -29,8 +30,10 @@ export default function PlayerModal({ video, user, completed, preview = false, o
   const [result, setResult] = useState(null) // { score, total, passed }
   const [err, setErr] = useState('')
 
-  // youtube videos use the custom YTPlayer; a raw embed URL uses a plain iframe
-  const embed = video.youtube_url || ''
+  // youtube videos use the custom YTPlayer; a raw embed URL uses a plain iframe.
+  // Anything that is not an absolute http(s) link is not a URL at all — see
+  // isEmbedUrl — and falls through to the "no video linked" placeholder.
+  const embed = isEmbedUrl(video.youtube_url) ? video.youtube_url.trim() : ''
   const title = hi && video.topic_hi ? video.topic_hi : video.topic
   const resumeKey = `ambria_resume_${user.id}_${video.id}`
 

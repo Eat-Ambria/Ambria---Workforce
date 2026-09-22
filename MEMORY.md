@@ -88,6 +88,86 @@ never learns about it.
 
 ## Session log
 
+### 2026-09-22 — the training video that played the app inside itself
+Not committed. No migration.
+
+**The report.** Opening the "Harpic, Lizol Colin Used" video showed the website
+inside the player.
+
+**The cause.** `training_videos` row 43 has
+`youtube_url = 'Harpic, Lizol Colin Used'` — somebody typed the title into the
+URL box. `VideoForm` deliberately allows a non-YouTube link so raw embed URLs
+work, so it saved with an empty `youtube_id`, and `PlayerModal` put the string
+straight into `<iframe src>`. **A relative iframe src resolves against the page**,
+so the iframe loaded the app. It was never an embed — it was the app in a box.
+
+| Where | What |
+| --- | --- |
+| [youtube.js](src/lib/youtube.js) | new `isEmbedUrl()` — absolute http(s) only, so `javascript:` and `data:` fail the protocol check rather than the parse |
+| [PlayerModal.jsx:33](src/pages/shared/training/videos/PlayerModal.jsx#L33) | `embed` is '' unless `isEmbedUrl`, so a bad row hits the "No video linked yet" placeholder |
+| [VideoForm.jsx](src/pages/shared/training/videos/VideoForm.jsx) | save refuses it, and the live preview says so while typing |
+| [youtube.test.js](src/lib/youtube.test.js) | 11 tests; the relative-path and bare-host cases are the ones that look close enough to a link to slip through |
+
+**Checked live:** 55 video rows, 24 with no usable URL — 23 are INACTIVE seed
+rows with an empty string (already correct, they show the placeholder). **Row 43
+is the only active one**, and it still holds the bad value: the code stops it
+breaking, it does not repair the data. Edit that video and paste the real link.
+
+**Verified:** build clean, eslint clean, 54 tests pass.
+
+---
+
+### 2026-09-22 — WiFi due-date reminder, and the CCTV register
+Not committed. Two migrations: one run, one waiting.
+
+**WiFi bills.** The due date was recorded and then nobody looked at it. Two
+halves:
+
+- *A reminder on the dashboard, two days out.* A `wifi_services` query appended
+  to the END of both `Promise.all` lists in [Dashboard.jsx](src/pages/Dashboard.jsx)
+  — that file's "ORDER IS THE CONTRACT" warning is real, the results are read
+  positionally. The widget only renders when something is `days <= 2`, so on a
+  normal day the dashboard looks exactly as it did.
+- *The date rolls itself forward.* `roll_wifi_due_dates()` in
+  `SUPABASE-MIGRATION-WIFI-DUE-ROLLOVER.sql`, on pg_cron — the day AFTER a due
+  date passes, it moves to the same day next month. **Run and verified live**;
+  it returns 0 because no date is in the past, which is the answer you want.
+
+**CCTV register.** New tab beside WiFi Services, admin-only like the rest of
+that group. One row per recorder: property, company, serial number, username,
+password, notes.
+
+| Where | What |
+| --- | --- |
+| [CctvDevices.jsx](src/pages/shared/training/CctvDevices.jsx) | new page — card list + add/edit modal, modelled on `FireSafety.jsx` |
+| [Training.jsx:27](src/pages/shared/Training.jsx#L27) | the tab, inside the `admin ?` block |
+| [index.js](src/translations/index.js) | `cctv`, `addDevice`, `editDevice`, `deviceCompany`, `noDevicesYet`, `deleteDevice*`, `showPassword`, `hidePassword` |
+| `SUPABASE-MIGRATION-CCTV-DEVICES.sql` | run 2026-09-22; table verified live, first row written through the app |
+
+**Decisions worth not re-litigating.**
+
+- *Cards + a modal, not the WiFi spreadsheet.* Five fields and a handful of rows
+  do not need the inline-edit sheet, and the sheet brings parent/child nesting
+  and Hindi transliteration that a recorder has no use for.
+- *The password is masked here, shown there.* A wifi key is written to be given
+  away, so `WifiServices` shows it and offers Copy. A recorder login is not, so
+  this one masks it behind a per-row eye. Both still store it as typed — see the
+  note at the top of the migration: the anon key ships in the bundle, so this
+  register is a convenience for admins, not a vault. That is the existing posture
+  of every table in the project, stated rather than implied.
+- *Company is free text with a picker.* CP Plus and Hik Connect are offered; a
+  third brand is somebody typing it, not a migration. A row already holding an
+  unrecognised brand opens in free-text mode so editing something else about it
+  does not quietly rewrite the name.
+- *Nothing is NOT NULL but `property`.* A register half filled in beats an empty
+  one waiting on somebody to have every field to hand.
+
+**Verified:** `npm run build` clean, `eslint` clean on the changed files, 43
+tests pass. Table read back through the REST API after the migration — the
+policy lets the anon key read it, which is what the tab needs.
+
+---
+
 ### 2026-09-11 — the "Unassigned" row, and what actually caused it
 Not yet committed (except the SQL cleanup, which has been run).
 
