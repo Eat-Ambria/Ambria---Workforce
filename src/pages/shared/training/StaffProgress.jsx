@@ -4,7 +4,7 @@ import { nowISO } from '../../../lib/time'
 import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
-import { PROPERTY_MAP, propName, DEPARTMENT_MAP, scopedProperty, scopedDepartment, personName, deptName } from '../../../constants/org'
+import { PROPERTY_MAP, propName, DEPARTMENT_MAP, MEASURED_ROLES, roleTag, scopedProperty, scopedDepartment, personName, deptName } from '../../../constants/org'
 import { Card, Loader, EmptyState, ProgressBar, Button } from '../../../components/common/UI'
 import Icon from '../../../components/common/Icon'
 
@@ -28,7 +28,12 @@ export default function StaffProgress() {
 
     const propScope = scopedProperty(user)
     const deptScope = scopedDepartment(user)
-    let sq = supabase.from('users').select('id, name, name_hi, department, property').eq('is_active', true).eq('role', 'e').order('name')
+    // Admins are in, not just role 'e'. They are posted to a venue and they do
+    // the department's work, so leaving them out left the venue looking untrained
+    // — and Exotica, whose only active person is an admin, vanished from the
+    // report altogether. Same list Analytics measures: super admins stay out,
+    // since they are the person reading this page.
+    let sq = supabase.from('users').select('id, name, name_hi, department, designation, property, role').eq('is_active', true).in('role', MEASURED_ROLES).order('name')
     if (propScope) sq = sq.eq('property', propScope)
     if (deptScope) sq = sq.eq('department', deptScope)
     const { data: st } = await sq
@@ -76,7 +81,7 @@ export default function StaffProgress() {
     })
     return Object.entries(byProp).map(([prop, list]) => ({
       prop,
-      list: list.sort((a, b) => (a.department || '').localeCompare(b.department) || a.name.localeCompare(b.name)),
+      list: list.sort((a, b) => (a.department || '').localeCompare(b.department || '') || (a.name || '').localeCompare(b.name || '')),
       done: list.reduce((s, r) => s + r.done, 0),
       total: list.reduce((s, r) => s + r.total, 0),
     }))
@@ -125,6 +130,13 @@ export default function StaffProgress() {
                 {g.list.map((s) => {
                   const sOpen = !!openStaff[s.id]
                   const dept = DEPARTMENT_MAP[s.department] || { name: s.department, color: C.tl }
+                  // Several admins carry no department, so the slot falls back to
+                  // the designation ("Site Head") rather than sitting empty.
+                  const where = s.department ? deptName(s.department, lang) : (s.designation || '')
+                  // Dropped when it would only repeat the line beside it — an
+                  // admin ON the Admin department would read "Admin · Admin".
+                  const tag = roleTag(s.role, lang)
+                  const showTag = !!tag && tag !== where
                   const spct = s.total ? Math.round((s.done / s.total) * 100) : 0
                   const all = s.total > 0 && s.done >= s.total
                   const list = deptVideos[s.department] || []
@@ -139,7 +151,16 @@ export default function StaffProgress() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{personName(s, lang)}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: dept.color }}>{deptName(s.department, lang)}</span>
+                            {where && <span style={{ fontSize: 11, fontWeight: 700, color: dept.color }}>{where}</span>}
+                            {showTag && (
+                              <span style={{
+                                fontSize: 10.5, fontWeight: 700, color: C.tl,
+                                border: `1px solid ${C.border}`, borderRadius: 999,
+                                padding: '1px 7px', whiteSpace: 'nowrap',
+                              }}>
+                                {tag}
+                              </span>
+                            )}
                           </div>
                           <div style={{ marginTop: 6 }}><ProgressBar value={spct} tone={all ? C.green : C.maroon} height={6} /></div>
                         </div>
