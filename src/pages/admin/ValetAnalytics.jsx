@@ -213,7 +213,7 @@ export default function ValetAnalytics({ visibleProps, scopeAll }) {
 
         <Button variant="ghost" disabled={!summary || !!busy} onClick={exportPdf} style={{ padding: '8px 13px', fontSize: 13 }}>
           <Icon name="download" size={15} color={C.tl} style={{ marginRight: 5 }} />
-          {hi ? 'प्रिंट / PDF' : 'Print / PDF'}
+          {hi ? 'प्रिंट PDF' : 'Print PDF'}
         </Button>
         {/* The guest list behind the figures. A file rather than a printout
             because this one gets sorted and filtered, not read. */}

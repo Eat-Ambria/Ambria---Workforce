@@ -1052,7 +1052,34 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
   // quiet weekday. Stored on the booking so reopening it does not silently drop
   // the two extra drivers on the next save.
   const [heavy, setHeavy] = useState(() => !!editing?.heavy_date)
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  // Where the problem is, said next to the thing that has it.
+  //
+  // The form is nine fields long and the error line sits under the last of them,
+  // so a complaint about a field near the top used to look like the Save button
+  // had done nothing at all. `err` is still the place for anything that is not
+  // about one field — a date clash, a write that failed.
+  const [fieldErr, setFieldErr] = useState({})
+  const fieldRef = {
+    guests: useRef(null),
+    event_date: useRef(null),
+    phone: useRef(null),
+    valet_vendor_id: useRef(null),
+  }
+  const clearFieldErr = (k) => setFieldErr((m) => (m[k] ? { ...m, [k]: '' } : m))
+  // `message` is optional: the guest count already shows its own live warning as
+  // you type, so that one only needs taking to.
+  const failAt = (name, message = '') => {
+    setErr('')
+    setFieldErr({ [name]: message })
+    const el = fieldRef[name]?.current
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // preventScroll so focus does not jump the modal instantly and leave the
+    // smooth scroll above with nothing to do
+    el.focus({ preventScroll: true })
+  }
+
+  const set = (k) => (e) => { clearFieldErr(k); setForm((f) => ({ ...f, [k]: e.target.value })) }
 
   const bookedCodes = bookedOn(form.event_date)
   const availableProps = visibleProps.filter((p) => !bookedCodes.has(p.code))
@@ -1084,18 +1111,19 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
   const useAuto = () => { setManual(null); setEditStaff(false) }
 
   async function save() {
-    if (!form.event_date) { setErr(`${t.dateLabel} ${t.isRequired}`); return }
+    setFieldErr({})
+    if (!form.event_date) { failAt('event_date', `${t.dateLabel} ${t.isRequired}`); return }
     // when editing, keeping the booking's original (possibly past) date is allowed
     const dateChanged = !editing || form.event_date !== editing.event_date
-    if (dateChanged && form.event_date < minDate) { setErr('Bookings cannot be made for past dates'); return }
-    if (form.event_date > maxDate) { setErr('Bookings can only be made up to one year ahead'); return }
-    if (overGuestLimit(form.guests)) { setErr(t.guestLimitExceeded); return }
-    if (!/^\d{10}$/.test(form.phone)) { setErr(t.phoneRule); return }
+    if (dateChanged && form.event_date < minDate) { failAt('event_date', 'Bookings cannot be made for past dates'); return }
+    if (form.event_date > maxDate) { failAt('event_date', 'Bookings can only be made up to one year ahead'); return }
+    if (overGuestLimit(form.guests)) { failAt('guests'); return }
+    if (!/^\d{10}$/.test(form.phone)) { failAt('phone', t.phoneRule); return }
     // Required — but only when there is somebody to pick. If every valet vendor
     // is deactivated, enforcing this would lock the form completely and no
     // booking could be made at all; the hint under the empty dropdown is the
     // better answer to that than a wall.
-    if (valetVendors.length && !form.valet_vendor_id) { setErr(t.valetRequired); return }
+    if (valetVendors.length && !form.valet_vendor_id) { failAt('valet_vendor_id', t.valetRequired); return }
     setBusy(true); setErr('')
 
     // one booking per property per day (ignore the booking being edited)
@@ -1168,6 +1196,7 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
         <div style={{ flex: 1 }}>
           <Field label={t.guestCount}>
             <input
+              ref={fieldRef.guests}
               type="number" min={0} max={MAX_GUESTS} style={inputStyle(C)} value={form.guests}
               onChange={(e) => setForm((f) => ({ ...f, guests: digitsOnly(e.target.value) }))}
               placeholder={`max ${MAX_GUESTS}`}
@@ -1184,8 +1213,8 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
 
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <Field label={t.dateLabel}>
-            <input type="date" min={minDate} max={maxDate} style={inputStyle(C)} value={form.event_date} onChange={onDate} />
+          <Field label={t.dateLabel} error={fieldErr.event_date}>
+            <input ref={fieldRef.event_date} type="date" min={minDate} max={maxDate} style={inputStyle(C)} value={form.event_date} onChange={onDate} />
           </Field>
         </div>
         <div style={{ flex: 1 }}>
@@ -1198,14 +1227,15 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
       <Field label={t.customerName}>
         <input style={inputStyle(C)} value={form.customer_name} onChange={set('customer_name')} />
       </Field>
-      <Field label={t.phone}>
+      <Field label={t.phone} error={fieldErr.phone}>
         <input
+          ref={fieldRef.phone}
           type="tel"
           inputMode="numeric"
           maxLength={10}
           style={inputStyle(C)}
           value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: typedPhone(e.target.value) }))}
+          onChange={(e) => { clearFieldErr('phone'); setForm((f) => ({ ...f, phone: typedPhone(e.target.value) })) }}
           placeholder={t.phonePlaceholder}
         />
       </Field>
@@ -1214,8 +1244,8 @@ function CreateModal({ C, t, lang, user, visibleProps, defaultProp, date, minDat
           valet project instead of sitting unassigned where nobody is looking.
           The blank option stays as a placeholder rather than defaulting to the
           first vendor — a select that arrives pre-filled gets saved unread. */}
-      <Field label={t.valetInCharge}>
-        <select style={inputStyle(C)} value={form.valet_vendor_id} onChange={set('valet_vendor_id')}>
+      <Field label={t.valetInCharge} error={fieldErr.valet_vendor_id}>
+        <select ref={fieldRef.valet_vendor_id} style={inputStyle(C)} value={form.valet_vendor_id} onChange={set('valet_vendor_id')}>
           <option value="">{t.selectValetVendor}</option>
           {valetVendors.map((v) => (
             <option key={v.id} value={v.id}>

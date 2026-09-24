@@ -6,6 +6,19 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Live URL: https://eat-ambria.github.io/Ambria---Workforce/
 export default defineConfig({
   base: '/Ambria---Workforce/',
+  // 5173 is vite's default, so it is whatever else is already running. Pinned
+  // here rather than passed on the command line so every way of starting the
+  // dev server lands on the same address. `strictPort` makes a clash an error
+  // instead of a silent hop to 5174 — a dev server on an address you did not
+  // expect is worse than one that refuses to start.
+  server: {
+    port: 5180,
+    strictPort: true,
+  },
+  preview: {
+    port: 5181,
+    strictPort: true,
+  },
   build: {
     rollupOptions: {
       // Two HTML entries, because two installable apps need two manifests in

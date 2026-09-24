@@ -794,7 +794,7 @@ export default function Analytics() {
               style={{ padding: '8px 13px', fontSize: 13 }}
             >
               <Icon name="download" size={15} color={C.tl} style={{ marginRight: 5 }} />
-              {lang === 'hi' ? 'प्रिंट / PDF' : 'Print / PDF'}
+              {lang === 'hi' ? 'प्रिंट PDF' : 'Print PDF'}
             </Button>
             {/* The only action on the page; it was a ghost beside another ghost. */}
             <Button variant="primary" onClick={() => load()} disabled={loading} style={{ padding: '8px 13px', fontSize: 13 }}>
@@ -1414,7 +1414,7 @@ function PersonMissedModal({ C, lang, t, person, range, periodLabel = '', days =
             style={{ flex: 1, whiteSpace: 'nowrap' }}
           >
             <Icon name="download" size={15} color={C.tl} style={{ marginRight: 5 }} />
-            {hi ? 'प्रिंट / PDF' : 'Print / PDF'}
+            {hi ? 'प्रिंट PDF' : 'Print PDF'}
           </Button>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>{t.close}</Button>
         </>
