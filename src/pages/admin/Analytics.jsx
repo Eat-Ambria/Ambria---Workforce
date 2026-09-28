@@ -3,6 +3,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { esc, openPrintable } from '../../lib/printable'
 
 import { supabase } from '../../lib/supabase'
+import { loadAbsences, absenceKey } from '../../lib/absences'
 import { todayISO, fmtDate } from '../../lib/time'
 import { statusColors } from '../../constants/status'
 import { useColors } from '../../context/ThemeContext'
@@ -158,6 +159,7 @@ function printReport({ lang, scopeLabel, periodLabel, totals, dayRows, staffRows
         <th class="num">${hi ? 'बाकी' : 'Open'}</th>
         <th class="num">${hi ? 'ओवरड्यू' : 'Overdue'}</th>
         <th class="num">${hi ? 'नहीं हुए' : 'Not done'}</th>
+        <th class="num">${hi ? 'गैरहाज़िर' : 'Absent'}</th>
       </tr></thead>
       <tbody>${staffRows.map((s) => `<tr>
         <td>${esc(personName(s, lang))}</td>
@@ -167,6 +169,7 @@ function printReport({ lang, scopeLabel, periodLabel, totals, dayRows, staffRows
         <td class="num">${esc(s.openNow)}</td>
         <td class="num">${esc(s.overdueNow)}</td>
         <td class="num"><span class="${s.missed ? 'miss' : ''}">${esc(s.missed)}</span></td>
+        <td class="num">${esc(s.absentDays || '—')}</td>
       </tr>`).join('')}</tbody>
     </table>
     <p class="note">${hi
@@ -204,10 +207,10 @@ function printPerson({ lang, person, periodLabel, jobs, perDay }) {
         <th class="num">${hi ? 'हुए' : 'Done'}</th>
         <th class="num">${hi ? 'बचे' : 'Left'}</th></tr></thead>
       <tbody>${perDay.map((d) => `<tr>
-        <td>${esc(d.day)}</td>
-        <td class="num">${esc(d.due || '—')}</td>
+        <td>${esc(d.day)}${d.absent ? ` — ${esc(hi ? 'गैरहाज़िर' : 'absent')}` : ''}</td>
+        <td class="num">${esc(d.absent ? '—' : (d.due || '—'))}</td>
         <td class="num">${esc(d.done)}</td>
-        <td class="num"><span class="${d.due - d.done > 0 ? 'miss' : ''}">${esc(Math.max(0, d.due - d.done))}</span></td>
+        <td class="num"><span class="${!d.absent && d.due - d.done > 0 ? 'miss' : ''}">${esc(d.absent ? '—' : Math.max(0, d.due - d.done))}</span></td>
       </tr>`).join('')}</tbody>
     </table>` : ''
 
@@ -279,7 +282,7 @@ export default function Analytics() {
       // every figure is aggregated server-side; these responses are one row per
       // person (or per property+department), never one row per task
       const [users, byAssignee, repairs, open, prevAssignee, prevRepairs, byDay, personDay, allTasks, comps,
-             videos, trainDone, fire, wifi, chem] = await Promise.all([
+             videos, trainDone, fire, wifi, chem, absent] = await Promise.all([
         supabase.from('users')
           .select('id, name, name_hi, role, property, department, designation')
           .eq('is_active', true).order('name'),
@@ -314,6 +317,9 @@ export default function Analytics() {
         supabase.from('chemical_usage').select('id, property, usage_date')
           .gte('usage_date', dayArgs.p_from)
           .lte('usage_date', dayArgs.p_to),
+        // The days people were not here. Every "due" figure below is a schedule
+        // walked day by day; these are the days it must skip.
+        loadAbsences(dayArgs.p_from, dayArgs.p_to),
       ])
       const firstError = [users, byAssignee, repairs, open].find((r) => r.error)
       if (firstError) throw firstError.error
@@ -337,6 +343,10 @@ export default function Analytics() {
         fire: fire.error ? [] : (fire.data || []),
         wifi: wifi.error ? [] : (wifi.data || []),
         chem: chem.error ? [] : (chem.data || []),
+        // Already a Set, and already empty rather than throwing if the table is
+        // not there — loadAbsences swallows that on purpose, so an install
+        // without the migration reads exactly as this page read before it.
+        absent,
         range: { from, to },
       })
       // Here rather than in the finally below: that runs on failure too, and a
@@ -368,8 +378,30 @@ export default function Analytics() {
   // walks a range a day at a time, so a range of one day answers "was this owed
   // then" — which is the only way to get a per-day denominator out of recurring
   // schedules. Roughly 170 tasks across 31 days, once per load.
+  // The ids with at least one day off in this range. `owedOverRange` checks this
+  // before walking anything, so a period in which nobody was absent costs one
+  // Set lookup per job rather than a second pass over every day.
+  const absentPeople = useMemo(() => {
+    const out = new Set()
+    ;(data?.absent || new Set()).forEach((k) => out.add(k.slice(0, k.lastIndexOf('|'))))
+    return out
+  }, [data])
+
+  // Days off per person over the loaded range — the number the staff table
+  // shows. Built from the same keys, so it cannot drift from what the
+  // denominators skipped.
+  const absentCount = useMemo(() => {
+    const out = new Map()
+    ;(data?.absent || new Set()).forEach((k) => {
+      const id = k.slice(0, k.lastIndexOf('|'))
+      out.set(id, (out.get(id) || 0) + 1)
+    })
+    return out
+  }, [data])
+
   const dueByDay = useMemo(() => {
     if (!data?.range) return new Map()
+    const absent = data.absent || new Set()
     const out = new Map()
     const end = new Date(data.range.to)
     end.setDate(end.getDate() - 1)   // `to` is exclusive, as in missedRows
@@ -378,10 +410,17 @@ export default function Analytics() {
     for (const d = new Date(data.range.from); d <= end; d.setDate(d.getDate() + 1)) {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       let n = 0
-      tasks.forEach((task) => { n += expectedOccurrences(task, d, d) })
+      tasks.forEach((task) => {
+        // Nothing was owed by somebody who was not here. Without this a day the
+        // whole team had off read as the day the whole team failed.
+        if (task.assigned_to && absent.has(absenceKey(task.assigned_to, key))) return
+        n += expectedOccurrences(task, d, d)
+      })
       out.set(key, n)
     }
     return out
+    // `absent` is read off `data`, which is already here — it is one state
+    // object, so a reload replaces the whole thing.
   }, [data, viewScope, personFilter])
 
   const dayRows = useMemo(() => {
@@ -449,7 +488,10 @@ export default function Analytics() {
       .filter((task) => inViewScope(task, viewScope)
         && (personFilter === 'all' || task.assigned_to === personFilter))
       .map((task) => {
-        const expected = expectedOccurrences(task, from, to)
+        // The one correction that carries the page: every other missed figure —
+        // each person's "Not done", the org's done-rate, the bands inside the
+        // drill-down — is a sum of these rows.
+        const expected = owedOverRange(task, from, to, data.absent || new Set(), absentPeople)
         // distinct DATES, not rows: a task completed twice on one day was still
         // only owed once that day
         const dates = doneBy.get(jobKey(task)) || new Set()
@@ -464,7 +506,7 @@ export default function Analytics() {
       // alphabetical, which put "nothing recorded" above the person who missed 44.
       .sort((a, b) => b.missed - a.missed
         || (a.task.title || '').localeCompare(b.task.title || ''))
-  }, [data, viewScope, personFilter])
+  }, [data, viewScope, personFilter, absentPeople])
 
   // the tab counts JOBS that fell short, not every recurring row
   const missedCount = useMemo(
@@ -575,12 +617,16 @@ export default function Analytics() {
           openNow: sumBy(open, 'open_n'),
           overdueNow: sumBy(open, 'overdue_n'),
           missed: miss?.total || 0,
+          // Counted, not inferred from the missing work: a person with no jobs
+          // at all was still absent, and the number is the reason their other
+          // figures are lower than usual.
+          absentDays: absentCount.get(s.id) || 0,
           jobs: jobsByPerson.get(s.id) || [],
           missedRows: miss?.rows || [],
         }
       })
       .sort((a, b) => b.completed - a.completed)
-  }, [data, scopedStaff, missedByPerson, jobsByPerson])
+  }, [data, scopedStaff, missedByPerson, jobsByPerson, absentCount])
 
   // ---- the head filter narrows the whole page, KPIs included -----------------
   // Heads offered in the picker. With no department chosen: everyone who covers
@@ -704,7 +750,10 @@ export default function Analytics() {
   // they are kept — just not as the first twenty of twenty-five rows.
   const [showQuiet, setShowQuiet] = useState(false)
   const busyStaff = useMemo(
-    () => staffRows.filter((r) => r.completed || r.missed || r.openNow || r.overdueNow),
+    // absentDays is in the test: somebody out the whole period now has nothing
+    // in any other column, which would fold the one fact about them into "the
+    // quiet ones" and hide it behind a toggle.
+    () => staffRows.filter((r) => r.completed || r.missed || r.openNow || r.overdueNow || r.absentDays),
     [staffRows],
   )
   const quietCount = staffRows.length - busyStaff.length
@@ -997,12 +1046,12 @@ export default function Analytics() {
                       the columns are gets said in words as well. */}
                   <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8, lineHeight: 1.6 }}>
                     {lang === 'hi'
-                      ? 'हुए · समय पर · बाकी · ओवरड्यू · नहीं हुए'
-                      : 'Done · On time · Open · Overdue · Not done'}
+                      ? 'हुए · समय पर · बाकी · ओवरड्यू · नहीं हुए · गैरहाज़िर'
+                      : 'Done · On time · Open · Overdue · Not done · Absent'}
                     <span style={{ display: 'block' }}>
                       {lang === 'hi'
-                        ? 'सबसे ज़्यादा छूटे काम पहले · बाकी और ओवरड्यू इस वक़्त के हैं, अवधि के नहीं'
-                        : 'Most missed first · Open and Overdue are live figures, not period ones'}
+                        ? 'सबसे ज़्यादा छूटे काम पहले · बाकी और ओवरड्यू इस वक़्त के हैं, अवधि के नहीं · गैरहाज़िर दिनों का काम किसी के खाते में नहीं गिना जाता'
+                        : 'Most missed first · Open and Overdue are live figures, not period ones · work owed on an absent day is counted against nobody'}
                     </span>
                   </div>
                   <StaffHeader C={C} lang={lang} />
@@ -1060,6 +1109,7 @@ export default function Analytics() {
               periodLabel={periodLabel}
               doneByDay={matchedByPersonDay.get(missedFor.id) || {}}
               days={personGrid.days}
+              absent={data?.absent || new Set()}
               onClose={() => setMissedFor(null)}
             />
           )}
@@ -1182,14 +1232,44 @@ function Section({ C, title, count, children }) {
 // The columns, named once. Kept beside the row that fills them so the two
 // cannot drift — a header that says "Open" above a column of Overdue is worse
 // than no header.
+// One day at a time, as a string, matching the keys dueByDay and perDay build.
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/**
+ * What a job was OWED over a range, minus the days the person holding it was
+ * not here.
+ *
+ * `expectedOccurrences` answers the whole range in one call, which is why it
+ * cannot simply be corrected afterwards: a daily job over 30 days returns 30,
+ * and there is nothing in that number saying which 30 days they were. So the
+ * days off are walked separately and subtracted — each one asking the schedule
+ * whether it would have fired on exactly that day, because a Monday-only job is
+ * owed nothing by somebody who was out on a Wednesday.
+ *
+ * The two early returns matter more than they look: almost nobody is absent on
+ * almost any day, so the common path is one call and a Set lookup, not a walk.
+ */
+export function owedOverRange(task, from, to, absent, absentPeople) {
+  const base = expectedOccurrences(task, from, to)
+  if (!base || !task.assigned_to) return base
+  if (!absentPeople.has(task.assigned_to)) return base
+  let off = 0
+  for (const d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+    if (!absent.has(absenceKey(task.assigned_to, dayKey(d)))) continue
+    off += expectedOccurrences(task, d, d)
+  }
+  return Math.max(0, base - off)
+}
+
 export const STAFF_COLS = (hi) => [
   { key: 'completed', label: hi ? 'पूरे' : 'Done' },
   { key: 'onTimeRate', label: hi ? 'समय पर' : 'On time' },
   { key: 'openNow', label: hi ? 'बाकी' : 'Open' },
   { key: 'overdueNow', label: hi ? 'ओवरड्यू' : 'Overdue' },
   { key: 'missed', label: hi ? 'नहीं हुआ' : 'Not done' },
+  { key: 'absentDays', label: hi ? 'गैरहाज़िर' : 'Absent' },
 ]
-const STAFF_GRID = 'minmax(0, 1fr) repeat(5, 68px)'
+const STAFF_GRID = 'minmax(0, 1fr) repeat(6, 68px)'
 
 export function StaffHeader({ C, lang }) {
   // Below 560px the rows carry their own captions, so this would be the same
@@ -1230,6 +1310,11 @@ function StaffRow({ C, lang, s, compact, onOpenMissed, onOpen }) {
     { key: 'missed', label: hi ? 'नहीं हुआ' : 'Not done',
       el: <Num C={C} value={s.missed} tone={s.missed > 0 ? TR_ORANGE : undefined}
                onClick={s.missed > 0 && onOpenMissed ? () => onOpenMissed(s) : undefined} /> },
+    // Not toned red. A day off is not a failure, and colouring it like one would
+    // undo the point of recording it. A dash when there are none, so the eye
+    // stops only where there is something.
+    { key: 'absentDays', label: hi ? 'गैरहाज़िर' : 'Absent',
+      el: <Num C={C} value={s.absentDays || '—'} muted={!s.absentDays} /> },
   ]
 
   const nameBlock = (
@@ -1324,7 +1409,7 @@ function Num({ C, value, tone, muted, onClick }) {
 // What one person was owed and did not deliver. The rows are already computed —
 // this only has to say them plainly: the job, how often it came round, and how
 // much of it is outstanding.
-function PersonMissedModal({ C, lang, t, person, range, periodLabel = '', days = [], doneByDay = {}, onClose }) {
+function PersonMissedModal({ C, lang, t, person, range, periodLabel = '', days = [], doneByDay = {}, absent = new Set(), onClose }) {
   const hi = lang === 'hi'
   const jobs = person.jobs || person.missedRows || []
 
@@ -1371,12 +1456,16 @@ function PersonMissedModal({ C, lang, t, person, range, periodLabel = '', days =
     const out = []
     for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      // Out that day: nothing was owed, and the row says so rather than showing
+      // a due figure the totals above no longer contain. The modal contradicting
+      // the row that opened it is a bug this file already carries scars from.
+      const off = absent.has(absenceKey(person.id, key))
       let due = 0
-      jobs.forEach(({ task }) => { due += expectedOccurrences(task, d, d) })
-      out.push({ day: key, due, done: doneByDay[key] || 0 })
+      if (!off) jobs.forEach(({ task }) => { due += expectedOccurrences(task, d, d) })
+      out.push({ day: key, due, done: doneByDay[key] || 0, absent: off })
     }
     return out.reverse()                    // newest first, like the day report
-  }, [scored, jobs, doneByDay])
+  }, [scored, jobs, doneByDay, absent, person.id])
 
   // Grouped under their band, each with the band's own totals — "which daily ones
   // did he do" should not be a scan of a list sorted by miss count.
@@ -1645,7 +1734,7 @@ function PersonMissedModal({ C, lang, t, person, range, periodLabel = '', days =
               display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 52px 52px 56px',
               gap: 8, alignItems: 'center', padding: '5px 2px', borderTop: `1px solid ${C.border}`,
             }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{fmtDay(d.day)}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: d.absent ? C.faint : C.text }}>{fmtDay(d.day)}</span>
               <span style={{ fontSize: 12.5, textAlign: 'right', color: d.due ? C.tl : C.faint, fontVariantNumeric: 'tabular-nums' }}>
                 {d.due || '—'}
               </span>
@@ -1653,7 +1742,11 @@ function PersonMissedModal({ C, lang, t, person, range, periodLabel = '', days =
                 {d.done}
               </span>
               <span style={{ fontSize: 11.5, fontWeight: 700, textAlign: 'right', color: C.faint }}>
-                {d.due ? `${Math.max(0, d.due - d.done)} ${hi ? 'बचा' : 'left'}` : ''}
+                {/* "0 due" on a day off is true but says nothing. The word is
+                    what stops the blank row reading as a day with no roster. */}
+                {d.absent
+                  ? (hi ? 'गैरहाज़िर' : 'absent')
+                  : (d.due ? `${Math.max(0, d.due - d.done)} ${hi ? 'बचा' : 'left'}` : '')}
               </span>
             </div>
           ))}

@@ -32,6 +32,12 @@ export default function Sidebar({ mobile = false, onNavigate }) {
         flexDirection: 'column',
         padding: '20px 14px',
         overflowY: 'auto',
+        // Read by .side-link in index.css. Set here rather than on each row so
+        // there is one place the hover colour comes from, and so it follows the
+        // theme without any row knowing about it.
+        '--side-ink': C.tl,
+        '--side-hover': C.cardAlt,
+        '--side-hover-ink': C.text,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '2px 8px 22px' }}>
@@ -45,6 +51,7 @@ export default function Sidebar({ mobile = false, onNavigate }) {
             key={item.path}
             to={item.path}
             onClick={onNavigate}
+            className={({ isActive }) => `side-link${isActive ? ' is-active' : ''}`}
             style={({ isActive }) => ({
               position: 'relative',
               display: 'flex',
@@ -54,15 +61,20 @@ export default function Sidebar({ mobile = false, onNavigate }) {
               borderRadius: 11,
               fontSize: 14.5,
               fontWeight: 600,
-              color: isActive ? C.maroon : C.tl,
-              background: isActive ? C.maroonSoft : 'transparent',
+              // Only the active row is painted inline. An inline colour or
+              // background beats every class selector, so a resting row set
+              // here could never be hovered — the resting state lives in
+              // index.css instead.
+              ...(isActive ? { color: C.maroon, background: C.maroonSoft } : null),
             })}
           >
             {({ isActive }) => (
               <>
                 {isActive && <span style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', width: 4, height: 22, borderRadius: 4, background: C.brandBg }} />}
                 <Icon name={item.icon} size={20} />
-                {t[item.key] || item.key}
+                {/* Its own element so it can move with the icon on hover — a bare
+                    text node cannot be transformed. */}
+                <span className="side-label">{t[item.key] || item.key}</span>
                 {item.path === '/task-board' && fixCount > 0 && (
                   <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: C.brandBg, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
                     {fixCount > 99 ? '99+' : fixCount}
@@ -78,14 +90,15 @@ export default function Sidebar({ mobile = false, onNavigate }) {
         {/* language toggle */}
         <button
           onClick={toggleLang}
+          className="side-link"
           style={{
             display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
             padding: '11px 13px', borderRadius: 11, fontSize: 14.5, fontWeight: 600,
-            color: C.tl, background: 'transparent', border: 'none', cursor: 'pointer',
+            border: 'none', cursor: 'pointer',
           }}
         >
           <Icon name="globe" size={20} />
-          {lang === 'en' ? 'हिंदी में देखें' : 'View in English'}
+          <span className="side-label">{lang === 'en' ? 'हिंदी में देखें' : 'View in English'}</span>
         </button>
 
         <div style={{ padding: '14px 8px 2px', borderTop: `1px solid ${C.border}` }}>

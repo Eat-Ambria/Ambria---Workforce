@@ -6,8 +6,10 @@ import {
   TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, deptName, personName, isDueToday, taskFrequency,
   frequencyLabel, FREQUENCY_MAP, PROPERTIES, propName,
 } from '../../constants/org'
-import { Card, ProgressBar, Loader, EmptyState } from '../../components/common/UI'
+import { Card, ProgressBar, Loader, EmptyState, Button } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
+import { todayISO } from '../../lib/time'
+import { loadAbsentOn, markAbsent, clearAbsent } from '../../lib/absences'
 
 // Where the day stands, person by person.
 //
@@ -29,8 +31,15 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState(null)
+  // Who is out today. Ids only — the names and counts come from the task rows,
+  // the same place every other name on this board comes from.
+  const [absentIds, setAbsentIds] = useState(() => new Set())
+  const [absentBusy, setAbsentBusy] = useState(null)
+  const today = todayISO()
 
   const load = useCallback(async () => {
+    const absents = await loadAbsentOn(today)
+    setAbsentIds(new Set(absents.map((a) => a.user_id)))
     let q = supabase
       .from('tasks')
       .select('id, title, title_hi, category, week_day, week_days, skip_sunday, month_week, time_block, status, assigned_to, assignee_name, property, department')
@@ -44,7 +53,18 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     const { data } = await q
     setRows(data || [])
     setLoading(false)
-  }, [propFilter, deptFilter, catFilter, prioFilter])
+  }, [propFilter, deptFilter, catFilter, prioFilter, today])
+
+  // Recorded, then reload — the person's whole row moves between the two lists
+  // and the header totals change with it, so half of this screen is now wrong
+  // until the data comes back.
+  const setAbsent = useCallback(async (id, out) => {
+    setAbsentBusy(id)
+    if (out) await markAbsent(id, today, { by: user?.id })
+    else await clearAbsent(id, today)
+    await load()
+    setAbsentBusy(null)
+  }, [today, user, load])
 
   useEffect(() => { load() }, [load])
 
@@ -56,7 +76,7 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [load])
 
-  const { people, totals } = useMemo(() => {
+  const { people, benched, totals } = useMemo(() => {
     // Only work that has somebody's name on it. This board answers "how far
     // along is each person today", and a job nobody holds has no answer to give
     // — it is not a slow start, it is an empty slot.
@@ -96,10 +116,20 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       }
       const p = by.get(key)
       p.tasks.push(r)
-      p.total += 1; sum.total += 1
-      if (r.status === TASK_STATUS.COMPLETED) { p.done += 1; sum.done += 1 }
-      else if (r.status === TASK_STATUS.IN_PROGRESS) { p.doing += 1; sum.doing += 1 }
-      else { p.todo += 1; sum.todo += 1 }
+      p.total += 1
+      if (r.status === TASK_STATUS.COMPLETED) p.done += 1
+      else if (r.status === TASK_STATUS.IN_PROGRESS) p.doing += 1
+      else p.todo += 1
+
+      // Out today: the row is still built, because the strip above the names
+      // has to say how much was set aside and offer the way back. It is the
+      // TOTALS it stays out of — scoring somebody out of work they were not
+      // here to do is the whole reason this exists.
+      if (absentIds.has(key)) return
+      sum.total += 1
+      if (r.status === TASK_STATUS.COMPLETED) sum.done += 1
+      else if (r.status === TASK_STATUS.IN_PROGRESS) sum.doing += 1
+      else sum.todo += 1
     })
 
     // Department first, then who is furthest behind inside it.
@@ -134,16 +164,24 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
       if (ap !== bp) return ap - bp                                     // furthest behind first
       return a.name.localeCompare(b.name)
     })
+    const mine = (l) => (memberFilter === 'all' ? l : l.filter((p) => p.id === memberFilter))
     return {
-      people: memberFilter === 'all' ? list : list.filter((p) => p.id === memberFilter),
+      people: mine(list.filter((p) => !absentIds.has(p.id))),
+      // Not a list of tasks — a list of people, with a number. The work itself
+      // stays hidden, which is what was asked for; that it was set aside does
+      // not, because a day of jobs quietly vanishing off the board is how you
+      // find out in a week that nobody watered anything.
+      benched: mine(list.filter((p) => absentIds.has(p.id))),
       totals: sum,
     }
-  }, [rows, members, lang, memberFilter])
+  }, [rows, members, lang, memberFilter, absentIds])
 
   // This table IS the page now — silently rendering nothing when a filter
   // matches no work would look like a broken screen, not an empty one.
   if (loading) return <Loader label={t.loading} />
-  if (totals.total === 0) {
+  // Everyone being out is not an empty screen: the strip is the answer to "why
+  // is there nothing here", and without it there would be no way back either.
+  if (totals.total === 0 && benched.length === 0) {
     return (
       <Card style={{ marginBottom: 14 }}>
         <EmptyState icon={null} title={t.noData} />
@@ -174,6 +212,41 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
           <Tally size="lg" state="todo"  label={t.pending}    n={totals.todo} />
         </div>
       </div>
+
+      {/* Who is out, and how much went with them.
+          One line each, no task list: the work is hidden, the fact that it was
+          set aside is not. It is also the only way back — an absent person has
+          no row among the names to undo it from. */}
+      {benched.length > 0 && (
+        <div style={{ padding: '11px 16px 12px', background: C.yBg, borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+            <Icon name="user" size={14} color={C.tl} />
+            <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.tl }}>
+              {t.absentToday}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gap: 7 }}>
+            {benched.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.name}
+                </span>
+                <span style={{ fontSize: 12.5, color: C.tl, fontVariantNumeric: 'tabular-nums' }}>
+                  {p.total} {t.jobsSetAside}
+                </span>
+                <Button
+                  variant="ghost"
+                  disabled={absentBusy === p.id}
+                  onClick={() => setAbsent(p.id, false)}
+                  style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: 12.5 }}
+                >
+                  {t.markPresent}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* one row per person — tap to see exactly which jobs */}
       {people.map((p, i) => {
@@ -284,6 +357,27 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
 
             {open && (
               <div style={{ padding: '2px 16px 14px', display: 'grid', gap: 14 }}>
+                {/* Not on the scan row. Marking somebody absent takes their
+                    whole day off the board, so it belongs one tap in — behind
+                    the same tap the admin already makes when a 0/7 makes them
+                    ask what is going on. */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  padding: '9px 11px', borderRadius: 10,
+                  background: C.bg, border: `1px solid ${C.border}`,
+                }}>
+                  <span style={{ fontSize: 12, color: C.tl, flex: 1, minWidth: 150, lineHeight: 1.45 }}>
+                    {t.absentNote}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    disabled={absentBusy === p.id}
+                    onClick={() => setAbsent(p.id, true)}
+                    style={{ padding: '6px 12px', fontSize: 12.5, whiteSpace: 'nowrap' }}
+                  >
+                    {t.markAbsent}
+                  </Button>
+                </div>
                 {groupByBand(p.tasks).map(({ band, tasks }) => (
                   <div key={band} style={{ display: 'grid', gap: 8 }}>
                     <div style={{

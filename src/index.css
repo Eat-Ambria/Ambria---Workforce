@@ -216,3 +216,69 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 :root[data-theme='dark'] ::selection { background: rgba(228, 113, 138, 0.22); }
 :root[data-theme='dark'] .hoverable:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
 :root[data-theme='dark'] .video-card:hover { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55) !important; }
+
+/* Sidebar rows.
+ *
+ * Only where hover is real, like the video cards above: on a touch screen
+ * :hover latches after a tap, and a row left highlighted next to the one you
+ * actually opened reads as two active items.
+ *
+ * The colour comes in as a custom property because the palette lives in JS and
+ * has two themes. The rule deliberately does NOT set a background on the active
+ * row — that one is painted inline, and :not(.is-active) is cheaper to read
+ * than an !important that would have to beat it.
+ */
+.side-link {
+  /* The resting state lives here and not inline. An inline background or color
+     beats every class selector, so a row painted `transparent` in its style
+     attribute can never be hovered — which is exactly how the first version of
+     this shipped doing nothing at all. Inline is kept for the ACTIVE row only,
+     where winning is the point. */
+  background: transparent;
+  color: var(--side-ink);
+  transition: background .14s ease, color .14s ease;
+}
+
+@media (hover: hover) {
+  .side-link:not(.is-active):hover {
+    background: var(--side-hover);
+    color: var(--side-hover-ink);
+  }
+  /* The active row is already the brand colour, so it cannot go darker without
+     reading as pressed. It lifts instead. */
+  .side-link.is-active:hover { filter: brightness(1.08); }
+}
+
+/* Sidebar motion.
+ *
+ * Two small movements, both about where you are:
+ *   - the icon of the row under the pointer steps a few pixels towards the
+ *     page, which is the direction the tap will take you;
+ *   - the row that becomes active settles in, rather than the fill appearing
+ *     from nowhere, so the eye follows the highlight from row to row.
+ * Nothing loops and nothing moves on its own — a sidebar that animates while
+ * you are reading the page next to it is a distraction, not a flourish.
+ */
+/* Icon and label move together — the icon alone stepping forward left the
+   word behind it, which read as the icon coming loose. */
+.side-link svg, .side-link .side-label { transition: transform .18s ease; }
+
+@media (hover: hover) {
+  .side-link:not(.is-active):hover svg,
+  .side-link:not(.is-active):hover .side-label { transform: translateX(3px); }
+}
+
+.side-link.is-active { animation: sideSettle .26s ease-out; }
+
+@keyframes sideSettle {
+  from { transform: scale(0.96); opacity: 0.6; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* Anyone who has asked their device for less motion gets none of it — the
+   colours still change, which is the part that carries the meaning. */
+@media (prefers-reduced-motion: reduce) {
+  .side-link, .side-link svg, .side-link .side-label { transition: background .14s ease, color .14s ease; }
+  .side-link svg, .side-link .side-label { transform: none !important; }
+  .side-link.is-active { animation: none; }
+}
