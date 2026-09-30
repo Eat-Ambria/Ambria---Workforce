@@ -80,6 +80,13 @@ export default function AdminTasks() {
 
   const PAGE_SIZE = 20
   const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'issuesDone', 'completed', 'all']
+  // The tabs that list today's work only, and the status each one is.
+  const TODAY_TABS = {
+    pending: TASK_STATUS.PENDING,
+    inprogress: TASK_STATUS.IN_PROGRESS,
+    completed: TASK_STATUS.COMPLETED,
+    review: TASK_STATUS.COMPLETION_REQUESTED,
+  }
 
   const [members, setMembers] = useState([])
   // The app header's height, so the tab row can sit directly under it. Measured,
@@ -185,17 +192,17 @@ export default function AdminTasks() {
     return (data || []).filter((r) => isTaskOverdue(r, today))
   }, [applyFilters, today])
 
-  // Pending means TODAY'S pending — the same set the Dashboard's Pending tile
-  // counts, so tapping it opens the list it described. It used to be every
-  // pending row in the roster: 184 of them on a Tuesday, under a tile saying 34,
-  // because a Friday job and next month's audit are both "pending" all week.
-  // Filtered here rather than in the query for the same reason as overdue: the
-  // rule reads the frequency and the day together and does not reduce to one.
-  const pendingRows = useCallback(async () => {
+  // Pending, In progress, Completed and Review are TODAY'S — the same set the
+  // Dashboard's Daily Task tile counts, so tapping a figure there opens the list
+  // it described. They used to be every row in the roster with that status:
+  // 184 pending under a tile saying 34, and 4 completed under a tile saying 2,
+  // because a monthly job done on the 3rd stays "completed" until next month.
+  // One read for all four, split here. Filtered in the app rather than in the
+  // query for the same reason as overdue: the rule reads the frequency and the
+  // day together and does not reduce to one.
+  const todaysRows = useCallback(async () => {
     const { data } = await applyFilters(
-      supabase.from('tasks').select('*')
-        .eq('status', TASK_STATUS.PENDING)
-        .order('created_at', { ascending: false })
+      supabase.from('tasks').select('*').order('created_at', { ascending: false })
     )
     return (data || []).filter((r) => isTodaysWork(r))
   }, [applyFilters])
@@ -205,13 +212,13 @@ export default function AdminTasks() {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!user) return
     if (!silent) setListLoading(true)
-    const [countPairs, late, pend, bands] = await Promise.all([
-      Promise.all(TAB_KEYS.filter((k) => k !== 'overdue' && k !== 'pending').map((k) =>
+    const [countPairs, late, todays, bands] = await Promise.all([
+      Promise.all(TAB_KEYS.filter((k) => k !== 'overdue' && !TODAY_TABS[k]).map((k) =>
         withStatus(applyFilters(supabase.from('tasks').select('*', { count: 'exact', head: true })), k)
           .then(({ count }) => [k, count || 0])
       )),
       overdueRows(),
-      pendingRows(),
+      todaysRows(),
       // Today's work in each band, for the five cards. It used to be every
       // pending row in the roster — 215 of them, a Friday job and next month's
       // audit included — above a board that only ever shows today. Same rule as
@@ -224,16 +231,21 @@ export default function AdminTasks() {
       ).then(({ data }) => (data || []).filter((r) => isTodaysWork(r))),
     ])
     const from = page * PAGE_SIZE
-    // overdue and pending paginate the rows they already have; the rest page in
-    // the database as before
+    const ofStatus = (k) => todays.filter((r) => r.status === TODAY_TABS[k])
+    // overdue and today's tabs paginate the rows they already have; the rest
+    // page in the database as before
     const data = tab === 'overdue' ? late.slice(from, from + PAGE_SIZE)
-      : tab === 'pending' ? pend.slice(from, from + PAGE_SIZE)
+      : TODAY_TABS[tab] ? ofStatus(tab).slice(from, from + PAGE_SIZE)
       : (await withStatus(
           applyFilters(supabase.from('tasks').select('*').order('created_at', { ascending: false })),
           tab
         ).range(from, from + PAGE_SIZE - 1)).data
 
-    setCounts({ ...Object.fromEntries(countPairs), overdue: late.length, pending: pend.length })
+    setCounts({
+      ...Object.fromEntries(countPairs),
+      overdue: late.length,
+      ...Object.fromEntries(Object.keys(TODAY_TABS).map((k) => [k, ofStatus(k).length])),
+    })
     setCatCounts(bands.reduce(
       (acc, r) => ({ ...acc, all: (acc.all || 0) + 1, [r.category]: (acc[r.category] || 0) + 1 }),
       {},
@@ -241,7 +253,7 @@ export default function AdminTasks() {
     setList(data || [])
     setListLoading(false)
     setLoading(false)
-  }, [user, applyFilters, withStatus, overdueRows, pendingRows, tab, page])
+  }, [user, applyFilters, withStatus, overdueRows, todaysRows, tab, page])
 
   useEffect(() => { load() }, [load])
 

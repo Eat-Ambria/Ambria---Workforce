@@ -400,10 +400,10 @@ function AdminDashboard({ user }) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', cursor: 'pointer',
                 background: C.rBg, color: C.red, border: `1px solid ${C.red}33`, borderLeft: `3px solid ${C.red}`,
-                borderRadius: 10, padding: wide ? '11px 14px' : '9px 11px', fontSize: wide ? 14.5 : 13, fontWeight: 700,
+                borderRadius: 10, padding: '9px 12px', fontSize: 13.5, fontWeight: 700,
               }}
             >
-              <Icon name="warning" size={wide ? 18 : 16} color={C.red} />
+              <Icon name="warning" size={16} color={C.red} />
               {d.fire.expired} {t.fsReplaceNow}
               <Icon name="chevronRight" size={16} color={C.red} style={{ marginLeft: 'auto' }} />
             </button>
@@ -773,18 +773,18 @@ function Widget({ C, icon, title, onView, children }) {
   const roomy = useRoomy()
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: roomy ? '16px 18px' : '14px 16px', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: roomy ? '13px 16px' : '14px 16px', borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: roomy ? 12 : 10 }}>
-          <span style={{ width: roomy ? 40 : 32, height: roomy ? 40 : 32, borderRadius: roomy ? 12 : 9, background: C.maroonSoft, color: C.maroon, display: 'grid', placeItems: 'center' }}>
-            <Icon name={icon} size={roomy ? 20 : 18} color={C.maroon} />
+          <span style={{ width: roomy ? 34 : 32, height: roomy ? 34 : 32, borderRadius: roomy ? 10 : 9, background: C.maroonSoft, color: C.maroon, display: 'grid', placeItems: 'center' }}>
+            <Icon name={icon} size={18} color={C.maroon} />
           </span>
-          <span style={{ fontWeight: 800, fontSize: roomy ? 17 : 15, letterSpacing: '-0.01em' }}>{title}</span>
+          <span style={{ fontWeight: 800, fontSize: roomy ? 15.5 : 15, letterSpacing: '-0.01em' }}>{title}</span>
         </div>
         <button onClick={onView} style={{ background: 'transparent', color: C.maroon, fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
           View <Icon name="chevronRight" size={15} color={C.maroon} />
         </button>
       </div>
-      <div style={{ padding: roomy ? '14px 18px 18px' : '12px 16px', display: 'grid', gap: roomy ? 7 : 8 }}>{children}</div>
+      <div style={{ padding: roomy ? '12px 16px 14px' : '12px 16px', display: 'grid', gap: roomy ? 6 : 8 }}>{children}</div>
     </Card>
   )
 }
@@ -799,7 +799,7 @@ function Row({ C, label, value, tone, danger, onClick }) {
   // line — the eye had to travel six hundred pixels to pair them up.
   const roomy = useRoomy()
   const strip = roomy ? {
-    margin: 0, padding: '10px 14px', borderRadius: 10,
+    margin: 0, padding: '6px 12px', borderRadius: 9,
     background: C.cardAlt, border: `1px solid ${C.border}`,
   } : null
   return (
@@ -820,12 +820,12 @@ function Row({ C, label, value, tone, danger, onClick }) {
         ...strip,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: roomy ? 10 : 8, fontSize: roomy ? 15 : 14, color: danger ? C.red : (roomy ? C.text : C.tl), fontWeight: danger ? 700 : (roomy ? 500 : 400) }}>
-        <span style={{ width: roomy ? 10 : 8, height: roomy ? 10 : 8, borderRadius: '50%', background: tone, flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: danger ? C.red : (roomy ? C.text : C.tl), fontWeight: danger ? 700 : (roomy ? 500 : 400) }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tone, flexShrink: 0 }} />
         {label}
       </div>
       <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-        <span style={{ fontSize: roomy ? 18 : 16, fontWeight: 800, color: danger ? C.red : C.text, fontVariantNumeric: 'tabular-nums' }}>{value ?? 0}</span>
+        <span style={{ fontSize: 15.5, fontWeight: 800, color: danger ? C.red : C.text, fontVariantNumeric: 'tabular-nums' }}>{value ?? 0}</span>
         {interactive && <Icon name="chevronRight" size={14} color={C.faint} />}
       </span>
     </div>
@@ -840,12 +840,12 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
   const cells = Children.toArray(children)
   const roomy = useRoomy()
   return (
-    <Card style={{ padding: roomy ? 20 : 16, marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: roomy ? 12 : 10, marginBottom: roomy ? 18 : 14 }}>
-        <span style={{ width: roomy ? 44 : 34, height: roomy ? 44 : 34, borderRadius: roomy ? 13 : 11, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-          <Icon name={icon} size={roomy ? 22 : 17} color={tone} />
+    <Card style={{ padding: 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <span style={{ width: roomy ? 36 : 34, height: roomy ? 36 : 34, borderRadius: 11, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <Icon name={icon} size={18} color={tone} />
         </span>
-        <span style={{ fontSize: roomy ? 18 : 15.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
+        <span style={{ fontSize: roomy ? 16 : 15.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
         {onView && (
           <button
             type="button"
@@ -854,12 +854,12 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
             // A round button on desktop: a bare chevron in a corner read as
             // decoration, and this is the way into the whole list.
             style={roomy ? {
-              marginLeft: 'auto', width: 34, height: 34, borderRadius: '50%',
+              marginLeft: 'auto', width: 30, height: 30, borderRadius: '50%',
               display: 'grid', placeItems: 'center', cursor: 'pointer',
               background: C.cardAlt, border: `1px solid ${C.border}`,
             } : { marginLeft: 'auto', background: 'transparent', color: C.tl, display: 'inline-flex', alignItems: 'center', padding: 2 }}
           >
-            <Icon name="chevronRight" size={roomy ? 17 : 16} color={roomy ? C.tl : C.faint} />
+            <Icon name="chevronRight" size={15} color={roomy ? C.tl : C.faint} />
           </button>
         )}
       </div>
@@ -902,32 +902,32 @@ function StatCell({ C, icon, value, label, tone, onClick, strong, divider }) {
       type="button"
       onClick={onClick}
       style={{
-        display: 'grid', justifyItems: 'center', gap: roomy ? 7 : 5, padding: roomy ? '2px 6px 4px' : '2px 4px',
+        display: 'grid', justifyItems: 'center', gap: roomy ? 6 : 5, padding: '2px 4px',
         background: 'transparent', border: 'none',
         borderLeft: divider ? `1px solid ${C.border}` : undefined,
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
       <span style={{
-        width: roomy ? 50 : 32, height: roomy ? 50 : 32, borderRadius: roomy ? 14 : 10, flexShrink: 0,
+        width: roomy ? 38 : 32, height: roomy ? 38 : 32, borderRadius: roomy ? 11 : 10, flexShrink: 0,
         background: tint(tone, roomy ? 0.16 : 0.12),
         display: 'grid', placeItems: 'center',
       }}>
-        <Icon name={icon} size={roomy ? 24 : 16} color={tone} />
+        <Icon name={icon} size={roomy ? 19 : 16} color={tone} />
       </span>
       {/* tabular figures: without them a row of 157 / 127 / 12 / 18 has its
           digits at four different widths and never lines up */}
       <span style={{
-        fontSize: roomy ? 32 : 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em',
+        fontSize: roomy ? 26 : 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em',
         fontVariantNumeric: 'tabular-nums',
         color: dim ? C.faint : (strong ? tone : C.text),
       }}>
         {value ?? 0}
       </span>
-      <span style={{ fontSize: roomy ? 14 : 11, fontWeight: roomy ? 500 : 600, color: roomy ? C.text : C.tl, textAlign: 'center', lineHeight: 1.25 }}>
+      <span style={{ fontSize: roomy ? 12.5 : 11, fontWeight: 600, color: C.tl, textAlign: 'center', lineHeight: 1.25 }}>
         {label}
       </span>
-      <span style={{ width: roomy ? 34 : 22, height: roomy ? 4 : 3, borderRadius: 999, background: tone }} />
+      <span style={{ width: roomy ? 26 : 22, height: 3, borderRadius: 999, background: tone }} />
     </button>
   )
 }
