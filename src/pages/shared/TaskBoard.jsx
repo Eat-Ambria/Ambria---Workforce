@@ -149,7 +149,10 @@ export default function TaskBoard() {
   const [rows, setRows] = useState([])
   const [members, setMembers] = useState([]) // staff + admins available for assignment (admin)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState(location.state?.tab || 'all')
+  // Opens on Open: what still has to be picked up is what this screen is read
+  // for. A link that names a tab (the Dashboard's Urgent row, a notification)
+  // still lands on that one.
+  const [tab, setTab] = useState(location.state?.tab || 'open')
   const [memberFilter, setMemberFilter] = useState('all') // filter list by assigned staff (admin)
   const [catFilter, setCatFilter] = useState('all')       // all | other (general) | kitchen
   const [query, setQuery] = useState('')                  // ticket number or words
@@ -446,9 +449,9 @@ export default function TaskBoard() {
       label: `${fixCatLabel(c, t, lang)} (${catPool.filter((r) => (r.category || 'other') === c).length})`,
     })),
   ]
+  // Work in the order it moves — open, being done, waiting, done — then the two
+  // views across all of it: Overdue, and All last.
   const tabs = [
-    { key: 'all', label: `${t.all} (${groups.all.length})` },
-    { key: 'overdue', label: `${t.overdue} (${groups.overdue.length})` },
     { key: 'open', label: `${t.open} (${groups.open.length})` },
     { key: 'in_progress', label: `${t.inProgress} (${groups.in_progress.length})` },
     { key: 'review', label: `${t.reviewQueue} (${groups.review.length})` },
@@ -459,6 +462,8 @@ export default function TaskBoard() {
     // shown only once there is something in it — an empty tab is a question
     // nobody asked
     ...(groups.logged.length ? [{ key: 'logged', label: `${t.logWorkTab} (${groups.logged.length})` }] : []),
+    { key: 'overdue', label: `${t.overdue} (${groups.overdue.length})` },
+    { key: 'all', label: `${t.all} (${groups.all.length})` },
   ]
 
   if (loading) return <Loader label={t.loading} />
