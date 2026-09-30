@@ -287,6 +287,14 @@ export default function AdminTasks() {
   // and a tab left on 'issues' would otherwise light them up over the Roster.
   const issuesOn = scope === 'all' && issueView
   const reviewOn = scope === 'all' && tab === 'review'
+  // One tab lit at a time. Issues and the review queue live INSIDE All tasks,
+  // so with either open both All tasks and it were filled — two selected tabs
+  // in a row of four, and no telling which one you were on. All tasks lights
+  // only for its own view, and tapping it from inside Issues goes back to it.
+  const allTasksOn = scope === 'all' && !issuesOn && !reviewOn
+  // Read off the tab, not the lit flags: coming back from My Tasks with Issues
+  // still left open underneath, All tasks has to mean All tasks.
+  const openAllTasks = () => { setScope('all'); if (issueView || tab === 'review') changeTab('all') }
 
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
   // Rows from the retired approval queue can still be sitting in 'review'.
@@ -346,13 +354,13 @@ export default function AdminTasks() {
             always been, which fit a phone and are what the staff view uses. */}
         {wide ? (
           <>
-            <ScopeTab C={C} active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</ScopeTab>
+            <ScopeTab C={C} active={allTasksOn} onClick={openAllTasks}>{t.allTasks}</ScopeTab>
             <ScopeTab C={C} active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</ScopeTab>
             <ScopeTab C={C} active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</ScopeTab>
           </>
         ) : (
           <>
-            <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
+            <PropChip C={C} full active={allTasksOn} onClick={openAllTasks}>{t.allTasks}</PropChip>
             <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
             <PropChip C={C} full active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</PropChip>
           </>
@@ -402,7 +410,10 @@ export default function AdminTasks() {
                 fontSize: 14, fontWeight: 700,
                 background: issuesOn ? C.red : C.rBg,
                 color: issuesOn ? '#fff' : C.red,
-                border: `1px solid ${issuesOn ? C.red : 'transparent'}`,
+                // A border like the three tabs beside it. It had none, so on the
+                // light theme it was a pale pink patch with no edge, and read as
+                // a smudge next to the outlined tabs rather than as the fourth.
+                border: `1px solid ${issuesOn ? C.red : `${C.red}55`}`,
               }}
             >
               <Icon name="warning" size={15} color={issuesOn ? '#fff' : C.red} />
