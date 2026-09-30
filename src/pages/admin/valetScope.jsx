@@ -150,12 +150,13 @@ export function PeriodBar({ C, hi, period, setPeriod, customFrom, setCustomFrom,
               key={p.key}
               onClick={() => setPeriod(p.key)}
               aria-pressed={on}
+              className={`seg-opt${on ? ' is-on' : ''}`}
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
                 padding: roomy ? '8px 16px' : '7px 5px', borderRadius: 9,
                 fontSize: roomy ? 13.5 : 11.5, fontWeight: on ? 700 : 600,
-                background: on ? C.card : 'transparent',
-                color: on ? C.maroon : C.tl,
+                ...(on ? { background: C.card, color: C.maroon } : null),
+                '--seg-ink': C.tl, '--seg-hover': C.card, '--seg-hover-ink': C.text,
                 border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
               }}
             >

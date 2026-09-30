@@ -6,8 +6,9 @@ import {
   TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, deptName, personName, isDueToday, taskFrequency,
   frequencyLabel, FREQUENCY_MAP, PROPERTIES, propName,
 } from '../../constants/org'
-import { Card, ProgressBar, Loader, EmptyState, Button } from '../../components/common/UI'
+import { Card, ProgressBar, Loader, EmptyState, Button, CountPill } from '../../components/common/UI'
 import Icon from '../../components/common/Icon'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { todayISO } from '../../lib/time'
 import { loadAbsentOn, markAbsent, clearAbsent } from '../../lib/absences'
 
@@ -27,6 +28,9 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
   const C = useColors()
   const t = useT()
   const { lang } = useLang()
+  // Same breakpoint AdminTasks gates its cards on, so the two halves of this
+  // screen change shape together rather than one at a time.
+  const wide = useMediaQuery('(min-width: 900px)')
 
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -310,7 +314,7 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
               }}
             >
               {/* who, and how far along — the line an admin scans down */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: wide ? 14 : 10 }}>
                 <span style={{ minWidth: 0, flex: 1 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {p.department && (
@@ -338,21 +342,43 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                     </span>
                   )}
                 </span>
+
+                {/* Wide: the three counts and the bar move up onto the name line,
+                    so one person is one row and a screen of them is scannable.
+                    Narrow keeps them stacked underneath, which is the only way
+                    they fit. */}
+                {wide && (
+                  <>
+                    <span style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
+                      <CountPill icon="check" n={p.done}  tone="green" />
+                      <CountPill icon="clock" n={p.doing} tone="yellow" />
+                      <CountPill icon="inbox" n={p.todo}  tone="tl" />
+                    </span>
+                    <span style={{ flex: '1 1 120px', minWidth: 80 }}>
+                      <StackedBar C={C} done={p.done} doing={p.doing} todo={p.todo} total={p.total} />
+                    </span>
+                  </>
+                )}
+
                 <span style={{ fontSize: 15, fontWeight: 800, color: tone, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
                   {p.done}/{p.total}
                 </span>
                 <Icon name="chevronRight" size={16} color={C.faint} style={{ flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none' }} />
               </div>
 
-              <div style={{ margin: '11px 0 9px' }}>
-                <StackedBar C={C} done={p.done} doing={p.doing} todo={p.todo} total={p.total} />
-              </div>
+              {!wide && (
+                <>
+                  <div style={{ margin: '11px 0 9px' }}>
+                    <StackedBar C={C} done={p.done} doing={p.doing} todo={p.todo} total={p.total} />
+                  </div>
 
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                <Leg state="done"  label={t.completed}  n={p.done} />
-                <Leg state="doing" label={t.inProgress} n={p.doing} />
-                <Leg state="todo"  label={t.pending}    n={p.todo} />
-              </div>
+                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                    <Leg state="done"  label={t.completed}  n={p.done} />
+                    <Leg state="doing" label={t.inProgress} n={p.doing} />
+                    <Leg state="todo"  label={t.pending}    n={p.todo} />
+                  </div>
+                </>
+              )}
             </div>
 
             {open && (
@@ -378,25 +404,58 @@ export default function StaffProgress({ user, members, propFilter, deptFilter, m
                     {t.markAbsent}
                   </Button>
                 </div>
-                {groupByBand(p.tasks).map(({ band, tasks }) => (
-                  <div key={band} style={{ display: 'grid', gap: 8 }}>
+                {(() => {
+                  // Bands with nothing left in them go too — a WEEKLY heading
+                  // over no jobs reads as a list that failed to load.
+                  const shown = groupByBand(p.tasks)
+                    .map(({ band, tasks }) => ({ band, jobs: jobsStillShown(tasks) }))
+                    .filter(({ jobs }) => jobs.length > 0)
+                  if (shown.length === 0) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.green, fontWeight: 700 }}>
+                        <Icon name="check" size={15} color={C.green} />
+                        {lang === 'hi' ? 'आज का सारा काम हो गया' : 'Everything due today is done'}
+                      </div>
+                    )
+                  }
+                  return shown.map(({ band, jobs }) => (
+                  <div key={band} style={{ display: 'grid', gap: wide ? 0 : 8 }}>
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 7,
                       fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
                       textTransform: 'uppercase', color: (FREQUENCY_MAP[band] || {}).ink || C.tl,
+                      marginBottom: wide ? 4 : 0,
                     }}>
                       {frequencyLabel(band, lang)}
-                      <span style={{ fontWeight: 700, color: C.faint }}>{tasks.length}</span>
+                      {/* what is listed under it, not what the band held */}
+                      <span style={{ fontWeight: 700, color: C.faint }}>{jobs.reduce((n, j) => n + j.rows.length, 0)}</span>
                     </div>
-                    {groupByJob(tasks).map(({ key, rows }) => (
-                      rows.length === 1
-                        // A grouped line for a job that exists once would be a
-                        // heading and one chip where a line already says it.
-                        ? <TaskLine key={rows[0].id} C={C} t={t} lang={lang} task={rows[0]} onOpen={onOpenTask} />
-                        : <TaskLineGroup key={key} C={C} t={t} lang={lang} rows={rows} onOpen={onOpenTask} />
-                    ))}
+                    {jobs.map(({ key, rows }, i) => {
+                      // Wide: hairline-separated rows running the full width of
+                      // the panel, rather than free-floating lines with a gap.
+                      // Eleven daily jobs is a list, and a list reads better
+                      // ruled than spaced. The negative margin takes the rules
+                      // out to the card's own edges; the first row has none, so
+                      // there is no double line under the band heading.
+                      const ruled = wide
+                        ? {
+                          borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
+                          padding: '9px 16px', margin: '0 -16px',
+                        }
+                        : undefined
+                      return (
+                        <div key={key} style={ruled}>
+                          {rows.length === 1
+                            // A grouped line for a job that exists once would be
+                            // a heading and one chip where a line already says it.
+                            ? <TaskLine C={C} t={t} lang={lang} task={rows[0]} onOpen={onOpenTask} wide={wide} />
+                            : <TaskLineGroup C={C} t={t} lang={lang} rows={rows} onOpen={onOpenTask} wide={wide} />}
+                        </div>
+                      )
+                    })}
                   </div>
-                ))}
+                  ))
+                })()}
               </div>
             )}
           </div>
@@ -489,6 +548,27 @@ function Tally({ state, label, n, size = 'md' }) {
 // Within a band, by time. Jobs with no window sort after the timed ones rather
 // than to the top, where a blank would push a 6 AM round down the list.
 const BANDS = ['daily', 'dailyMS', 'alternate', 'alternateMS', 'weekly', 'sunday', 'monthly']
+
+// Weekly and monthly work leaves the list the moment it is done.
+//
+// A daily round done at nine is back tomorrow, so seeing it ticked for the rest
+// of the day is the record of today. A weekly deep-clean done on Wednesday is
+// not back until next Wednesday, and a monthly job not until next month — left
+// on the list, ticked, it sat there for days as clutter between the jobs still
+// to do. Hidden from the LIST only: the person's "4/7" and the header totals
+// still count it, because it was done and the score has to say so.
+//
+// Category, not taskFrequency, so Sunday-only work (weekly with day 7) goes the
+// same way as any other weekly job.
+const leavesWhenDone = (task) => task?.category === 'weekly' || task?.category === 'monthly'
+
+// A job — one title, grouped across venues — is gone once EVERY venue of it is
+// done. Half-done, it stays, with the ticked venues still ticked, because
+// "2 of 3 venues" is the useful thing to see about it.
+export function jobsStillShown(tasks) {
+  return groupByJob(tasks).filter(({ rows, finished }) => !(leavesWhenDone(rows[0]) && finished))
+}
+
 function groupByBand(tasks) {
   const by = new Map()
   for (const task of tasks || []) {
@@ -576,7 +656,7 @@ const timeOf = (rows) => (rows.find((r) => (r.time_block || '').trim()) || {}).t
 
 // One job, several venues: the title and its time stated once, then a chip per
 // venue carrying that venue's own state and its own way in.
-function TaskLineGroup({ C, t, lang, rows, onOpen }) {
+function TaskLineGroup({ C, t, lang, rows, onOpen, wide }) {
   const first = rows[0]
   const done = rows.filter((r) => r.status === TASK_STATUS.COMPLETED).length
   const doing = rows.some((r) => r.status === TASK_STATUS.IN_PROGRESS)
@@ -609,7 +689,7 @@ function TaskLineGroup({ C, t, lang, rows, onOpen }) {
             may be the one with no window while another says "As needed" — which
             is worth keeping rather than dropping because of chip order. Two
             different real windows cannot be here; that would be two groups. */}
-        {timeOf(rows) && (
+        {timeOf(rows) && !wide && (
           <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: C.tl }}>
             {timeOf(rows)}
           </span>
@@ -620,7 +700,14 @@ function TaskLineGroup({ C, t, lang, rows, onOpen }) {
             rows — and the chip says only where. Collapsed by venue so a venue
             holding more than one of their rows still draws once, and the chip
             opens the first of them that is not finished. */}
-        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+        <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+          {/* Wide: the window rides in front of the chips rather than taking a
+              line of its own above them — same reasoning as the single line. */}
+          {wide && timeOf(rows) && (
+            <span style={{ fontSize: 12, color: C.tl, marginRight: 3, whiteSpace: 'nowrap' }}>
+              {timeOf(rows)}
+            </span>
+          )}
           {byVenue(rows).map(({ property, tasks }) => {
             const doneN = tasks.filter((x) => x.status === TASK_STATUS.COMPLETED).length
             const isDone = doneN === tasks.length
@@ -660,13 +747,20 @@ function TaskLineGroup({ C, t, lang, rows, onOpen }) {
           })}
         </span>
       </span>
+      {/* The chips are the way in — each opens its own venue — but without this
+          a ruled row sitting between two rows that HAVE a chevron reads as the
+          one you cannot open. It opens the first venue still outstanding, which
+          is what the row is about. */}
+      {onOpen && wide && (
+        <Icon name="chevronRight" size={15} color={C.faint} style={{ flexShrink: 0, marginTop: 2 }} />
+      )}
     </div>
   )
 }
 
 // One job, and whether it is done. A tick beats the word "completed" repeated
 // down a list — the eye finds the ones that are NOT ticked.
-function TaskLine({ C, t, lang, task, onOpen }) {
+function TaskLine({ C, t, lang, task, onOpen, wide }) {
   const done = task.status === TASK_STATUS.COMPLETED
   const doing = task.status === TASK_STATUS.IN_PROGRESS
   const tone = done ? C.green : doing ? C.yellow : C.tl
@@ -679,9 +773,11 @@ function TaskLine({ C, t, lang, task, onOpen }) {
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.45,
         cursor: onOpen ? 'pointer' : 'default',
-        // a real tap target on a phone, without a border round every line
-        padding: onOpen ? '5px 8px' : 0,
-        margin: onOpen ? '0 -8px' : 0,
+        // a real tap target on a phone, without a border round every line. On
+        // wide the ruled wrapper around this row already provides it, so adding
+        // it here would pad the row twice.
+        padding: onOpen && !wide ? '5px 8px' : 0,
+        margin: onOpen && !wide ? '0 -8px' : 0,
         borderRadius: 8,
         textAlign: 'left',
       }}
@@ -695,10 +791,16 @@ function TaskLine({ C, t, lang, task, onOpen }) {
         </span>
         {/* No frequency here any more — the heading above the group says it,
             and repeating it on every line was the only thing on most of them. */}
+        {/* Wide: on the same line as the job, greyed. A window is a detail OF
+            the job — given its own line it read as a second fact, and a list of
+            eleven of them was twenty-two lines. Narrow keeps it underneath,
+            where there is no room to sit beside a wrapping title. */}
         {(task.time_block || doing) && (
-          <span style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginTop: 2, fontSize: 12, color: C.tl }}>
+          <span style={wide
+            ? { marginLeft: 9, fontSize: 12, color: C.tl, whiteSpace: 'nowrap' }
+            : { display: 'flex', gap: 9, flexWrap: 'wrap', marginTop: 2, fontSize: 12, color: C.tl }}>
             {task.time_block && <span>{task.time_block}</span>}
-            {doing && <span style={{ color: C.yellow, fontWeight: 700 }}>{t.inProgress}</span>}
+            {doing && <span style={{ color: C.yellow, fontWeight: 700, marginLeft: wide ? 9 : 0 }}>{t.inProgress}</span>}
           </span>
         )}
       </span>

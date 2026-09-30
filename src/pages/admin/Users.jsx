@@ -10,7 +10,8 @@ import {
 } from '../../constants/org'
 import { navForRole, alwaysVisibleFor } from '../../constants/nav'
 import { normalizePhone, typedPhone, isValidPhone } from '../../lib/phone'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField, Avatar } from '../../components/common/UI'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import Modal from '../../components/common/Modal'
 import MultiSelect from '../../components/common/MultiSelect'
 import Icon from '../../components/common/Icon'
@@ -40,6 +41,8 @@ export default function Users() {
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
+  // Same breakpoint the rest of the wide layout uses.
+  const wide = useMediaQuery('(min-width: 900px)')
 
   const PAGE_SIZE = 25
 
@@ -227,7 +230,11 @@ export default function Users() {
             return (
               <Card key={u.id} onClick={() => setEditing(u)} style={{ cursor: 'pointer', borderLeft: `4px solid ${tone}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ minWidth: 0 }}>
+                  {/* Wide only. On a phone the coloured left border already says
+                      which role this is, and 38px of circle is 38px the name
+                      and the venue line need more. */}
+                  {wide && <Avatar name={personName(u, lang) || u.username} seed={u.id} size={38} />}
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 700, fontSize: 15 }}>{personName(u, lang)}</span>
                       <span style={{ fontSize: 12, color: C.faint }}>@{u.username}</span>

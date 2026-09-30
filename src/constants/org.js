@@ -374,10 +374,24 @@ export function taskDays(task) {
   return alternateDays(task?.skip_sunday ?? task?.skipSunday)
 }
 
-// Which date of the month a monthly task falls on: week 1 = the 1st, week 2 the
-// 8th, week 3 the 15th, week 4 the 22nd.
-export const monthlyDate = (monthWeek) => 1 + (Math.min(Math.max(Number(monthWeek) || 1, 1), 4) - 1) * 7
-const ORDINAL = { 1: '1st', 8: '8th', 15: '15th', 22: '22nd' }
+// Which date of the month a monthly task falls on — the day itself, chosen
+// directly (1-31), rather than one of four "weeks" mapped onto the 1st/8th/
+// 15th/22nd. SUPABASE-MIGRATION-MONTHLY-EXACT-DATE.sql converted every
+// existing row from the old week index to the real day it already meant, so
+// this is now just a clamp against a stored value that might predate both —
+// or a NULL, which still means "the 1st", as it always has.
+export const monthlyDate = (monthDay) => Math.min(Math.max(Number(monthDay) || 1, 1), 31)
+
+// 1 -> "1st", 22 -> "22nd", 23 -> "23rd" — a real ordinal suffix, not a lookup
+// table sized for four fixed values. Hindi just takes the number: Devanagari
+// ordinals for dates are not how anyone writes a monthly rota.
+export function ordinal(n, lang) {
+  if (lang === 'hi') return String(n)
+  const v = Number(n) || 0
+  const suf = ['th', 'st', 'nd', 'rd']
+  const rem = v % 100
+  return `${v}${suf[(rem - 20) % 10] || suf[rem] || 'th'}`
+}
 
 // When the job actually comes round, in words, for the roster's Time column and
 // the staff member's task card. Empty for plain daily work — "Daily" already
@@ -394,7 +408,7 @@ export function scheduleText(task, lang) {
   }
   if (fk === 'monthly') {
     const d = monthlyDate(week)
-    return hi ? `महीने की ${d}` : `${ORDINAL[d] || d} of month`
+    return hi ? `महीने की ${d} तारीख़` : `${ordinal(d, 'en')} of month`
   }
   return ''
 }
@@ -406,8 +420,12 @@ export function scheduleText(task, lang) {
 // SQL — kept in step with it deliberately, because a task the database has not
 // brought back should not be sitting in somebody's list either.
 //
-// Monthly is the exception: its "day" is the start of a week-long window, not a
-// date to be at work on, so it stays visible through that week.
+// Monthly is pinned to its one exact date, the same as any other same-day
+// work: not due the day before, not due the day after. It used to stay open for
+// a whole week (four "weeks" a month spread the work out) — pinning it to a
+// single date was asked for explicitly, on the understanding that a missed
+// monthly job is not caught up on later; it is simply missed, the same as a
+// missed alternate-day round, and Analytics is where that shows up.
 export function isDueToday(task, now = new Date()) {
   const iso = now.getDay() === 0 ? 7 : now.getDay()
   const fk = taskFrequency(task)
@@ -419,16 +437,24 @@ export function isDueToday(task, now = new Date()) {
   // there — so unlike daily and alternate work it does not get superseded, and
   // dropping it the next morning is how it silently never happens.
   if (fk === 'weekly') return iso >= Number(task?.week_day ?? task?.weekDay ?? 1)
-  if (fk === 'monthly') {
-    // Its week of the month, not a single date and not the whole month. Pinning
-    // it to one date would make a month's work impossible to catch up on; leaving
-    // it open all month put every monthly job into every day's total, which is
-    // how "today's work" read 287 when 130 of those were not due today at all.
-    // same reasoning, a month long: from its week until the month is out
-    const wk = Math.min(Math.floor((now.getDate() - 1) / 7) + 1, 4)
-    return wk >= Math.min(Math.max(Number(task?.month_week ?? task?.monthWeek) || 1, 1), 4)
-  }
+  if (fk === 'monthly') return now.getDate() === monthlyDate(task?.month_week ?? task?.monthWeek)
   return true                            // daily
+}
+
+// Is this TODAY'S work, as opposed to work still open from an earlier day?
+//
+// Narrower than isDueToday on exactly one point. A weekly job stays due from
+// its day to the end of the week, so on Thursday a Monday deep-clean that was
+// never done is still on the list — rightly, it still needs doing — but it is
+// Monday's work, late, and it is counted under Overdue. Counting it as one of
+// "today's pending" too put it in two tiles and made Pending read as a mix of
+// today and the backlog. Everything else is already pinned to its own day by
+// isDueToday: daily, alternate, Sunday-only and monthly.
+export function isTodaysWork(task, now = new Date()) {
+  if (!isDueToday(task, now)) return false
+  if (taskFrequency(task) !== 'weekly') return true
+  const iso = now.getDay() === 0 ? 7 : now.getDay()
+  return iso === Number(task?.week_day ?? task?.weekDay ?? 1)
 }
 
 // WHY a task is late — isTaskOverdue only says whether it is.
@@ -438,8 +464,13 @@ export function isDueToday(task, now = new Date()) {
 //
 //   date      it had a real deadline and the deadline passed
 //   weekday   weekly work whose day has gone by      (day, late = days over)
-//   monthweek monthly work whose week has gone by    (week, late = weeks over)
 //   today     same-day work still open past the cutoff hour
+//
+// Monthly work is same-day work now — see isDueToday — so it is scored by the
+// `today` branch below like daily and alternate work, rather than by a kind of
+// its own. There used to be a `monthweek` kind here; a job pinned to one exact
+// date is never late by a week, only by hours on the day itself, or already
+// gone by the next.
 //
 // null when the task is not late at all.
 export function overdueReason(task, today, now = new Date()) {
@@ -451,11 +482,6 @@ export function overdueReason(task, today, now = new Date()) {
   if (fk === 'weekly') {
     const day = Number(task.week_day ?? task.weekDay ?? 1)
     return { kind: 'weekday', day, late: iso - day }
-  }
-  if (fk === 'monthly') {
-    const wk = Math.min(Math.floor((now.getDate() - 1) / 7) + 1, 4)
-    const week = Math.min(Math.max(Number(task.month_week ?? task.monthWeek) || 1, 1), 4)
-    return { kind: 'monthweek', week, late: wk - week }
   }
   return { kind: 'today' }
 }
@@ -518,21 +544,19 @@ export function isTaskOverdue(task, today, now = new Date()) {
   const fk = taskFrequency(task)
   const iso = now.getDay() === 0 ? 7 : now.getDay()
 
-  // Weekly and monthly work is late once its own day / week has PASSED and it is
-  // still open. On the day itself it is simply today's job, not a failure.
+  // Weekly work is late once its own day has PASSED and it is still open. On
+  // the day itself it is simply today's job, not a failure.
   if (fk === 'weekly') return iso > Number(task.week_day ?? task.weekDay ?? 1)
-  if (fk === 'monthly') {
-    const wk = Math.min(Math.floor((now.getDate() - 1) / 7) + 1, 4)
-    return wk > Math.min(Math.max(Number(task.month_week ?? task.monthWeek) || 1, 1), 4)
-  }
 
   // Everything left is same-day work — daily, daily (Mon-Sat), alternate days,
-  // Sunday-only — and it has today to be done. Late once the cutoff hour passes.
+  // Sunday-only, and now monthly too, pinned to its one exact date — and it has
+  // today to be done. Late once the cutoff hour passes.
   //
-  // Alternate and Sunday work never reached a branch of their own before: they
-  // are not `weekly` or `monthly` to taskFrequency, and their category is not
-  // 'daily', so both fell to the due-date line — which is null on all but one
-  // row in this database. A Tue/Fri round missed on Tuesday was never late; it
-  // simply disappeared from the list on Wednesday.
+  // Alternate, Sunday and monthly work never reached a branch of their own
+  // before this comment: they are not `weekly` to taskFrequency, and their
+  // category is not 'daily', so all three fell to the due-date line — which is
+  // null on all but one row in this database. A Tue/Fri round missed on Tuesday
+  // was never late; it simply disappeared from the list on Wednesday. A missed
+  // monthly job now behaves the same way, on purpose.
   return !!dailyOverdueActive(now)
 }

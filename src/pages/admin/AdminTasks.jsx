@@ -7,10 +7,10 @@ import { nowISO, todayISO, fmtDate, fmtDateTime } from '../../lib/time'
 import { useColors } from '../../context/ThemeContext'
 import { useT, useLang } from '../../context/LangContext'
 import { useAuth } from '../../context/AuthContext'
-import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, overdueReason, dailyOverdueLabel, dayName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
+import { TASK_STATUS, TASK_CATEGORIES, PRIORITIES, DEPARTMENTS, PROPERTIES, PROPERTY_MAP, propName, DEPARTMENT_MAP, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, isTodaysWork, overdueReason, dailyOverdueLabel, dayName, memberInProperty, assigneeLabel, isOwnAssignedWork, personName, deptName } from '../../constants/org'
 import { assigneesQuery } from '../../lib/assignees'
 import { statusColors } from '../../constants/status'
-import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField, StatCard } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import RosterModal from './RosterModal'
@@ -25,9 +25,49 @@ import { translateToHindi } from '../../lib/translate'
 
 const TR_ORANGE = '#EA580C' // overdue accent (matches the dashboard)
 
+// One icon and one colour per band. The bands are a fixed list in org.js, so
+// these are written out beside it rather than derived — a new band should be a
+// deliberate choice of both, not whatever the next palette entry happens to be.
+const CAT_ICON = {
+  all: 'taskBoard', daily: 'myTasks', alternate: 'refresh',
+  weekly: 'calendar', monthly: 'dashboard',
+}
+const CAT_TONE = {
+  all: 'maroon', daily: 'blue', alternate: 'green',
+  weekly: 'yellow', monthly: 'purple',
+}
+
+// A full-width segment in the view switcher. Same shape as PillTabs' buttons,
+// written here because the row it lives in also carries the Issues pill, which
+// keeps its own red and is not a scope.
+function ScopeTab({ C, active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 12,
+        fontSize: 14, fontWeight: active ? 800 : 600,
+        color: active ? '#fff' : C.tl,
+        background: active ? C.brandBg : C.card,
+        border: `1px solid ${active ? C.brandBg : C.border}`,
+        boxShadow: active ? C.shadow : 'none',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function AdminTasks() {
   const C = useColors()
   const roomy = useMediaQuery('(min-width: 560px)')
+  // The wide layout. 900px because the sidebar already takes 244 of the width
+  // and five cards in a row need what is left; below it every control here
+  // stays exactly as it was, which is what the phone view is.
+  const wide = useMediaQuery('(min-width: 900px)')
   const t = useT()
   const { lang } = useLang()
   const { user } = useAuth()
@@ -37,7 +77,6 @@ export default function AdminTasks() {
   const presetProp = location.state?.property // set when navigating from the dashboard
   const presetTab = location.state?.tab       // which tab to open (e.g. 'pending', 'completed')
   const presetMember = location.state?.member // staff filter carried from the dashboard
-  const presetPriority = location.state?.priority // e.g. dashboard 'High' row
 
   const PAGE_SIZE = 20
   const TAB_KEYS = ['overdue', 'pending', 'inprogress', 'review', 'issues', 'issuesDone', 'completed', 'all']
@@ -48,7 +87,7 @@ export default function AdminTasks() {
   const [appHeaderH, setAppHeaderH] = useState(0)
   const [list, setList] = useState([])       // current page of rows for the active tab
   const [counts, setCounts] = useState({})   // per-tab totals (server counts)
-  const [catCounts, setCatCounts] = useState({})  // pending per frequency band
+  const [catCounts, setCatCounts] = useState({})  // today's work per frequency band
   const [loading, setLoading] = useState(true)       // first load
   const [listLoading, setListLoading] = useState(false) // subsequent refreshes
   const [page, setPage] = useState(0)
@@ -61,7 +100,6 @@ export default function AdminTasks() {
   const [review, setReview] = useState(null)
   const [creating, setCreating] = useState(false)
   const [deptFilter, setDeptFilter] = useState('all')  // narrow the list to one department
-  const [prioFilter, setPrioFilter] = useState(presetPriority || 'all')
   const [scope, setScope] = useState('all')    // 'all' = everyone's work | 'mine' = my own
 
   const today = todayISO()
@@ -77,10 +115,9 @@ export default function AdminTasks() {
     if (deptScope) q = q.eq('department', deptScope)
     else if (deptFilter !== 'all') q = q.eq('department', deptFilter)
     if (!skipCat && catFilter !== 'all') q = q.eq('category', catFilter)
-    if (prioFilter !== 'all') q = q.eq('priority', prioFilter)
     if (memberFilter !== 'all') q = q.eq('assigned_to', memberFilter)
     return q
-  }, [user, propFilter, deptFilter, catFilter, prioFilter, memberFilter])
+  }, [user, propFilter, deptFilter, catFilter, memberFilter])
 
   // narrow a query to a tab's status condition
   const withStatus = useCallback((q, key) => {
@@ -102,7 +139,6 @@ export default function AdminTasks() {
   // even when we're already on this page and the component doesn't remount.
   useEffect(() => {
     if (location.state?.tab) { setTab(location.state.tab); setPage(0) }
-    if (location.state?.priority) { setPrioFilter(location.state.priority); setPage(0) }
   }, [location.state])
 
   // deep-link from a notification: open the exact task's review modal by id
@@ -149,35 +185,55 @@ export default function AdminTasks() {
     return (data || []).filter((r) => isTaskOverdue(r, today))
   }, [applyFilters, today])
 
+  // Pending means TODAY'S pending — the same set the Dashboard's Pending tile
+  // counts, so tapping it opens the list it described. It used to be every
+  // pending row in the roster: 184 of them on a Tuesday, under a tile saying 34,
+  // because a Friday job and next month's audit are both "pending" all week.
+  // Filtered here rather than in the query for the same reason as overdue: the
+  // rule reads the frequency and the day together and does not reduce to one.
+  const pendingRows = useCallback(async () => {
+    const { data } = await applyFilters(
+      supabase.from('tasks').select('*')
+        .eq('status', TASK_STATUS.PENDING)
+        .order('created_at', { ascending: false })
+    )
+    return (data || []).filter((r) => isTodaysWork(r))
+  }, [applyFilters])
+
   // load per-tab counts + the active tab's page whenever filters/tab/page change.
   // `silent` skips the loading dim — used by the background auto-refresh below.
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!user) return
     if (!silent) setListLoading(true)
-    const [countPairs, late, bands] = await Promise.all([
-      Promise.all(TAB_KEYS.filter((k) => k !== 'overdue').map((k) =>
+    const [countPairs, late, pend, bands] = await Promise.all([
+      Promise.all(TAB_KEYS.filter((k) => k !== 'overdue' && k !== 'pending').map((k) =>
         withStatus(applyFilters(supabase.from('tasks').select('*', { count: 'exact', head: true })), k)
           .then(({ count }) => [k, count || 0])
       )),
       overdueRows(),
-      // One column, all five bands. Cheaper than five head counts on a page that
-      // refreshes itself in the background.
+      pendingRows(),
+      // Today's work in each band, for the five cards. It used to be every
+      // pending row in the roster — 215 of them, a Friday job and next month's
+      // audit included — above a board that only ever shows today. Same rule as
+      // the Dashboard's Daily Task tile (isTodaysWork), so the two agree for the
+      // same venue and member. Every status, not just pending: "All tasks" is
+      // how much today holds, the way the tile's Total is.
       applyFilters(
-        supabase.from('tasks').select('category').eq('status', TASK_STATUS.PENDING),
+        supabase.from('tasks').select('category, week_day, week_days, skip_sunday, month_week'),
         { skipCat: true },
-      ).then(({ data }) => data || []),
+      ).then(({ data }) => (data || []).filter((r) => isTodaysWork(r))),
     ])
     const from = page * PAGE_SIZE
-    // the overdue tab paginates the rows it already has; the rest page in the
-    // database as before
-    const data = tab === 'overdue'
-      ? late.slice(from, from + PAGE_SIZE)
+    // overdue and pending paginate the rows they already have; the rest page in
+    // the database as before
+    const data = tab === 'overdue' ? late.slice(from, from + PAGE_SIZE)
+      : tab === 'pending' ? pend.slice(from, from + PAGE_SIZE)
       : (await withStatus(
           applyFilters(supabase.from('tasks').select('*').order('created_at', { ascending: false })),
           tab
         ).range(from, from + PAGE_SIZE - 1)).data
 
-    setCounts({ ...Object.fromEntries(countPairs), overdue: late.length })
+    setCounts({ ...Object.fromEntries(countPairs), overdue: late.length, pending: pend.length })
     setCatCounts(bands.reduce(
       (acc, r) => ({ ...acc, all: (acc.all || 0) + 1, [r.category]: (acc[r.category] || 0) + 1 }),
       {},
@@ -185,7 +241,7 @@ export default function AdminTasks() {
     setList(data || [])
     setListLoading(false)
     setLoading(false)
-  }, [user, applyFilters, withStatus, overdueRows, tab, page])
+  }, [user, applyFilters, withStatus, overdueRows, pendingRows, tab, page])
 
   useEffect(() => { load() }, [load])
 
@@ -203,7 +259,6 @@ export default function AdminTasks() {
   const changeTab = (k) => { setTab(k); setPage(0) }
   const changeProp = (p) => { setPropFilter(p); setPage(0) }
   const changeDept = (d) => { setDeptFilter(d); setPage(0) }
-  const changePrio = (p) => { setPrioFilter(p); setPage(0) }
   const changeCat = (c) => { setCatFilter(c); setPage(0) }
   const changeMember = (m) => { setMemberFilter(m); setPage(0) }
 
@@ -228,6 +283,10 @@ export default function AdminTasks() {
   }, [members, lang])
 
   const issueView = tab === 'issues' || tab === 'issuesDone'
+  // Lit only where the queue actually is. The buttons now show on every view,
+  // and a tab left on 'issues' would otherwise light them up over the Roster.
+  const issuesOn = scope === 'all' && issueView
+  const reviewOn = scope === 'all' && tab === 'review'
 
   const c = (k) => (counts[k] ? ` (${counts[k]})` : '')
   // Rows from the retired approval queue can still be sitting in 'review'.
@@ -269,52 +328,87 @@ export default function AdminTasks() {
         style={{
           position: 'sticky', top: appHeaderH, zIndex: 70,
           display: 'flex', gap: 8, flexWrap: 'wrap',
-          background: C.bg, padding: '10px 12px', margin: '0 -12px 8px',
+          background: C.bg,
+          // The bar has to start at the very top of <main>, not 16px into it.
+          // main's own padding was a transparent strip above this row, and while
+          // the row is stuck under the header everything below scrolls THROUGH
+          // that strip — which is the band of colour appearing between the
+          // header and the tabs. The negative margin eats the padding on all
+          // three sides and the padding puts it back inside, so the tabs sit
+          // exactly where they did and the background now reaches the header.
+          //
+          // -16 rather than the -12 it was: main's padding is 16, so 12 left a
+          // 4px sliver down each side doing the same thing more quietly.
+          padding: '26px 16px 10px', margin: '-16px -16px 8px',
         }}
       >
-        <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
-        <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
-        <PropChip C={C} full active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</PropChip>
+        {/* Wide: three equal segments across the page. Narrow: the chips it has
+            always been, which fit a phone and are what the staff view uses. */}
+        {wide ? (
+          <>
+            <ScopeTab C={C} active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</ScopeTab>
+            <ScopeTab C={C} active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</ScopeTab>
+            <ScopeTab C={C} active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</ScopeTab>
+          </>
+        ) : (
+          <>
+            <PropChip C={C} full active={scope === 'all'} onClick={() => setScope('all')}>{t.allTasks}</PropChip>
+            <PropChip C={C} full active={scope === 'mine'} onClick={() => setScope('mine')}>{t.myTasks}</PropChip>
+            <PropChip C={C} full active={scope === 'roster'} onClick={() => setScope('roster')}>{t.roster}</PropChip>
+          </>
+        )}
 
         {/* Issues sit up here with the view switcher, not under the progress
             table. Something has gone wrong on two jobs — that is the first
-            thing an admin should see, not the last. Only on "All tasks": the
-            roster and a personal task list have no issue queue. */}
-        {scope === 'all' && (
-          <span style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            thing an admin should see, not the last.
+
+            On every view, not only "All tasks". It used to vanish on My Tasks
+            and the Roster, which made the other three tabs jump wider under the
+            finger — and an issue does not stop being the first thing to see
+            because you are looking at the roster. The queue itself lives under
+            All tasks, so from the other two it takes you there. */}
+        <span style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap', ...(wide ? { flex: 1 } : null) }}>
             {staleReview && (
               <button
-                onClick={() => changeTab(tab === 'review' ? 'all' : 'review')}
-                aria-pressed={tab === 'review'}
+                onClick={() => {
+                  if (scope !== 'all') { setScope('all'); changeTab('review'); return }
+                  changeTab(tab === 'review' ? 'all' : 'review')
+                }}
+                aria-pressed={reviewOn}
                 style={{
                   whiteSpace: 'nowrap', flexShrink: 0,
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
-                  background: tab === 'review' ? C.brandBg : C.cardAlt,
-                  color: tab === 'review' ? '#fff' : C.tl,
-                  border: `1px solid ${tab === 'review' ? C.maroon : C.border}`,
+                  background: reviewOn ? C.brandBg : C.cardAlt,
+                  color: reviewOn ? '#fff' : C.tl,
+                  border: `1px solid ${reviewOn ? C.maroon : C.border}`,
                 }}
               >
                 {t.reviewQueue} ({counts.review})
               </button>
             )}
             <button
-              onClick={() => changeTab(issueView ? 'all' : 'issues')}
-              aria-pressed={issueView}
+              onClick={() => {
+                if (scope !== 'all') { setScope('all'); changeTab('issues'); return }
+                changeTab(issueView ? 'all' : 'issues')
+              }}
+              aria-pressed={issuesOn}
               style={{
                 whiteSpace: 'nowrap', flexShrink: 0,
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '9px 14px', borderRadius: 999, fontSize: 14, fontWeight: 700,
-                background: issueView ? C.red : C.rBg,
-                color: issueView ? '#fff' : C.red,
-                border: `1px solid ${issueView ? C.red : 'transparent'}`,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                ...(wide
+                  ? { width: '100%', padding: '12px 14px', borderRadius: 12 }
+                  : { padding: '9px 14px', borderRadius: 999 }),
+                fontSize: 14, fontWeight: 700,
+                background: issuesOn ? C.red : C.rBg,
+                color: issuesOn ? '#fff' : C.red,
+                border: `1px solid ${issuesOn ? C.red : 'transparent'}`,
               }}
             >
-              <Icon name="warning" size={15} color={issueView ? '#fff' : C.red} />
+              <Icon name="warning" size={15} color={issuesOn ? '#fff' : C.red} />
               {t.issues}{counts.issues ? ` (${counts.issues})` : ''}
             </button>
-          </span>
-        )}
+        </span>
       </div>
 
       {scope === 'roster' ? (
@@ -359,12 +453,6 @@ export default function AdminTasks() {
             </select>
           </FilterField>
         )}
-        <FilterField label={t.priority}>
-          <select style={filterStyle(C)} value={prioFilter} onChange={(e) => changePrio(e.target.value)}>
-            <option value="all">{t.all}</option>
-            {PRIORITIES.map((p) => <option key={p} value={p}>{t[`priority${p[0].toUpperCase()}${p.slice(1)}`] || p}</option>)}
-          </select>
-        </FilterField>
         <FilterField label={t.members}>
           <select style={filterStyle(C)} value={memberFilter} onChange={(e) => changeMember(e.target.value)}>
             <option value="all">{t.all}</option>
@@ -379,6 +467,25 @@ export default function AdminTasks() {
           tighten and "Alternate days" shortens — the roster already labels that
           band ALT / बदल. overflow stays as a backstop for a longer translation,
           with the bar hidden. */}
+      {wide ? (
+        // The same one setting with five values, given the room to be read at a
+        // glance instead of squeezed into a segmented control. Still a filter:
+        // the card that is on carries the border, and tapping it again clears
+        // back to All, exactly as the strip below does.
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          {['all', ...TASK_CATEGORIES].map((cat) => (
+            <StatCard
+              key={cat}
+              icon={CAT_ICON[cat] || 'tasks'}
+              tone={CAT_TONE[cat] || 'maroon'}
+              label={cat === 'all' ? t.allTasks : t[cat]}
+              value={catCounts[cat] || 0}
+              active={catFilter === cat}
+              onClick={() => changeCat(cat)}
+            />
+          ))}
+        </div>
+      ) : (
       <div className="no-bar" style={{
         display: 'flex', gap: 2, marginBottom: 14, padding: 3,
         background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 11,
@@ -392,18 +499,19 @@ export default function AdminTasks() {
               type="button"
               onClick={() => changeCat(cat)}
               aria-pressed={on}
+              className={`seg-opt${on ? ' is-on' : ''}`}
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
                 display: 'grid', justifyItems: 'center', gap: 1,
                 padding: roomy ? '6px 16px' : '5px 6px', borderRadius: 9,
                 fontSize: roomy ? 13.5 : 13, fontWeight: on ? 700 : 600,
-                background: on ? C.card : 'transparent',
-                color: on ? C.maroon : C.tl,
+                ...(on ? { background: C.card, color: C.maroon } : null),
+                '--seg-ink': C.tl, '--seg-hover': C.card, '--seg-hover-ink': C.text,
                 border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
               }}
             >
               <span>{cat === 'all' ? t.all : (!roomy && cat === 'alternate' ? t.alternateShort : t[cat])}</span>
-              {/* How much is still pending in this band. A zero is drawn too — an
+              {/* How much of today is in this band. A zero is drawn too — an
                   empty band is an answer, and leaving it blank makes the row jump
                   as the counts land. */}
               <span style={{
@@ -418,6 +526,7 @@ export default function AdminTasks() {
           )
         })}
       </div>
+      )}
 
       {/* Hidden while looking at issues or the leftover approval queue. That
           table answers "how is today going", which is not the question you are
@@ -433,7 +542,6 @@ export default function AdminTasks() {
         deptFilter={deptFilter}
         memberFilter={memberFilter}
         catFilter={catFilter}
-        prioFilter={prioFilter}
         onOpenTask={async ({ id }) => {
           const { data } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle()
           if (data) setReview(data)
@@ -532,14 +640,14 @@ export default function AdminTasks() {
                           </div>
                         ) : null
                       }
+                      // Monthly work is 'today' here, not a kind of its own — a
+                      // job pinned to one exact date is same-day work, like
+                      // daily and alternate; see the comment on overdueReason.
                       const say = why.kind === 'date' ? fmtDate(why.date)
                         : why.kind === 'weekday' ? t.lateWasDue.replace('{d}', dayName(why.day, lang))
-                        : why.kind === 'monthweek' ? t.lateWeek.replace('{n}', why.week)
                         : t.lateToday.replace('{h}', dailyOverdueLabel())
                       // how far past, when that is a number worth reading
-                      const by = why.kind === 'weekday' && why.late > 0 ? t.lateDays.replace('{n}', why.late)
-                        : why.kind === 'monthweek' && why.late > 0 ? t.lateWeeks.replace('{n}', why.late)
-                        : ''
+                      const by = why.kind === 'weekday' && why.late > 0 ? t.lateDays.replace('{n}', why.late) : ''
                       return (
                         <div style={{ fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: TR_ORANGE, fontWeight: 700 }}>
                           <Icon name="warning" size={12} color={TR_ORANGE} />

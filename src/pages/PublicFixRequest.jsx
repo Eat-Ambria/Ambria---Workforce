@@ -3,10 +3,9 @@ import { supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/time'
 import { useColors, useTheme } from '../context/ThemeContext'
 import { useLang } from '../context/LangContext'
-import { PROPERTIES, PROPERTY_MAP, propName, deptName } from '../constants/org'
+import { PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { hindiFor } from '../lib/translate'
 import { Spinner, inputStyle, Badge, ProgressBar, EmptyState, Loader, Tabs, Field } from '../components/common/UI'
-import HindiInput from '../components/common/HindiInput'
 import PhotoCapture from '../components/common/PhotoCapture'
 import VoiceRecorder from '../components/common/VoiceRecorder'
 import Icon from '../components/common/Icon'
@@ -14,7 +13,7 @@ import PoweredBy from '../components/common/PoweredBy'
 
 // PUBLIC, no-login portal (/fix-request). Anyone with the link can:
 //   - SEE all repair requests and their live status / progress
-//   - ADD a new repair request (name + phone required)
+//   - ADD a new repair request (name + title, and a voice note of the problem)
 // Submissions land in `work_board` as an `open` request so an admin can assign
 // them. Renders outside AppLayout and never touches AuthContext.
 
@@ -471,13 +470,17 @@ function RequestCard({ C, hi, r, isMine }) {
   )
 }
 
-// ---- the Add Request form (name + phone required, phone capped at 10 digits) ----
+// ---- the Add Request form ----
+//
+// Seven fields: who, what, where, how urgent, a photo, a voice note, and a note.
+// It used to ask for a phone number, a Hindi title, the kind of repair, a
+// department, a location and a Hindi description too — thirteen fields between
+// a visitor noticing something broken and it being reported. The Hindi is still
+// written, just not asked for: translated on submit from what they typed.
 function RequestForm({ C, hi, onBack, onSubmitted }) {
   const lang = hi ? 'hi' : 'en'
   const [form, setForm] = useState({
-    name: '', phone: '', property: 'pp', location: '',
-    title: '', titleHi: '', issue: '', descHi: '', category: 'other', priority: 'normal',
-    department: '',
+    name: '', property: 'pp', title: '', issue: '', priority: 'normal',
   })
   const [photos, setPhotos] = useState([])
   const [voice, setVoice] = useState('')
@@ -492,44 +495,13 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const setDept = (e) => setForm((f) => ({ ...f, department: e.target.value }))
-
-  // A kitchen fault is a kitchen job, a wiring fault is the electrician's. The
-  // kind of repair already names the team, so fill it in rather than making the
-  // visitor say the same thing twice — they can still change it afterwards.
-  // 'other' names no team, so it leaves the department alone.
-  const CAT_DEPT = { kitchen: 'kt', ms: 'ms', el: 'el', pt: 'pt', cp: 'cp' }
-  // A general repair is the only kind that leaves the team open, and the teams
-  // it can go to are the four that do general work. Kitchen, Electrician and the
-  // rest are their own kind of repair — offering them here as well would let a
-  // request say "General repair" and "Electrician" at the same time.
-
-  const GENERAL_DEPTS = ['a', 'h', 'k', 's']
-  const deptChoices = CAT_DEPT[form.category] ? [CAT_DEPT[form.category]] : GENERAL_DEPTS
-
-  const setCategory = (e) => {
-    const cat = e.target.value
-    const dept = CAT_DEPT[cat]
-    setForm((f) => ({
-      ...f,
-      category: cat,
-      // The kind of repair decides the team, so the previous answer never
-      // survives the switch: a trade sets its own, and going back to General
-      // clears it rather than leaving "Kitchen" sitting under "General repair".
-      department: dept || '',
-    }))
-  }
-  // phone: keep digits only, never longer than 10
-  const setPhone = (e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))
-
   // The title is what the request IS; the description only elaborates. That
   // matches the admin form, where the description is optional too.
-  const canSubmit = !!form.name.trim() && form.phone.length === 10 && !!form.title.trim() && !busy
+  const canSubmit = !!form.name.trim() && !!form.title.trim() && !busy
 
   async function onSubmit(e) {
     e.preventDefault()
     if (!form.name.trim()) { setError(hi ? 'नाम भरना ज़रूरी है।' : 'Name is required.'); return }
-    if (form.phone.length !== 10) { setError(hi ? 'फ़ोन नंबर 10 अंकों का होना चाहिए।' : 'Phone number must be exactly 10 digits.'); return }
     if (!form.title.trim()) { setError(hi ? 'शीर्षक भरना ज़रूरी है।' : 'A title is required.'); return }
     // What is wrong, in the reporter's own words: recorded normally, typed only
     // where recording is impossible.
@@ -551,37 +523,26 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       issueText ? '' : null,
       inHindi ? '— सार्वजनिक लिंक से भेजा गया —' : '— Reported via public link —',
       `${inHindi ? 'नाम' : 'Name'}: ${form.name.trim()}`,
-      `${inHindi ? 'फ़ोन' : 'Phone'}: ${form.phone}`,
-      form.location.trim() ? `${inHindi ? 'स्थान' : 'Location'}: ${form.location.trim()}` : null,
     ].filter((l) => l !== null).join('\n')
     const description = block(issue, hi)
     const title = form.title.trim()
 
-    // Whatever the reporter left in the Hindi boxes wins — those boxes show the
-    // machine's attempt and let it be corrected, so overwriting it here would
-    // throw away the only human judgement in the loop. Only what is still blank
-    // gets translated. (hindiFor leaves Devanagari alone, so a form filled in
-    // Hindi needs nothing either way.)
-    const typedTitleHi = form.titleHi.trim()
-    const typedDescHi = form.descHi.trim()
-    let title_hi = typedTitleHi
-    let hiDesc = typedDescHi
-    if (!title_hi || (issue && !hiDesc)) {
-      const auto = await hindiFor(title, issue)
-      title_hi = title_hi || auto.hi
-      hiDesc = hiDesc || auto.hiDesc
-    }
+    // Translated here rather than asked for. hindiFor never throws: a failure
+    // stores nothing and staff read the English. It leaves Devanagari alone, so
+    // a form filled in Hindi needs nothing.
+    const { hi: title_hi, hiDesc } = await hindiFor(title, issue)
 
     const { data, error: err } = await supabase.from('work_board').insert({
       title,
       title_hi,
       description,
       description_hi: hiDesc ? block(hiDesc, true) : null,
-      category: form.category || 'other',
+      // The kind of repair and the department are no longer asked for, so
+      // neither is guessed. The admin who routes it assigns it, and that gives
+      // it a team.
+      category: 'other',
       property: form.property,
-      // Without this a department-scoped admin never sees the request: the board
-      // filters on department and a NULL matches nothing.
-      department: form.department || null,
+      department: null,
       posted_by: 'public',
       posted_by_name: `${form.name.trim()} · ${hi ? 'बाहरी' : 'External'}`,
       priority: form.priority,
@@ -657,21 +618,14 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'फ़ोन नंबर' : 'Phone number'} <span style={{ color: C.red }}>*</span></label>
-        <div style={{ position: 'relative' }}>
-          <span style={leadIcon}><Icon name="phone" size={18} /></span>
-          <input
-            style={{ ...inputStyle(C), paddingLeft: 42 }}
-            type="tel" inputMode="numeric" maxLength={10}
-            value={form.phone} onChange={setPhone}
-            placeholder={hi ? '10 अंकों का नंबर' : '10-digit number'}
-          />
-        </div>
-        <span style={{ fontSize: 11.5, color: form.phone.length === 10 ? C.green : C.faint, marginTop: 4, display: 'block' }}>
-          {form.phone.length}/10 {hi ? 'अंक' : 'digits'}
-        </span>
-      </div>
+      <Field label={hi ? 'शीर्षक' : 'Title'} required>
+        <input
+          style={inputStyle(C)}
+          value={form.title}
+          onChange={set('title')}
+          placeholder={hi ? 'जैसे: गेट 2 की लाइट खराब' : 'e.g. Gate 2 light not working'}
+        />
+      </Field>
 
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>{hi ? 'कौन सी जगह?' : 'Which venue?'}</label>
@@ -682,56 +636,6 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
             </option>
           ))}
         </select>
-      </div>
-
-      {/* Same two fields the admin form opens with. The title used to be sliced
-          off the first line of the description, which produced titles cut
-          mid-word; and the Hindi was generated at submit where nobody could see
-          it, let alone fix it. */}
-      <Field label={hi ? 'शीर्षक' : 'Title'} required>
-        <input
-          style={inputStyle(C)}
-          value={form.title}
-          onChange={set('title')}
-          placeholder={hi ? 'जैसे: गेट 2 की लाइट खराब' : 'e.g. Gate 2 light not working'}
-        />
-      </Field>
-
-      <HindiInput
-        label={hi ? 'शीर्षक हिंदी में' : 'Title in Hindi'}
-        hint={hi ? 'स्टाफ यही पढ़ता है। अनुवाद गलत हो तो ठीक कर दें।' : 'This is what the staff read. Correct it if the translation is off.'}
-        source={form.title}
-        value={form.titleHi}
-        onChange={(v) => setForm((f) => ({ ...f, titleHi: v }))}
-      />
-
-      {/* Kitchen faults go to a different person, so the visitor says which
-          kind it is rather than an admin guessing from the description. */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'किस चीज़ की मरम्मत?' : 'What kind of repair?'}</label>
-        <select style={inputStyle(C)} value={form.category} onChange={setCategory}>
-          <option value="other">{hi ? 'सामान्य मरम्मत' : 'General repair'}</option>
-          <option value="kitchen">{hi ? 'रसोई / किचन' : 'Kitchen'}</option>
-          {/* the trades, listed the same way Kitchen is. Codes match
-              FIX_CATEGORIES in TaskBoard — a visitor and an admin have to be
-              filing the same thing under the same name. */}
-          {['ms', 'el', 'pt', 'cp'].map((c) => (
-            <option key={c} value={c}>{deptName(c, lang)}</option>
-          ))}
-        </select>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'किस डिपार्टमेंट का काम?' : 'Which department?'}</label>
-        <select style={inputStyle(C)} value={form.department} onChange={setDept}>
-          <option value="">{hi ? '— चुनें (वैकल्पिक) —' : '— Select (optional) —'}</option>
-          {deptChoices.map((code) => <option key={code} value={code}>{deptName(code, lang)}</option>)}
-        </select>
-        <span style={{ fontSize: 11.5, color: C.faint, marginTop: 4, display: 'block' }}>
-          {hi
-            ? 'इससे तय होता है कि किस डिपार्टमेंट का एडमिन यह अनुरोध देखेगा।'
-            : 'This decides which department\u2019s admin sees the request.'}
-        </span>
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -749,28 +653,9 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'जगह / एरिया (कहाँ है समस्या?)' : 'Location / area (where is it?)'}</label>
-        <div style={{ position: 'relative' }}>
-          <span style={leadIcon}><Icon name="pin" size={18} /></span>
-          <input style={{ ...inputStyle(C), paddingLeft: 42 }} value={form.location} onChange={set('location')} placeholder={hi ? 'जैसे: लॉन, वॉशरूम, गेट 2' : 'e.g. Lawn, washroom, gate 2'} />
-        </div>
+        <label style={fieldLabel}>{hi ? 'फ़ोटो (वैकल्पिक)' : 'Photo (optional)'}</label>
+        <PhotoCapture folder="work_board" value={photos} onChange={setPhotos} />
       </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label style={fieldLabel}>{hi ? 'ब्यौरा (वैकल्पिक)' : 'Description (optional)'}</label>
-        <textarea rows={4} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.issue} onChange={set('issue')} placeholder={hi ? 'क्या ठीक करना है?' : 'What needs to be fixed?'} />
-      </div>
-
-      {/* only worth showing once there is something to translate */}
-      {form.issue.trim() && (
-        <HindiInput
-          label={hi ? 'ब्यौरा हिंदी में' : 'Description in Hindi'}
-          rows={3}
-          source={form.issue}
-          value={form.descHi}
-          onChange={(v) => setForm((f) => ({ ...f, descHi: v }))}
-        />
-      )}
 
       <div style={{ marginBottom: 16 }}>
         <label style={fieldLabel}>
@@ -782,8 +667,8 @@ function RequestForm({ C, hi, onBack, onSubmitted }) {
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <label style={fieldLabel}>{hi ? 'फ़ोटो (वैकल्पिक)' : 'Photo (optional)'}</label>
-        <PhotoCapture folder="work_board" value={photos} onChange={setPhotos} />
+        <label style={fieldLabel}>{hi ? 'ब्यौरा (वैकल्पिक)' : 'Description (optional)'}</label>
+        <textarea rows={4} style={{ ...inputStyle(C), resize: 'vertical' }} value={form.issue} onChange={set('issue')} placeholder={hi ? 'क्या ठीक करना है?' : 'What needs to be fixed?'} />
       </div>
 
       {error && (

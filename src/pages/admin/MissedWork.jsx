@@ -37,25 +37,26 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
   // list everyone on a job, including whoever did their share.
   const missedOnly = useMemo(() => rows.filter((r) => r.missed > 0), [rows])
 
+  // The By Person lens is a list of people to go and talk to. Work nobody was
+  // ever put on is a real gap, but it is not a conversation with a person — it
+  // showed up here as a card named "Nobody assigned yet", sorted to the bottom
+  // however many jobs it held, and it read as a member of staff with the worst
+  // record in the building. It has its place: the Roster names the actual empty
+  // slot, and the By Job lens below still lists it against the job it belongs
+  // to. Excluded here at the source, not just hidden from the list — its jobs
+  // and its missed count are left out of `mine` so the band header above the
+  // names adds up to exactly the people under it.
+  const assignedOnly = useMemo(() => missedOnly.filter((r) => r.task.assignee_name), [missedOnly])
+
   const groups = useMemo(() => BANDS.map((band) => {
-    const mine = missedOnly.filter((r) => band.match(taskFrequency(r.task)))
-    // by person: the same job unassigned at three venues is three different
-    // problems, but one person missing six rounds is one conversation
+    const mine = assignedOnly.filter((r) => band.match(taskFrequency(r.task)))
+    // by person: one person missing six rounds is one conversation
     const byPerson = new Map()
     mine.forEach((r) => {
-      const key = r.task.assignee_name || '_none'
+      const key = r.task.assignee_name
       if (!byPerson.has(key)) {
         byPerson.set(key, {
-          // A phrase about the work, not a name. Called t.unassigned it sat in a
-          // list of staff reading as somebody called Unassigned — same problem
-          // the progress board had, same wording as the block there.
-          key, name: r.task.assignee_name || t.nobodyAssigned,
-          unassigned: !r.task.assignee_name,
-          // Null when nobody is on it — same reason as StaffProgress: the
-          // department would be whichever task was counted first, and it gave
-          // the Unassigned row a coloured dot and a team name, so it read as a
-          // person. It is a bucket, not a member of staff.
-          department: r.task.assignee_name ? r.task.department : null,
+          key, name: key, department: r.task.department,
           expected: 0, done: 0, missed: 0, tasks: [],
         })
       }
@@ -63,13 +64,7 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
       p.expected += r.expected; p.done += r.done; p.missed += r.missed
       p.tasks.push(r)
     })
-    const people = [...byPerson.values()].sort((a, b) => (
-      // Nobody-assigned last however bad its number is: the list is read as
-      // "who do I speak to", and it is not a person to speak to.
-      (a.unassigned !== b.unassigned)
-        ? (a.unassigned ? 1 : -1)
-        : (b.missed - a.missed || a.name.localeCompare(b.name))
-    ))
+    const people = [...byPerson.values()].sort((a, b) => b.missed - a.missed || a.name.localeCompare(b.name))
     return {
       key: band.key,
       people,
@@ -77,7 +72,7 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
       missed: mine.reduce((n, r) => n + r.missed, 0),
       jobs: mine.length,
     }
-  }).filter((g) => g.jobs > 0), [missedOnly, t])
+  }).filter((g) => g.jobs > 0), [assignedOnly])
 
   // One entry per JOB — the same title at the same venue, however many people
   // carry it. In this schema a task row IS one assignee, so three people sharing
@@ -107,8 +102,14 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
     }
   }).filter((g) => g.jobs.length > 0), [rows, t])
 
-  const totalMissed = missedOnly.reduce((n, r) => n + r.missed, 0)
-  const totalOwed = missedOnly.reduce((n, r) => n + r.expected, 0)
+  // The headline sits above both lenses and has to add up to whichever one is
+  // open. By Job accounts for everything, unassigned work included — that is
+  // the true total, and it is what the job cards below sum to. By Person only
+  // ever shows people, so its headline is the same total minus the unassigned
+  // share, matching what is actually on screen underneath it.
+  const source = view === 'person' ? assignedOnly : missedOnly
+  const totalMissed = source.reduce((n, r) => n + r.missed, 0)
+  const totalOwed = source.reduce((n, r) => n + r.expected, 0)
 
   return (
     <div>
@@ -119,8 +120,8 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
         </span>
         <span style={{ fontSize: 13, color: C.tl }}>
           {hi
-            ? `बार काम नहीं हुआ — ${totalOwed} बार होना था, ${missedOnly.length} अलग काम, ${periodLabel}`
-            : `missed of ${totalOwed} due · ${missedOnly.length} different jobs · ${periodLabel}`}
+            ? `बार काम नहीं हुआ — ${totalOwed} बार होना था, ${source.length} अलग काम, ${periodLabel}`
+            : `missed of ${totalOwed} due · ${source.length} different jobs · ${periodLabel}`}
         </span>
       </div>
 
@@ -192,7 +193,7 @@ export default function MissedWork({ lang, t, rows, periodLabel }) {
                           {p.department && (
                             <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: DEPARTMENT_MAP[p.department]?.color || C.tl }} />
                           )}
-                          <span style={{ fontSize: 13.5, fontWeight: 700, color: p.unassigned ? C.red : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {p.name}
                           </span>
                         </span>

@@ -282,3 +282,39 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   .side-link svg, .side-link .side-label { transform: none !important; }
   .side-link.is-active { animation: none; }
 }
+
+/* Segmented options — the All / Pushpanjali / Exotica… switcher and the other
+ * controls built the same way (period pickers, category strips).
+ *
+ * Same arrangement as the sidebar rows: the resting colours live here so the
+ * hover can override them, and only the selected option paints inline.
+ *
+ * All of the motion is inside (hover: hover). Two of these controls are on
+ * screens the staff use on their phones, and the instruction for those is to
+ * leave them exactly as they were — a touch screen gets no hover, and no
+ * settle animation either.
+ */
+.seg-opt {
+  background: transparent;
+  color: var(--seg-ink);
+  transition: background .14s ease, color .14s ease, transform .16s ease;
+}
+
+@media (hover: hover) {
+  .seg-opt:not(.is-on):hover {
+    background: var(--seg-hover);
+    color: var(--seg-hover-ink);
+    transform: translateY(-1px);
+  }
+  .seg-opt.is-on { animation: segSettle .22s ease-out; }
+}
+
+@keyframes segSettle {
+  from { transform: scale(0.94); }
+  to   { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg-opt, .seg-opt:hover { transform: none !important; }
+  .seg-opt.is-on { animation: none; }
+}

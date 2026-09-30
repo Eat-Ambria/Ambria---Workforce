@@ -13,7 +13,7 @@ import {
   PROPERTY_MAP, propName, PROPERTIES, DEPARTMENT_MAP, deptName, personName, TASK_STATUS,
   FREQUENCY_MAP, frequencyLabel, taskFrequency,
 } from '../../constants/org'
-import { Card, Loader, EmptyState, Button, SectionTitle, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
+import { Card, Loader, EmptyState, Button, SectionTitle, inputStyle, filterStyle, FilterField, Avatar } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import Icon from '../../components/common/Icon'
 import { pct, avgOf, sumBy, rateTone } from './analyticsUtils'
@@ -873,12 +873,13 @@ export default function Analytics() {
               key={p.key}
               onClick={() => setPeriod(p.key)}
               aria-pressed={on}
+              className={`seg-opt${on ? ' is-on' : ''}`}
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
                 padding: roomy ? '8px 16px' : '7px 5px', borderRadius: 9,
                 fontSize: roomy ? 13.5 : 11.5, fontWeight: on ? 700 : 600,
-                background: on ? C.card : 'transparent',
-                color: on ? C.maroon : C.tl,
+                ...(on ? { background: C.card, color: C.maroon } : null),
+                '--seg-ink': C.tl, '--seg-hover': C.card, '--seg-hover-ink': C.text,
                 border: 'none',
                 boxShadow: on ? C.shadow : 'none',
                 cursor: 'pointer',
@@ -1318,7 +1319,12 @@ function StaffRow({ C, lang, s, compact, onOpenMissed, onOpen }) {
   ]
 
   const nameBlock = (
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* The same circle, and the same colour for the same person, as the task
+            board and User Management. That is the point of deriving it from the
+            id rather than picking one per screen. */}
+        {roomy && !compact && <Avatar name={personName(s, lang)} seed={s.id} size={34} />}
+        <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>{personName(s, lang)}</span>
           {/* an admin doing fieldwork is now in this list; say so */}
@@ -1341,6 +1347,7 @@ function StaffRow({ C, lang, s, compact, onOpenMissed, onOpen }) {
         <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>
           {propName(s.property, lang)}
           {s.department ? ` · ${deptName(s.department, lang)}` : ''}
+        </div>
         </div>
       </div>
   )

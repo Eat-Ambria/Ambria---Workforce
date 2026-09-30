@@ -50,6 +50,11 @@ never learns about it.
 
 ## Open threads
 
+- **Run `SUPABASE-MIGRATION-MONTHLY-EXACT-DATE.sql`.** Until it is, the four
+  "Staff Training" jobs (and any new monthly job that isn't the 1st) still reset
+  on the 1st of the month regardless of what day they're set for — the live bug
+  the 2026-09-29 entry found and fixed in the app's own logic, but the database
+  side needs this file run to match it.
 - **`property: 'all'` collides with the "no filter" sentinel, and it is still
   live.** A user whose stored `property` is `'all'` but who is not named in
   `ALL_PROPERTY_ADMINS` (`['vicky','sandeep']`) gets **every venue on Tasks** and
@@ -67,6 +72,11 @@ never learns about it.
   entry lists them and the exact ordering, and the work is small enough to redo
   from scratch rather than worth carrying around half-applied.
 
+- **Run `SUPABASE-MIGRATION-STAFF-ABSENCES.sql`, then RE-RUN
+  `SUPABASE-MIGRATION-DELETE-USER.sql`.** In that order. Until the first one
+  runs, the Absent controls write nothing and every figure reads as it did
+  before — `loadAbsences` swallows the missing table on purpose. The second
+  is `create or replace`, so re-running it changes no data.
 - **Run `SUPABASE-MIGRATION-VALET-BOOKING-FUNCTION-TYPE.sql`**, then redeploy
   `valet-bookings-feed`. In that order. Until both happen, `function_type` is
   code-only — see the 2026-09-05 entry.
@@ -87,6 +97,159 @@ never learns about it.
 ---
 
 ## Session log
+
+### 2026-09-29 — monthly work, pinned to one exact date
+Not committed. One new migration to run.
+
+**The ask:** the "Monthly" schedule picker offered four choices — 1st / 8th /
+15th / 22nd — standing for "week 1-4" of the month, and a monthly job stayed
+visible on the board for that whole week so a missed morning could be caught up
+on later in it. Wanted instead: pick a real date (1st, 2nd, 3rd … 31st); the
+job is due ONLY that day, gone the day after whether or not it was done, and a
+miss shows up in Analytics rather than as a week of grace on the board.
+
+**A live bug found and fixed along the way, not just the feature asked for.**
+Checked the database before writing anything: the app's own due/overdue logic
+already computed against an exact calendar day (it always turned the stored
+"week" into a real date first), but the nightly reset did not — it has been
+resetting EVERY monthly job on the 1st of the month, full stop, ignoring which
+week a job was set to. Harmless for a job on the 1st; a real bug for the four
+"Staff Training" jobs on "week 3" (the 15th) — completing one any time this
+month would have been logged against the 1st, and Analytics would have called
+it missed even though it was done. Nobody has completed one of those four since
+completion history started being recorded, so there is nothing to backfill —
+just the reset to fix, which this migration also does.
+
+| Where | What |
+| --- | --- |
+| [org.js](src/constants/org.js) | `monthlyDate` is now the day itself, not a formula; `isDueToday`/`isTaskOverdue`/`overdueReason` fold monthly into the same "same-day work" path alternate/daily already use — no more `monthweek` kind |
+| [org.js](src/constants/org.js) | new exported `ordinal()`, general (any 1-31), replacing a 4-entry lookup table |
+| [RosterModal.jsx](src/pages/admin/RosterModal.jsx) | both monthly dropdowns now list all 31 dates; local `ordinal` deleted in favour of the shared one |
+| [AdminTasks.jsx](src/pages/admin/AdminTasks.jsx) | dropped the dead `monthweek` branch from the overdue-reason line |
+| `SUPABASE-MIGRATION-MONTHLY-EXACT-DATE.sql` | **not run yet** — widens the day range 1-31, converts existing "week" values to the real day they meant, and teaches the nightly reset the exact date |
+| [org.test.js](src/constants/org.test.js) | new, 21 tests on the monthly arithmetic |
+
+**Decisions worth not re-litigating.**
+
+- *A missed monthly job is not caught up on.* Explicitly asked for — it behaves
+  like a missed alternate-day round: simply gone, not late.
+- *The Sunday-nudge (skip a Sunday-falling date to Monday) was dropped, not
+  ported.* Checked live: zero monthly jobs are marked `skip_sunday`, so nothing
+  exercises it. Reproducing it for one exact date instead of a landing-week
+  added real complexity for a rule nothing uses.
+- *The data conversion is guarded on the column's own COMMENT*, not left to
+  "don't run this twice." A second run after someone has picked a genuine
+  "3rd" from the new picker would otherwise wrongly reinterpret it as the old
+  week-3 (the 15th) and silently move it.
+- *The column stays named `month_week`.* Renaming it touches ~30 references
+  across JS and several older migration files for no functional gain — flagged
+  as debt, not fixed here.
+- *A date beyond what a short month has (the 31st in February) simply has no
+  occurrence that month* — in the reset, in `isDueToday`, and in
+  `expectedOccurrences` alike. No clamping to the last real day; documented
+  rather than guessed.
+
+**Verified:** build clean, eslint clean, 90 tests pass (21 new). The "reset
+always fires on the 1st" finding was confirmed against live `task_date` values
+before writing the fix — not assumed from the migration files, which turned out
+to disagree with each other about which version was actually live.
+
+---
+
+### 2026-09-24 — the wide layout
+Not committed. No migration.
+
+**The ask:** a mockup of the Daily Task screen — sidebar, greeting, search, five
+gradient stat cards, avatar rows — applied across the whole app. **Desktop only;
+the phone view is explicitly not being touched.**
+
+**How that constraint is held:** everything new is gated on
+`useMediaQuery('(min-width: 900px)')`, and every narrow branch is the markup that
+was already there. 900px because the sidebar takes 244 of the width and five
+cards need what is left.
+
+| Where | What |
+| --- | --- |
+| [avatar.js](src/lib/avatar.js) | `initials` + `avatarTint` — colour derived from the user id, so one person is one colour on every screen |
+| [GlobalSearch.jsx](src/components/layout/GlobalSearch.jsx) | people / venues / pages, keyboard-driven; navigates via the `member` and `property` state Daily Task already reads |
+| [Header.jsx](src/components/layout/Header.jsx) | greeting block + search on wide; the compact name-over-venue line unchanged on narrow |
+| [Sidebar.jsx](src/components/layout/Sidebar.jsx) | active item is a filled pill; user block gained an avatar and a sign-out |
+| [UI.jsx](src/components/common/UI.jsx) | `StatCard`, `PillTabs`, `Avatar`, `CountPill`, and `Tabs` renders as segments ≥900px |
+| [AdminTasks.jsx](src/pages/admin/AdminTasks.jsx) | full-width scope tabs; the category strip becomes five stat cards |
+| [StaffProgress.jsx](src/pages/admin/StaffProgress.jsx) | one person = one row: avatar, name, three count pills, bar, score |
+| [Analytics.jsx](src/pages/admin/Analytics.jsx), [Users.jsx](src/pages/admin/Users.jsx) | avatars on the person rows |
+
+**Decisions worth not re-litigating.**
+
+- *`Tabs` itself changed, rather than each page's tab row.* One edit gives
+  Training, Valet, TaskBoard and PublicFixRequest the new look and keeps them
+  from drifting apart later.
+- *The Dashboard's `StatCell` was left alone.* It is already a tinted icon tile
+  with a big tabular number and a tone — the same vocabulary. Wrapping it in a
+  gradient card would be a bordered box inside a bordered card.
+- *The search does people, venues and pages — not tasks.* A job exists once per
+  venue per person and no page opens on one, so "go to this task" would mean
+  teaching every board to focus a row. The placeholder says what it does.
+- *Avatar colour comes from the id, not the name.* Two people called Ravi get
+  different circles, and a rename keeps the same one. Red is not in the palette:
+  it means "wrong" everywhere else here.
+- *No gradient on the phone.* Not a style call — old handsets are what the staff
+  use, and this session already spent a day on a photo-upload crash there.
+
+**Verified:** build clean, eslint clean across `src/`, 65 tests pass.
+
+---
+
+### 2026-09-24 — absence: a day off stops reading as a day of failure
+Not committed. One migration to run, plus a re-run of an existing one.
+
+**The gap.** The roster serves the same jobs every morning whether or not the
+person holding them came in, and nothing recorded that they did not. A day off
+read as failure on every screen. `Analytics.jsx` already admitted it in a
+comment: *"everything else on this page comes from completions alone, which
+cannot show an absence."*
+
+**The decision, made explicitly:** an absent person's work is **written off for
+that day, not reassigned**. Reassigning would mean writing `tasks.assigned_to`,
+and the daily reset deliberately preserves that column — so a "just for today"
+hand-over would silently become permanent.
+
+| Where | What |
+| --- | --- |
+| `SUPABASE-MIGRATION-STAFF-ABSENCES.sql` | **not run yet** — `staff_absences`, one row per person per day |
+| `SUPABASE-MIGRATION-DELETE-USER.sql` | **re-run needed** — the cascade now clears these rows |
+| [absences.js](src/lib/absences.js) | the shared rule both screens read |
+| [StaffProgress.jsx](src/pages/admin/StaffProgress.jsx) | hide at the `due` filter; "Absent today" strip; Mark absent inside the expanded person |
+| [Analytics.jsx](src/pages/admin/Analytics.jsx) | `owedOverRange`, three denominators, an Absent column, both print templates |
+| [absences.test.js](src/lib/absences.test.js) | 11 tests on the arithmetic |
+
+**Decisions worth not re-litigating.**
+
+- *One row per person per day, NOT a from/to range like `staff_deployments`.*
+  Cover is read one person at a time for today; absence is read for everybody
+  across a month. As a range every reader would expand it back into days. As
+  days the reader is a Set lookup. A week off is 7 rows; 40 staff for a year is
+  15,000 — nothing.
+- *The absent person keeps a line on the board.* Their tasks are hidden, as
+  asked. That the work was set aside is not — a day of jobs quietly vanishing is
+  how you find out in a week that nobody watered anything. It is also the only
+  way to undo, since they have no row left among the names.
+- *Mark absent sits inside the expanded person, not on the scan row.* It takes a
+  whole day off the board; it belongs behind the tap the admin already makes
+  when a 0/7 makes them ask what happened.
+- *`owedOverRange` re-asks the schedule per day off rather than subtracting
+  flat.* A Monday-only job is owed nothing by somebody out on a Wednesday.
+- *Absent is not toned red on the staff table.* A day off is not a failure.
+- *`loadAbsences` returns an empty Set on any failure, including a missing
+  table.* Before the migration runs, every screen behaves exactly as it did.
+
+**Not corrected, on purpose:** `onTimeRate`. Its denominator is `completed`, so
+absence neither helps nor hurts it.
+
+**Verified:** build clean, eslint clean across `src/`, 65 tests pass (11 new).
+Not verified against the database — the table does not exist yet.
+
+---
 
 ### 2026-09-22 — the training video that played the app inside itself
 Not committed. No migration.

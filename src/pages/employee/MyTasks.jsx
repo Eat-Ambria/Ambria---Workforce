@@ -339,13 +339,14 @@ export default function MyTasks() {
               type="button"
               onClick={() => setCat(c)}
               aria-pressed={on}
+              className={`seg-opt${on ? ' is-on' : ''}`}
               style={{
                 flex: '1 1 auto', minWidth: 0, whiteSpace: 'nowrap',
                 display: 'grid', justifyItems: 'center', gap: 1,
                 padding: roomy ? '6px 16px' : '5px 6px', borderRadius: 9,
                 fontSize: roomy ? 13.5 : 13, fontWeight: on ? 700 : 600,
-                background: on ? C.card : 'transparent',
-                color: on ? C.maroon : C.tl,
+                ...(on ? { background: C.card, color: C.maroon } : null),
+                '--seg-ink': C.tl, '--seg-hover': C.card, '--seg-hover-ink': C.text,
                 border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
               }}
             >

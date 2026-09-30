@@ -2,6 +2,7 @@ import { Children } from 'react'
 import { useColors } from '../../context/ThemeContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import Icon from './Icon'
+import { initials, avatarTint } from '../../lib/avatar'
 
 export function Spinner({ size = 22, color }) {
   const C = useColors()
@@ -216,6 +217,7 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
   // Not "is this a phone" but "can five labels sit on one line", which they can
   // from about 560px up.
   const roomy = useMediaQuery('(min-width: 560px)')
+  const wide = useMediaQuery('(min-width: 900px)')
 
   // Pills below that. An underline row cannot wrap — a second row would leave
   // the first row's underlines hanging away from the border — so it scrolled
@@ -257,6 +259,41 @@ export function Tabs({ tabs, active, onChange, noMargin }) {
                 background: on ? C.brandBg : C.cardAlt,
                 color: on ? '#fff' : C.tl,
                 border: `1px solid ${on ? C.maroon : C.border}`,
+              }}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // From 900px the underline row becomes filled segments across the page. It is
+  // the same control — the change is that a tab row is now the same object here
+  // as the view switcher on Daily Task, instead of two ways of saying "pick one
+  // of these" on adjacent screens.
+  //
+  // Between 560 and 900 the underline row stays: segments need width to be
+  // segments, and at 700px with six tabs they are slivers.
+  if (wide) {
+    return (
+      <div style={{ display: 'flex', gap: 8, marginBottom: noMargin ? 0 : 16, flexWrap: 'wrap' }}>
+        {tabs.map((tab) => {
+          const on = active === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => onChange(tab.key)}
+              aria-pressed={on}
+              style={{
+                flex: '1 1 0', minWidth: 110, padding: '11px 14px', borderRadius: 12,
+                fontSize: 14, fontWeight: on ? 800 : 600,
+                color: on ? '#fff' : C.tl,
+                background: on ? C.brandBg : C.card,
+                border: `1px solid ${on ? C.brandBg : C.border}`,
+                boxShadow: on ? C.shadow : 'none',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}
             >
               {tab.label}
@@ -383,5 +420,146 @@ export function FilterChip({ children, active, onClick, dot, dotRing, check }) {
       )}
       {children}
     </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The wide layout's own vocabulary.
+//
+// Everything below renders only where there is room for it — the callers gate
+// on `useIsMobile`, and the narrow view keeps the controls it already had. That
+// is deliberate: the phone view is what the staff use on old handsets, and a
+// gradient behind every tile is the kind of change that costs a frame there for
+// nothing they asked for.
+// ---------------------------------------------------------------------------
+
+// A headline figure with a way into the thing it counts.
+//
+// `tone` is a colour key from the palette — the card takes its icon tile and a
+// soft wash of that colour, so five of them in a row read as five different
+// things rather than as five copies. The wash is a gradient of ONE hue, not
+// two: two-colour gradients drift towards looking like a brand other than this
+// one, and the number has to stay the loudest thing in the box.
+export function StatCard({ icon, label, value, tone = 'maroon', onClick, active }) {
+  const C = useColors()
+  const ink = C[tone] || C.maroon
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flex: '1 1 150px', minWidth: 0, textAlign: 'left',
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 15px', borderRadius: 16,
+        background: `linear-gradient(135deg, ${hexA(ink, 0.16)}, ${hexA(ink, 0.05)})`,
+        border: `1px solid ${active ? ink : hexA(ink, 0.28)}`,
+        boxShadow: active ? C.shadowMd : 'none',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
+      <span style={{
+        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+        display: 'grid', placeItems: 'center', background: hexA(ink, 0.18),
+      }}>
+        <Icon name={icon} size={20} color={ink} />
+      </span>
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{
+          display: 'block', fontSize: 12, fontWeight: 700, color: C.tl,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {label}
+        </span>
+        <span style={{
+          display: 'block', fontSize: 23, fontWeight: 800, color: C.text,
+          letterSpacing: '-0.02em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums',
+        }}>
+          {value}
+        </span>
+      </span>
+      {onClick && <Icon name="chevronRight" size={16} color={C.faint} style={{ flexShrink: 0 }} />}
+    </button>
+  )
+}
+
+// A colour at an opacity, from the palette's hex.
+//
+// Written out rather than reached for from a library because the palette is
+// plain hex strings in both themes and this is the only place that needs to
+// soften one. A non-hex value is returned untouched, so a token that becomes
+// `rgb()` or a gradient later degrades to "no wash" instead of to `NaN`.
+function hexA(hex, a) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || ''))
+  if (!m) return hex
+  const n = parseInt(m[1], 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
+// The big tab row: full-width segments rather than the underlined labels the
+// narrow view uses. Same props as `Tabs`, so a caller can swap between them on
+// width without restating its tabs.
+export function PillTabs({ tabs, active, onChange, style }) {
+  const C = useColors()
+  return (
+    <div style={{ display: 'flex', gap: 10, marginBottom: 16, ...style }}>
+      {tabs.map((tb) => {
+        const on = tb.key === active
+        return (
+          <button
+            key={tb.key}
+            type="button"
+            onClick={() => onChange(tb.key)}
+            style={{
+              flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 12,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              fontSize: 14, fontWeight: on ? 800 : 600,
+              color: on ? '#fff' : C.tl,
+              background: on ? C.brandBg : C.card,
+              border: `1px solid ${on ? C.brandBg : C.border}`,
+              boxShadow: on ? C.shadow : 'none',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {tb.icon && <Icon name={tb.icon} size={15} color={on ? '#fff' : C.tl} />}
+            {tb.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// The circle with somebody's initial. The tint comes from their id, so the same
+// person is the same colour everywhere — see lib/avatar.js.
+export function Avatar({ name, seed, size = 40 }) {
+  const C = useColors()
+  return (
+    <span style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      display: 'grid', placeItems: 'center',
+      fontSize: Math.round(size * 0.36), fontWeight: 800,
+      ...avatarTint(seed || name, C),
+    }}>
+      {initials(name)}
+    </span>
+  )
+}
+
+// One of the small counters that sit beside a name — an icon, a number, and the
+// colour that says which kind of number it is.
+export function CountPill({ icon, n, tone }) {
+  const C = useColors()
+  const ink = C[tone] || C.tl
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '5px 11px', borderRadius: 999,
+      background: hexA(ink, 0.13), border: `1px solid ${hexA(ink, 0.22)}`,
+      fontSize: 13, fontWeight: 800, color: ink,
+      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+    }}>
+      <Icon name={icon} size={13} color={ink} />
+      {n}
+    </span>
   )
 }

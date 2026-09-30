@@ -10,7 +10,7 @@ import {
   TASK_STATUS, DEPARTMENTS, DEPARTMENT_MAP, PROPERTIES, propName, deptName,
   memberInProperty, personName, PRIORITIES,
   FREQUENCY_MAP, taskFrequency, frequencyLabel,
-  WEEK_DAYS, dayName, dayShort, staffingLabel, monthlyDate, taskDays,
+  WEEK_DAYS, dayName, dayShort, staffingLabel, ordinal, taskDays,
   SHIFTS, shiftLabel,
 } from '../../constants/org'
 import { Button, Loader, Field, inputStyle, filterStyle } from '../../components/common/UI'
@@ -21,6 +21,7 @@ import Icon from '../../components/common/Icon'
 import HindiInput from '../../components/common/HindiInput'
 import { useConfirm } from '../../components/common/ConfirmDialog'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import TransferWorkModal from './TransferWorkModal'
 
 // A task's time window lives in the existing `time_block` column as free text.
 // Storing "09:00 - 10:00" keeps that column working everywhere it is already
@@ -254,12 +255,17 @@ const DAY_COLS = [7, 1, 2, 3, 4, 5, 6]
 // call itself a range because Saturday was missing from the middle.
 const DAY_INITIAL = { 1: 'M', 2: 'Tu', 3: 'W', 4: 'Th', 5: 'F', 6: 'Sa', 7: 'Su' }
 
-// 1 -> "1st". Hindi just takes the number — Devanagari ordinals for dates are
-// not how anyone writes a monthly rota.
-const ordinal = (n, lang) => {
-  if (lang === 'hi') return String(n)
-  const s = ['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th'
-  return `${n}${s}`
+// The dates a monthly job can be put on: the 1st, 2nd and 3rd, as asked. These
+// are the raw values stored, not inputs to monthlyDate().
+const MONTH_DAYS = [1, 2, 3]
+
+// The list a monthly dropdown offers. A job already on some other date — the
+// four Staff Training jobs sit on the 15th — keeps that date as an option of its
+// own. Without it the select has no matching option, shows "1st" instead, and
+// the screen says one date while the job runs on another.
+const monthOptions = (current) => {
+  const n = Number(current)
+  return n && !MONTH_DAYS.includes(n) ? [...MONTH_DAYS, n].sort((a, b) => a - b) : MONTH_DAYS
 }
 
 // Which days a row shows as ticked. Weekly means one day; monthly is not a
@@ -454,6 +460,8 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
   const { lang } = useLang()
   const confirm = useConfirm()
   const wide = useMediaQuery('(min-width: 760px)')
+  // "Transfer work": everything one person holds, to another, in one go
+  const [transferring, setTransferring] = useState(false)
   // A 13px icon with 1px of padding is a mouse target. A finger needs ~34px, so
   // the row actions grow on a phone instead of asking for a precise tap.
   const iconSize = wide ? 17 : 18
@@ -1800,6 +1808,24 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
             <Icon name={picking ? 'close' : 'check'} size={14} color={picking ? '#fff' : C.tl} />
             {picking ? t.cancel : t.selectRows}
           </button>
+          {/* Beside Select, the other thing done to many rows at once — but by
+              person rather than by row: somebody is leaving, and everything
+              with their name on it goes to one other person. */}
+          {!picking && (
+            <button
+              type="button"
+              onClick={() => setTransferring(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                padding: '8px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+                background: C.card, color: C.tl,
+                border: `1px solid ${C.borderStrong}`, cursor: 'pointer',
+              }}
+            >
+              <Icon name="team" size={14} color={C.tl} />
+              {lang === 'hi' ? 'काम ट्रांसफ़र' : 'Transfer work'}
+            </button>
+          )}
           {/* Only while selecting, and only over the rows on screen: with a venue
               or a department filtered, "all" cannot honestly mean rows you are not
               being shown. Tapping it again clears them. */}
@@ -2239,10 +2265,10 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
                                 onChange={(e) => e.target.value && setGroupTime(g.key, setMonthly(e.target.value))}
                                 aria-label={t.monthly}
                               >
-                                {/* "8" alone reads as a count; the date says which
-                                    day of the month the job lands on. */}
-                                {[1, 2, 3, 4].map((w) => (
-                                  <option key={w} value={w}>{ordinal(monthlyDate(w), lang)}</option>
+                                {/* The ordinal reads as a date; a bare "2"
+                                    reads as a count. */}
+                                {monthOptions(g.monthWeek).map((d) => (
+                                  <option key={d} value={d}>{ordinal(d, lang)}</option>
                                 ))}
                               </select>
                             ) : (
@@ -2366,6 +2392,15 @@ export default function RosterModal({ user, members, canSeeAllProps, defaultProp
 
           {err && <div style={{ color: C.red, fontSize: 13, marginTop: 10 }}>{err}</div>}
         </>
+      )}
+      {transferring && (
+        <TransferWorkModal
+          user={user}
+          onClose={() => setTransferring(false)}
+          // The sheet re-reads so the names on its rows are the new ones; the
+          // page around it refreshes its own counts the same way a save does.
+          onDone={() => { load(); onSaved?.() }}
+        />
       )}
     </>
   )
@@ -2775,7 +2810,7 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy, shiftOf, on
         </Field>
       )}
 
-      {/* Frequency first: it decides whether a day, a week of the month, or
+      {/* Frequency first: it decides whether a day, a date of the month, or
           neither is worth asking for. "(Mon-Sat)" is the Sunday rule; "Sunday
           only" is the light work done while clients walk the property. */}
       {/* The sheet's nine controls, in the sheet's order. Tick the days the job
@@ -2834,7 +2869,7 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy, shiftOf, on
           </Field>
         </div>
         <div style={{ flex: '1 1 150px' }}>
-          <Field label={t.monthly} hint={t.weekOfMonthHint}>
+          <Field label={t.monthly} hint={t.monthDateHint}>
             <select
               style={inputStyle(C)}
               value={value.freq === 'monthly' ? (value.monthWeek || 1) : ''}
@@ -2843,8 +2878,8 @@ function JobForm({ value, staff, onChange, onCancel, onSubmit, busy, shiftOf, on
               })}
             >
               <option value="">—</option>
-              {[1, 2, 3, 4].map((w) => (
-                <option key={w} value={w}>{ordinal(monthlyDate(w), lang)}</option>
+              {monthOptions(value.monthWeek).map((d) => (
+                <option key={d} value={d}>{ordinal(d, lang)}</option>
               ))}
             </select>
           </Field>

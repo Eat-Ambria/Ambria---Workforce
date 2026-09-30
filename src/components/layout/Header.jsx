@@ -6,10 +6,7 @@ import { PROPERTY_MAP, propName, personName } from '../../constants/org'
 import NotificationBell from './NotificationBell'
 import Icon from '../common/Icon'
 import BrandMark from '../common/BrandMark'
-
-function initials(name = '') {
-  return name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'A'
-}
+import { initials, avatarTint } from '../../lib/avatar'
 
 export default function Header({ showBrand, onMenu }) {
   const C = useColors()
@@ -73,7 +70,12 @@ export default function Header({ showBrand, onMenu }) {
           onClick={toggleAccount}
           title={t.myAccount || 'My Account'}
           aria-label={t.myAccount || 'My Account'}
-          style={{ ...avatar(C), cursor: 'pointer', ...(onAccount ? { background: C.brandBg, color: '#fff' } : {}) }}
+          style={{
+            ...avatar(C),
+            ...avatarTint(user?.id || user?.name, C),
+            cursor: 'pointer',
+            ...(onAccount ? { background: C.brandBg, color: '#fff' } : {}),
+          }}
         >{initials(user?.name)}</button>
       </div>
     </header>

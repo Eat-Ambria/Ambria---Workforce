@@ -5,7 +5,7 @@ import { todayISO, fmtDate } from '../lib/time'
 import { useColors } from '../context/ThemeContext'
 import { useT, useLang } from '../context/LangContext'
 import { useAuth } from '../context/AuthContext'
-import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, notDueToday, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
+import { personName, isAdminRole, canSeeAllProperties, scopedProperty, scopedDepartment, isTaskOverdue, notDueToday, isTodaysWork, dailyOverdueLabel, memberInProperty, isFlaggedPriority, taskFrequency, frequencyLabel, FREQUENCY_MAP, TASK_STATUS, PROPERTIES, PROPERTY_MAP, propName } from '../constants/org'
 import { assigneesQuery } from '../lib/assignees'
 import { Card, Loader, SectionTitle, filterStyle, FilterField } from '../components/common/UI'
 import Icon from '../components/common/Icon'
@@ -36,7 +36,11 @@ function AdminDashboard({ user }) {
   const [loading, setLoading] = useState(true)
   const [d, setD] = useState(null)          // aggregated stats (server counts)
   const [members, setMembers] = useState([]) // staff for the filter dropdown
-  const [prop, setProp] = useState('all') // top-level property selector (all-scope admins)
+  // Top-level property selector (all-scope admins). Opens on Pushpanjali, as
+  // asked. Only for admins who can see every venue: for anyone else `prop` is
+  // what their own scope falls back to, and a venue-locked admin at Exotica
+  // handed 'pp' here would be shown Pushpanjali with no selector to get out.
+  const [prop, setProp] = useState(() => (scopeAll ? 'pp' : 'all'))
   const [member, setMember] = useState('all') // staff filter for task stats (all | <staff id>)
 
   // people list for the filter — staff + admins (both can hold tasks),
@@ -79,10 +83,6 @@ function AdminDashboard({ user }) {
       else if (propScope) q = q.eq('property', propScope)
       return q
     }
-    let vq = supabase.from('vendors').select('*', { count: 'exact', head: true }).eq('is_active', true)
-    if (propScope) vq = vq.eq('property', propScope)
-    else if (prop !== 'all') vq = vq.or(`property.eq.${prop},property.eq.all`)
-
     // work assigned to THIS admin — admins can be given tasks / repairs too.
     // Deliberately unfiltered by the property/member selectors: it's personal.
     const myTasksQ = supabase.from('tasks').select('*', { count: 'exact', head: true })
@@ -102,7 +102,7 @@ function AdminDashboard({ user }) {
     const [
       taskRows,
       bOpen, bProg, bDone, bUrgent, bHigh,
-      vendors, videos, fireR, chemR, boardOverdue,
+      fireR, boardOverdue,
       myTasks, myFixes, wifiR,
     ] = await Promise.all([
       taskRowsQ,
@@ -113,10 +113,7 @@ function AdminDashboard({ user }) {
       // too would leave the number high all week after the work was done.
       boardBase().eq('priority', 'urgent').not('status', 'in', '("approved","completed")'),
       boardBase().eq('priority', 'high').not('status', 'in', '("approved","completed")'),
-      vq,
-      supabase.from('training_videos').select('*', { count: 'exact', head: true }).eq('is_active', true),
       scopedRows('fire_extinguishers', 'expiry_date', false),
-      scopedRows('chemical_usage', 'quantity', true),
       // repair requests past their due date and not finished (counted as overdue)
       boardBase().lt('due_date', today).neq('status', 'approved').neq('status', 'completed'),
       myTasksQ,
@@ -138,7 +135,13 @@ function AdminDashboard({ user }) {
     // together, and a second copy of it is how a tile and the screen it opens
     // start disagreeing.
     const due = (taskRows.data || []).filter((r) => !notDueToday(r))
-    const tc = (fn) => due.filter(fn).length
+    // The Daily Task tile is today's work only. A weekly job left over from
+    // Monday is still due — it is on the list — but it is late, and the
+    // Overdue tile beside this one is where it is counted. Counted here as well
+    // it read as one of today's jobs, and Pending mixed today with the backlog.
+    // All five figures use the same set, so they still add up to the total.
+    const todays = due.filter((r) => isTodaysWork(r))
+    const tc = (fn) => todays.filter(fn).length
     const fireStat = { ok: 0, expiring: 0, expired: 0 }
     ;(fireR.data || []).forEach((e) => {
       if (!e.expiry_date) { fireStat.ok++; return }
@@ -147,7 +150,6 @@ function AdminDashboard({ user }) {
       else if (days <= 15) fireStat.expiring++
       else fireStat.ok++
     })
-    const chemRows = chemR.data || []
 
     // Bills falling due inside the next two days, and any already past. Two days
     // because that is the notice somebody needs to actually pay one — the day
@@ -165,29 +167,22 @@ function AdminDashboard({ user }) {
 
     setD({
       task: {
-        total: due.length,
+        total: todays.length,
         pending: tc((r) => r.status === TASK_STATUS.PENDING),
         inProgress: tc((r) => r.status === TASK_STATUS.IN_PROGRESS),
         waiting: tc((r) => r.status === TASK_STATUS.COMPLETION_REQUESTED),
         done: tc((r) => r.status === TASK_STATUS.COMPLETED),
         // one rule for late work, the same one My Tasks and the board use
-        overdue: tc((r) => isTaskOverdue(r, today)),
-        priority: {
-          high: tc((r) => r.priority === 'high'),
-          medium: tc((r) => r.priority === 'medium'),
-          low: tc((r) => r.priority === 'low'),
-        },
+        // from `due`, not `todays`: late work is exactly what `todays` leaves out
+        overdue: due.filter((r) => isTaskOverdue(r, today)).length,
       },
       board: {
         open: cnt(bOpen), progress: cnt(bProg), done: cnt(bDone), overdue: cnt(boardOverdue),
         urgent: cnt(bUrgent), high: cnt(bHigh),
       },
       mine: { tasks: cnt(myTasks), fixes: cnt(myFixes) },
-      vendors: cnt(vendors),
       fire: fireStat,
       wifiSoon,
-      chem: { entries: chemRows.length, total: chemRows.reduce((s, r) => s + Number(r.quantity || 0), 0) },
-      videos: cnt(videos),
     })
     setLoading(false)
   }, [user, prop, member])
@@ -251,11 +246,12 @@ function AdminDashboard({ user }) {
                     type="button"
                     onClick={() => setProp(p.code)}
                     aria-pressed={on}
+                    className={`seg-opt${on ? ' is-on' : ''}`}
                     style={{
                       whiteSpace: 'nowrap', padding: '7px 15px', borderRadius: 8,
                       fontSize: 13, fontWeight: on ? 700 : 600,
-                      background: on ? C.card : 'transparent',
-                      color: on ? C.maroon : C.tl,
+                      ...(on ? { background: C.card, color: C.maroon } : null),
+                      '--seg-ink': C.tl, '--seg-hover': C.card, '--seg-hover-ink': C.text,
                       border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
                     }}
                   >
@@ -351,12 +347,6 @@ function AdminDashboard({ user }) {
           <Row C={C} label={t.completed} value={d.board.done} tone={C.green} />
         </Widget>
 
-        <Widget C={C} icon="training" title={t.training} onView={() => navigate('/training')}>
-          <Row C={C} label={t.videos} value={d.videos} tone={C.indigo} />
-          <Row C={C} label={t.chemicalUsage} value={`${d.chem.entries} logs`} tone={C.cyan} />
-          <Row C={C} label={t.chemicalUsed} value={`${d.chem.total}`} tone={C.maroon} />
-        </Widget>
-
         <Widget C={C} icon="fire" title={t.fireSafety} onView={() => navigate('/training', { state: { tab: 'fire' } })}>
           {d.fire.expired > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.rBg, color: C.red, border: `1px solid ${C.red}33`, borderLeft: `3px solid ${C.red}`, borderRadius: 10, padding: '9px 11px', fontSize: 13, fontWeight: 700 }}>
@@ -397,23 +387,6 @@ function AdminDashboard({ user }) {
           </Widget>
         )}
 
-        <Widget C={C} icon="vendors" title={t.vendors} onView={() => navigate('/vendors')}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 30, fontWeight: 800, color: C.text }}>{d.vendors}</span>
-            <span style={{ fontSize: 13, color: C.tl }}>{t.activeVendors}</span>
-          </div>
-        </Widget>
-
-        {/* each row opens the task list filtered to that priority — the View
-            link alone landed on an unfiltered list, which told you nothing */}
-        <Widget C={C} icon="warning" title={t.taskPriority} onView={() => go('/tasks', 'all')}>
-          <Row C={C} label={t.priorityHigh} value={d.task.priority.high} tone={C.red}
-               onClick={() => navigate('/tasks', { state: { tab: 'all', priority: 'high', property: prop, member } })} />
-          <Row C={C} label={t.priorityMedium} value={d.task.priority.medium} tone={C.yellow}
-               onClick={() => navigate('/tasks', { state: { tab: 'all', priority: 'medium', property: prop, member } })} />
-          <Row C={C} label={t.priorityLow} value={d.task.priority.low} tone={C.green}
-               onClick={() => navigate('/tasks', { state: { tab: 'all', priority: 'low', property: prop, member } })} />
-        </Widget>
       </div>
     </div>
   )

@@ -62,11 +62,11 @@ describe('Sidebar rows', () => {
     expect(active.style.color).not.toBe('')
   })
 
-  it('give the footer button the same class and no inline colour', () => {
+  it('give the two footer buttons the same class and no inline colour', () => {
     const { container } = renderAt('/dashboard')
     const buttons = [...container.querySelectorAll('button.side-link')]
-    // the language toggle
-    expect(buttons.length).toBe(1)
+    // the language toggle and sign-out
+    expect(buttons.length).toBe(2)
     buttons.forEach((b) => {
       expect(b.style.background).toBe('')
       expect(b.style.color).toBe('')
