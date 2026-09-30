@@ -1,4 +1,4 @@
-import { Children, cloneElement, useCallback, useEffect, useMemo, useState } from 'react'
+import { Children, Fragment, cloneElement, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { todayISO, fmtDate } from '../lib/time'
@@ -226,39 +226,65 @@ function AdminDashboard({ user }) {
       </SectionTitle>
 
       {/* venue + staff filters — both dropdowns, side by side (stack on narrow) */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+      {/* Tops, not bottoms: the venue bar is a few pixels taller than a select,
+          so bottom-aligned the two captions sat at different heights and the
+          row looked broken. The captions are the line the eye reads across. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {scopeAll && (wide ? (
           /* One setting with six values, drawn as one object. Six separate
              pills read as six independent toggles, which is not what they are —
-             the same control the Analytics period bar uses. */
+             the same control the Analytics period bar uses.
+
+             Captioned like the Members select beside it. Without one the two
+             sat at different heights — the caption pushed Members down and the
+             venue bar floated above it. A div, not FilterField: that one is a
+             <label>, and a label wrapped round six buttons clicks the first of
+             them whenever the caption is tapped. */
+          // Its own width. Stretched to fill the row, six venue names spread to
+          // two hundred pixels apiece and the bar read as the loudest thing on
+          // the page. Members takes up the rest instead.
+          <div style={{ display: 'grid', gap: 4, minWidth: 0, flex: '0 1 auto' }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+            textTransform: 'uppercase', color: C.faint,
+          }}>
+            {t.properties}
+          </span>
           <div className="no-bar" style={{
-            display: 'flex', gap: 2, padding: 3, minWidth: 0,
-            background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10,
+            display: 'flex', alignItems: 'center', gap: 2, padding: 4, minWidth: 0,
+            background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12,
             // contained, or six unshrinkable buttons push the page sideways
             overflowX: 'auto', WebkitOverflowScrolling: 'touch',
           }}>
             {[{ code: 'all', name: t.all }, ...PROPERTIES.map((p) => ({ code: p.code, name: propName(p.code, lang) }))]
-              .map((p) => {
+              .map((p, i, all) => {
                 const on = prop === p.code
+                // A hairline between two names, dropped either side of the one
+                // chosen, whose own outline already separates it.
+                const nextOn = all[i + 1] && prop === all[i + 1].code
+                const rule = i < all.length - 1 && !on && !nextOn
                 return (
+                  <Fragment key={p.code}>
                   <button
-                    key={p.code}
                     type="button"
                     onClick={() => setProp(p.code)}
                     aria-pressed={on}
                     className={`seg-opt${on ? ' is-on' : ''}`}
                     style={{
-                      whiteSpace: 'nowrap', padding: '7px 15px', borderRadius: 8,
-                      fontSize: 13, fontWeight: on ? 700 : 600,
-                      ...(on ? { background: C.card, color: C.maroon } : null),
+                      whiteSpace: 'nowrap', padding: '8px 18px', borderRadius: 9,
+                      fontSize: 14, fontWeight: on ? 700 : 500,
+                      ...(on ? { background: C.maroonSoft, color: C.maroon } : null),
                       '--seg-ink': C.tl, '--seg-hover': C.card, '--seg-hover-ink': C.text,
-                      border: 'none', boxShadow: on ? C.shadow : 'none', cursor: 'pointer',
+                      border: `1px solid ${on ? C.maroon : 'transparent'}`, cursor: 'pointer',
                     }}
                   >
                     {p.name}
                   </button>
+                  {rule && <span aria-hidden="true" style={{ width: 1, height: 18, background: C.borderStrong, flexShrink: 0 }} />}
+                  </Fragment>
                 )
               })}
+          </div>
           </div>
         ) : (
           <div style={{ flex: '1 1 140px', minWidth: 0 }}>
@@ -270,12 +296,28 @@ function AdminDashboard({ user }) {
             </FilterField>
           </div>
         ))}
+        {/* Fills what the venue bar leaves, so the row ends at the page edge. */}
         <div style={{ flex: '1 1 140px', minWidth: 0 }}>
           <FilterField label={t.members}>
-            <select style={filterStyle(C)} value={member} onChange={(e) => setMember(e.target.value)}>
-              <option value="all">{t.all}</option>
-              {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
-            </select>
+            <span style={{ position: 'relative', display: 'block' }}>
+              {wide && (
+                <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex', pointerEvents: 'none' }}>
+                  <Icon name="user" size={17} color={C.tl} />
+                </span>
+              )}
+              <select
+                style={{
+                  ...filterStyle(C),
+                  // the height of the venue bar beside it, so the two line up
+                  ...(wide ? { paddingLeft: 42, minHeight: 44, borderRadius: 12 } : null),
+                }}
+                value={member}
+                onChange={(e) => setMember(e.target.value)}
+              >
+                <option value="all">{t.all}</option>
+                {memberOptions.map((m) => <option key={m.id} value={m.id}>{personName(m, lang)}</option>)}
+              </select>
+            </span>
           </FilterField>
         </div>
       </div>
@@ -326,6 +368,7 @@ function AdminDashboard({ user }) {
       {/* Overdue — tasks and repairs together, because both are late work */}
       <StatBlock
         C={C} icon="warning" tone={C.red} title={t.overdue}
+        onView={() => go('/tasks', 'overdue')}
         hint={task.overdue + d.board.overdue === 0
           ? (lang === 'hi' ? 'कुछ भी बाकी नहीं — शाबाश' : 'Nothing late — all clear')
           : undefined}
@@ -349,10 +392,21 @@ function AdminDashboard({ user }) {
 
         <Widget C={C} icon="fire" title={t.fireSafety} onView={() => navigate('/training', { state: { tab: 'fire' } })}>
           {d.fire.expired > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.rBg, color: C.red, border: `1px solid ${C.red}33`, borderLeft: `3px solid ${C.red}`, borderRadius: 10, padding: '9px 11px', fontSize: 13, fontWeight: 700 }}>
-              <Icon name="warning" size={16} color={C.red} />
+            // Tappable, with the chevron to say so: the cylinders that need
+            // replacing are exactly the ones worth opening from here.
+            <button
+              type="button"
+              onClick={() => navigate('/training', { state: { tab: 'fire' } })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', cursor: 'pointer',
+                background: C.rBg, color: C.red, border: `1px solid ${C.red}33`, borderLeft: `3px solid ${C.red}`,
+                borderRadius: 10, padding: wide ? '11px 14px' : '9px 11px', fontSize: wide ? 14.5 : 13, fontWeight: 700,
+              }}
+            >
+              <Icon name="warning" size={wide ? 18 : 16} color={C.red} />
               {d.fire.expired} {t.fsReplaceNow}
-            </div>
+              <Icon name="chevronRight" size={16} color={C.red} style={{ marginLeft: 'auto' }} />
+            </button>
           )}
           <Row C={C} label={t.fsOk} value={d.fire.ok} tone={C.green} />
           <Row C={C} label={t.fsExpiring} value={d.fire.expiring} tone={C.yellow} />
@@ -686,7 +740,12 @@ const FIX_PRIO_LABEL = { low: 'prioLow', normal: 'prioNormal', high: 'prioHigh',
 // fix-request status → existing translation key
 const FIX_STATUS_LABEL = { assigned: 'pending', in_progress: 'inProgress', approval_requested: 'reviewQueue', open: 'pending' }
 
-const widgetGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }
+// auto-fit, not auto-fill. auto-fill keeps a column for every card that COULD
+// fit, empty or not — with two cards left on a wide screen that was two cards
+// and three empty columns, the right half of the page blank. auto-fit collapses
+// the empty ones so the cards that are there share the width. On a phone it is
+// one column either way.
+const widgetGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }
 
 function MineChip({ C, label, value, onClick }) {
   return (
@@ -705,21 +764,27 @@ function MineChip({ C, label, value, onClick }) {
   )
 }
 
+// The desktop look. The card components below are shared with the staff
+// dashboard, which is what people open on their phones, so every size change
+// here is gated on this and the narrow view keeps exactly what it had.
+const useRoomy = () => useMediaQuery('(min-width: 900px)')
+
 function Widget({ C, icon, title, onView, children }) {
+  const roomy = useRoomy()
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 32, height: 32, borderRadius: 9, background: C.maroonSoft, color: C.maroon, display: 'grid', placeItems: 'center' }}>
-            <Icon name={icon} size={18} color={C.maroon} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: roomy ? '16px 18px' : '14px 16px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: roomy ? 12 : 10 }}>
+          <span style={{ width: roomy ? 40 : 32, height: roomy ? 40 : 32, borderRadius: roomy ? 12 : 9, background: C.maroonSoft, color: C.maroon, display: 'grid', placeItems: 'center' }}>
+            <Icon name={icon} size={roomy ? 20 : 18} color={C.maroon} />
           </span>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>{title}</span>
+          <span style={{ fontWeight: 800, fontSize: roomy ? 17 : 15, letterSpacing: '-0.01em' }}>{title}</span>
         </div>
         <button onClick={onView} style={{ background: 'transparent', color: C.maroon, fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
           View <Icon name="chevronRight" size={15} color={C.maroon} />
         </button>
       </div>
-      <div style={{ padding: '12px 16px', display: 'grid', gap: 8 }}>{children}</div>
+      <div style={{ padding: roomy ? '14px 18px 18px' : '12px 16px', display: 'grid', gap: roomy ? 7 : 8 }}>{children}</div>
     </Card>
   )
 }
@@ -729,14 +794,22 @@ function Widget({ C, icon, title, onView, children }) {
 // unfiltered list. The chevron and the hover tint say it is a link.
 function Row({ C, label, value, tone, danger, onClick }) {
   const interactive = !!onClick
+  // Desktop: each row in a strip of its own. At half the page wide, a label on
+  // the left and its number on the far right with nothing between them lost the
+  // line — the eye had to travel six hundred pixels to pair them up.
+  const roomy = useRoomy()
+  const strip = roomy ? {
+    margin: 0, padding: '10px 14px', borderRadius: 10,
+    background: C.cardAlt, border: `1px solid ${C.border}`,
+  } : null
   return (
     <div
       onClick={onClick}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       onKeyDown={interactive ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
-      onMouseEnter={interactive ? (e) => { e.currentTarget.style.background = C.cardAlt } : undefined}
-      onMouseLeave={interactive ? (e) => { e.currentTarget.style.background = 'transparent' } : undefined}
+      onMouseEnter={interactive ? (e) => { e.currentTarget.style.background = roomy ? C.card : C.cardAlt } : undefined}
+      onMouseLeave={interactive ? (e) => { e.currentTarget.style.background = roomy ? C.cardAlt : 'transparent' } : undefined}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
         cursor: interactive ? 'pointer' : undefined,
@@ -744,14 +817,15 @@ function Row({ C, label, value, tone, danger, onClick }) {
         padding: interactive ? '4px 8px' : undefined,
         borderRadius: interactive ? 8 : undefined,
         transition: 'background .12s',
+        ...strip,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: danger ? C.red : C.tl, fontWeight: danger ? 700 : 400 }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tone, flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: roomy ? 10 : 8, fontSize: roomy ? 15 : 14, color: danger ? C.red : (roomy ? C.text : C.tl), fontWeight: danger ? 700 : (roomy ? 500 : 400) }}>
+        <span style={{ width: roomy ? 10 : 8, height: roomy ? 10 : 8, borderRadius: '50%', background: tone, flexShrink: 0 }} />
         {label}
       </div>
       <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: danger ? C.red : C.text }}>{value ?? 0}</span>
+        <span style={{ fontSize: roomy ? 18 : 16, fontWeight: 800, color: danger ? C.red : C.text, fontVariantNumeric: 'tabular-nums' }}>{value ?? 0}</span>
         {interactive && <Icon name="chevronRight" size={14} color={C.faint} />}
       </span>
     </div>
@@ -764,20 +838,28 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
   // toArray drops the conditional cells that render as false, so the column
   // count and the dividers are both taken from what is actually shown.
   const cells = Children.toArray(children)
+  const roomy = useRoomy()
   return (
-    <Card style={{ padding: 16, marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <span style={{ width: 34, height: 34, borderRadius: 11, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-          <Icon name={icon} size={17} color={tone} />
+    <Card style={{ padding: roomy ? 20 : 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: roomy ? 12 : 10, marginBottom: roomy ? 18 : 14 }}>
+        <span style={{ width: roomy ? 44 : 34, height: roomy ? 44 : 34, borderRadius: roomy ? 13 : 11, background: tint(tone, 0.12), display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <Icon name={icon} size={roomy ? 22 : 17} color={tone} />
         </span>
-        <span style={{ fontSize: 15.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
+        <span style={{ fontSize: roomy ? 18 : 15.5, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{title}</span>
         {onView && (
           <button
             type="button"
             onClick={onView}
-            style={{ marginLeft: 'auto', background: 'transparent', color: C.tl, display: 'inline-flex', alignItems: 'center', padding: 2 }}
+            aria-label={title}
+            // A round button on desktop: a bare chevron in a corner read as
+            // decoration, and this is the way into the whole list.
+            style={roomy ? {
+              marginLeft: 'auto', width: 34, height: 34, borderRadius: '50%',
+              display: 'grid', placeItems: 'center', cursor: 'pointer',
+              background: C.cardAlt, border: `1px solid ${C.border}`,
+            } : { marginLeft: 'auto', background: 'transparent', color: C.tl, display: 'inline-flex', alignItems: 'center', padding: 2 }}
           >
-            <Icon name="chevronRight" size={16} color={C.faint} />
+            <Icon name="chevronRight" size={roomy ? 17 : 16} color={roomy ? C.tl : C.faint} />
           </button>
         )}
       </div>
@@ -814,37 +896,38 @@ function StatBlock({ C, icon, tone, title, hint, onView, children }) {
 // is first.
 function StatCell({ C, icon, value, label, tone, onClick, strong, divider }) {
   const dim = !value && !strong
+  const roomy = useRoomy()
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        display: 'grid', justifyItems: 'center', gap: 5, padding: '2px 4px',
+        display: 'grid', justifyItems: 'center', gap: roomy ? 7 : 5, padding: roomy ? '2px 6px 4px' : '2px 4px',
         background: 'transparent', border: 'none',
         borderLeft: divider ? `1px solid ${C.border}` : undefined,
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
       <span style={{
-        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-        background: tint(tone, 0.12),
+        width: roomy ? 50 : 32, height: roomy ? 50 : 32, borderRadius: roomy ? 14 : 10, flexShrink: 0,
+        background: tint(tone, roomy ? 0.16 : 0.12),
         display: 'grid', placeItems: 'center',
       }}>
-        <Icon name={icon} size={16} color={tone} />
+        <Icon name={icon} size={roomy ? 24 : 16} color={tone} />
       </span>
       {/* tabular figures: without them a row of 157 / 127 / 12 / 18 has its
           digits at four different widths and never lines up */}
       <span style={{
-        fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em',
+        fontSize: roomy ? 32 : 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em',
         fontVariantNumeric: 'tabular-nums',
         color: dim ? C.faint : (strong ? tone : C.text),
       }}>
         {value ?? 0}
       </span>
-      <span style={{ fontSize: 11, fontWeight: 600, color: C.tl, textAlign: 'center', lineHeight: 1.25 }}>
+      <span style={{ fontSize: roomy ? 14 : 11, fontWeight: roomy ? 500 : 600, color: roomy ? C.text : C.tl, textAlign: 'center', lineHeight: 1.25 }}>
         {label}
       </span>
-      <span style={{ width: 22, height: 3, borderRadius: 999, background: tone }} />
+      <span style={{ width: roomy ? 34 : 22, height: roomy ? 4 : 3, borderRadius: 999, background: tone }} />
     </button>
   )
 }
