@@ -4,6 +4,22 @@ import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
 import { propName, PROPERTIES, scopedProperty } from '../../../constants/org'
+
+// Where a recorder can be: the five venues, plus the studio.
+//
+// The studio has cameras but is not a venue — nobody is rostered there, nothing
+// is booked there — so it is added here rather than to PROPERTIES, where it
+// would turn up in every venue picker in the app (tasks, valet, the dashboard).
+// The column is plain text, so 'studio' needs nothing from the database.
+const CCTV_PLACES = [
+  ...PROPERTIES.map((p) => ({ code: p.code, name: p.name })),
+  { code: 'studio', name: 'Studio', nameHi: 'स्टूडियो' },
+]
+const placeName = (code, lang) => {
+  const extra = CCTV_PLACES.find((p) => p.code === code && p.nameHi)
+  if (extra) return lang === 'hi' ? extra.nameHi : extra.name
+  return propName(code, lang)
+}
 import { Card, Loader, EmptyState, Badge, Button, Field, FilterChip, inputStyle } from '../../../components/common/UI'
 import Modal from '../../../components/common/Modal'
 import MultiSelect from '../../../components/common/MultiSelect'
@@ -79,7 +95,7 @@ export default function CctvDevices() {
   const removeDevice = useCallback(async (d) => {
     if (!(await confirm({
       message: t.deleteDeviceConfirm,
-      detail: `${propName(d.property, lang)}${d.company ? ` · ${d.company}` : ''}`,
+      detail: `${placeName(d.property, lang)}${d.company ? ` · ${d.company}` : ''}`,
     }))) return
     await supabase.from('cctv_devices').delete().eq('id', d.id)
     load()
@@ -89,7 +105,7 @@ export default function CctvDevices() {
   // dead end dressed up as a choice.
   const propOptions = useMemo(() => {
     const present = new Set(rows.map((d) => d.property))
-    return PROPERTIES.filter((p) => present.has(p.code)).map((p) => ({ value: p.code, label: p.name }))
+    return CCTV_PLACES.filter((p) => present.has(p.code)).map((p) => ({ value: p.code, label: p.name }))
   }, [rows])
 
   const visible = useMemo(
@@ -125,7 +141,7 @@ export default function CctvDevices() {
                   active={on}
                   onClick={() => setPropSel((prev) => (on ? prev.filter((v) => v !== o.value) : [...prev, o.value]))}
                 >
-                  {propName(o.value, lang)}
+                  {placeName(o.value, lang)}
                 </FilterChip>
               )
             })}
@@ -152,7 +168,7 @@ export default function CctvDevices() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Icon name="camera" size={18} color={C.maroon} />
                 <span style={{ fontWeight: 700, fontSize: 15.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {propName(d.property, lang)}
+                  {placeName(d.property, lang)}
                 </span>
                 {d.company && <Badge color={C.maroon} bg={C.maroonSoft}>{d.company}</Badge>}
                 <Button variant="ghost" onClick={(ev) => { ev.stopPropagation(); removeDevice(d) }}
@@ -297,13 +313,13 @@ function DeviceModal({ record, propScope, onClose, onSaved }) {
       {propScope ? (
         <Field label={t.propertyLabel} required>
           <div style={{ ...inputStyle(C), display: 'flex', alignItems: 'center', color: C.tl, background: C.cardAlt }}>
-            {propName(propScope, lang)}
+            {placeName(propScope, lang)}
           </div>
         </Field>
       ) : (
         <Field label={t.propertyLabel} required>
           <select style={inputStyle(C)} value={form.property} onChange={set('property')}>
-            {PROPERTIES.map((p) => <option key={p.code} value={p.code}>{propName(p.code, lang)}</option>)}
+            {CCTV_PLACES.map((p) => <option key={p.code} value={p.code}>{placeName(p.code, lang)}</option>)}
           </select>
         </Field>
       )}
