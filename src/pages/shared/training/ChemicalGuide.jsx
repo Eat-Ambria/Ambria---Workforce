@@ -468,19 +468,27 @@ export default function ChemicalGuide({ visibleProps }) {
                 onClick={admin && c.row ? () => setEditingFormula(c.row) : undefined}
                 style={{ padding: 0, overflow: 'hidden', borderLeft: `4px solid ${c.color}`, cursor: admin && c.row ? 'pointer' : 'default' }}
               >
-                <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                {/* Four lines, in the order they are read: what it is, where it
+                    goes, how to mix it, and the sum behind the quantity. The mix
+                    and the sum used to share one faint 11.5px style, so the line a
+                    cleaner acts on looked exactly as skippable as the arithmetic.
+                    Now the mix reads as an instruction and the sum as a footnote,
+                    with even-width digits so its numbers line up. */}
+                <div style={{ padding: '13px 15px', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ padding: '2px 7px', borderRadius: 5, background: c.color + '20', color: c.color, fontSize: 10.5, fontWeight: 700 }}>{c.code}</span>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{hi && c.nameHi ? c.nameHi : c.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+                      <span style={{ padding: '2px 7px', borderRadius: 5, background: c.color + '20', color: c.color, fontSize: 11, fontWeight: 800, letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{c.code}</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: C.text, letterSpacing: '-0.01em', lineHeight: 1.25 }}>{hi && c.nameHi ? c.nameHi : c.name}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: C.tl, marginBottom: 5 }}>{hi && c.areaHi ? c.areaHi : c.area}</div>
-                    <div style={{ fontSize: 11.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{c.formula}</div>
-                    <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{hi && c.noteHi ? c.noteHi : c.note}</div>
+                    <div style={{ fontSize: 13, color: C.tl, fontWeight: 500, marginBottom: 8 }}>{hi && c.areaHi ? c.areaHi : c.area}</div>
+                    {(hi && c.noteHi ? c.noteHi : c.note) && (
+                      <div style={{ fontSize: 13, color: C.text, fontWeight: 600, lineHeight: 1.4 }}>{hi && c.noteHi ? c.noteHi : c.note}</div>
+                    )}
+                    <div style={{ fontSize: 12, color: C.faint, marginTop: 3, fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' }}>{c.formula}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: c.color, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{c.qty}</div>
-                    <div style={{ fontSize: 11, color: C.tl, fontWeight: 600 }}>{unitLabel(c.unit, hi)}/{perMonth(hi)}</div>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: c.color, letterSpacing: '-0.02em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>{c.qty}</div>
+                    <div style={{ fontSize: 11.5, color: C.tl, fontWeight: 600, marginTop: 2 }}>{unitLabel(c.unit, hi)}/{perMonth(hi)}</div>
                   </div>
                 </div>
               </Card>
