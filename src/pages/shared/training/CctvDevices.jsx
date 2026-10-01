@@ -44,21 +44,32 @@ const iconBtn = { background: 'transparent', padding: 2, lineHeight: 0, flexShri
  * `children` wins over `value` — the password cell needs its own buttons beside
  * the text and everything else is a plain string.
  */
-function Cell({ C, label, value, mono, children }) {
+// How a code reads on these cards — a serial number, a revealed password. The
+// app's own face, not a monospace: `ui-monospace` is a Safari keyword, Chrome on
+// Windows falls to Courier New, and a second typeface on one line read as a
+// different kind of thing from the username beside it. Even-width digits and a
+// little air between characters are what make a code legible; that is all this
+// adds. Copy is right there for anyone who needs it character-perfect.
+const CODE = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.03em' }
+
+function Cell({ C, label, value, code, children }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{
-        fontSize: 11, fontWeight: 600, color: C.faint,
-        textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3,
+        fontSize: 10.5, fontWeight: 700, color: C.faint,
+        textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5,
       }}>
         {label}
       </div>
       <div style={{
-        fontSize: 13.5, fontWeight: 600, display: 'flex',
-        alignItems: 'center', gap: 6, minWidth: 0,
+        fontSize: 14.5, fontWeight: 600, color: C.text, display: 'flex',
+        alignItems: 'center', gap: 6, minWidth: 0, lineHeight: 1.35,
       }}>
         {children ?? (value
-          ? <span style={{ fontFamily: mono ? 'ui-monospace, monospace' : undefined, wordBreak: 'break-all' }}>{value}</span>
+          // A code, not prose: the app's own face with even-width digits and a
+          // little air between characters, so a long serial still reads as
+          // one, without switching to a second typeface for it.
+          ? <span style={{ wordBreak: 'break-all', ...(code ? CODE : null) }}>{value}</span>
           : <span style={{ color: C.faint }}>—</span>)}
       </div>
     </div>
@@ -167,7 +178,7 @@ export default function CctvDevices() {
                   identical cards apart at a glance. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Icon name="camera" size={18} color={C.maroon} />
-                <span style={{ fontWeight: 700, fontSize: 15.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.01em', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {placeName(d.property, lang)}
                 </span>
                 {d.company && <Badge color={C.maroon} bg={C.maroonSoft}>{d.company}</Badge>}
@@ -188,20 +199,28 @@ export default function CctvDevices() {
                 gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                 marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`,
               }}>
-                <Cell C={C} label={t.serialNo} value={d.serial_number} mono />
+                <Cell C={C} label={t.serialNo} value={d.serial_number} code />
                 <Cell C={C} label={t.username} value={d.username} />
                 <Cell C={C} label={t.password}>
                   {!d.password ? (
                     <span style={{ color: C.faint }}>—</span>
                   ) : (
                     <>
-                      <span style={{
-                        fontFamily: shown === d.id ? 'ui-monospace, monospace' : undefined,
-                        letterSpacing: shown === d.id ? 0 : 1.5,
-                        wordBreak: 'break-all',
-                      }}>
-                        {shown === d.id ? d.password : '••••••••'}
-                      </span>
+                      {/* Masked, the dots are drawn smaller than the text and
+                          raised to its middle, so the row sits at the same
+                          height as the username next to it rather than as a
+                          line of large black beads. Revealed, it is a code like
+                          the serial number: same face, same spacing. */}
+                      {shown === d.id ? (
+                        <span style={{ wordBreak: 'break-all', ...CODE }}>{d.password}</span>
+                      ) : (
+                        <span aria-label={t.password} style={{
+                          fontSize: 11, letterSpacing: '0.22em', lineHeight: 1,
+                          color: C.text, position: 'relative', top: -1,
+                        }}>
+                          ●●●●●●●●
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={(ev) => { ev.stopPropagation(); setShown((s) => (s === d.id ? null : d.id)) }}
@@ -226,8 +245,8 @@ export default function CctvDevices() {
 
               {d.notes && (
                 <div style={{
-                  fontSize: 12.5, color: C.tl, marginTop: 12, paddingTop: 10,
-                  borderTop: `1px solid ${C.border}`,
+                  fontSize: 13, fontWeight: 500, color: C.tl, lineHeight: 1.45,
+                  marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.border}`,
                 }}>
                   {d.notes}
                 </div>
