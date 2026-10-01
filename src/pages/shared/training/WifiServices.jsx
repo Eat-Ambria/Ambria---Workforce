@@ -63,8 +63,14 @@ const RAIL = (C) => `${C.maroon}55`
 const cellInput = (C) => ({
   width: '100%', background: C.white, color: C.text,
   border: `1px solid ${C.border}`, borderRadius: 7,
-  padding: '6px 8px', fontSize: 12.5, outline: 'none',
+  padding: '6px 8px', fontSize: 13.5, fontWeight: 500, outline: 'none',
 })
+
+// A password or a phone number reads as a code, the same way it does on the CCTV
+// cards: even-width digits and a little air between characters, in the sheet's
+// own face. Without it "9871 0" and "98710" are hard to tell apart at a glance,
+// and a wifi key is read out over the phone character by character.
+const CODE = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.03em', fontWeight: 600 }
 
 // id for a row that exists only on screen. Prefixed so the save can tell a new
 // row from a saved one without a second flag to keep in step.
@@ -617,7 +623,7 @@ export default function WifiServices() {
                   <span style={{ ...tdCell, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <input
                       className="sheet-cell"
-                      style={cellInput(C)}
+                      style={{ ...cellInput(C), ...CODE }}
                       value={r.password || ''}
                       placeholder={hi ? 'पासवर्ड' : 'Password'}
                       onChange={(e) => set(r.key, { password: e.target.value })}
@@ -690,7 +696,7 @@ export default function WifiServices() {
                       <input
                         className="sheet-cell"
                         inputMode="tel"
-                        style={cellInput(C)}
+                        style={{ ...cellInput(C), ...CODE }}
                         value={r.contact || ''}
                         placeholder="98XXXXXXXX"
                         onChange={(e) => set(r.key, { contact: e.target.value })}
