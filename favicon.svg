@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#000000"/>
+  <!-- the Ambria lambda, drawn as strokes so it stays crisp down to 16px -->
+  <path d="M150 366 L256 152 L362 366" fill="none" stroke="#FFFFFF"
+        stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

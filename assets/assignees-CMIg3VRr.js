@@ -1,0 +1,1 @@
+import{s as a,W as s}from"./main-C2k4n0gT.js";function n({propScope:r,deptScope:t}={}){let e=a.from("users").select("id, name, name_hi, role, department, property, designation, shift").eq("is_active",!0).in("role",s).order("name");return r&&(e=e.or(`property.eq.${r},property.eq.all`)),t&&(e=e.eq("department",t)),e}export{n as a};
