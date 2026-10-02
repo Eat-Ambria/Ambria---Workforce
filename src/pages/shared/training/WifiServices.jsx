@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import { todayISO } from '../../../lib/time'
+import { todayISO, fmtDate } from '../../../lib/time'
 import { useColors } from '../../../context/ThemeContext'
 import { useT, useLang } from '../../../context/LangContext'
 import { useAuth } from '../../../context/AuthContext'
@@ -71,6 +71,24 @@ const cellInput = (C) => ({
 // own face. Without it "9871 0" and "98710" are hard to tell apart at a glance,
 // and a wifi key is read out over the phone character by character.
 const CODE = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.03em', fontWeight: 600 }
+
+/**
+ * The same day next month, for a bill just paid.
+ *
+ * Clamped to the month's last day, the way the nightly rollover's Postgres
+ * `+ interval '1 month'` is (SUPABASE-MIGRATION-WIFI-DUE-ROLLOVER.sql): the 31st
+ * of January becomes the 28th of February rather than spilling into March,
+ * which is what `new Date(y, m + 1, 31)` would do. Plain string in, plain
+ * string out — no time zone gets a chance to move the day.
+ */
+export function nextMonthISO(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number)
+  const ty = m === 12 ? y + 1 : y
+  const tm = m === 12 ? 1 : m + 1
+  const last = new Date(ty, tm, 0).getDate()   // day 0 of the month after = last of this one
+  const day = Math.min(d, last)
+  return `${ty}-${String(tm).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
 
 // id for a row that exists only on screen. Prefixed so the save can tell a new
 // row from a saved one without a second flag to keep in step.
@@ -419,6 +437,32 @@ export default function WifiServices() {
     load()
   }
 
+  // Paid: the due date moves to the same day next month, which also takes the
+  // reminder off the Dashboard (it only shows a bill inside its last 3 days).
+  //
+  // Written straight away, for this one field, rather than waiting for Save:
+  // paying a bill is an event, not an edit, and it should not sit unsaved on a
+  // sheet somebody may walk away from. The row's other unsaved edits are left
+  // exactly as they were — only due_date is touched, on screen and in `saved`,
+  // so Save still knows what else is pending.
+  async function markPaid(r) {
+    if (!r.id || !r.due_date) return
+    const next = nextMonthISO(r.due_date)
+    const ok = await confirm({
+      message: hi ? 'बिल भर दिया?' : 'Mark this bill paid?',
+      detail: `${(hi && r.wifi_name_hi) || r.wifi_name || ''} · ${hi ? 'अगली तारीख़' : 'next due'} ${fmtDate(next)}`,
+      confirmLabel: hi ? 'हाँ, भर दिया' : 'Paid',
+    })
+    if (!ok) return
+    const { error } = await supabase.from('wifi_services')
+      .update({ due_date: next, updated_at: new Date().toISOString() })
+      .eq('id', r.id)
+    if (error) { setErr(error.message); return }
+    const bump = (list) => list.map((x) => (x.key === r.key ? { ...x, due_date: next } : x))
+    setRows(bump)
+    setSaved(bump)
+  }
+
   async function copyPassword(r) {
     if (!r.password) return
     try {
@@ -726,7 +770,7 @@ export default function WifiServices() {
                       onChange={(e) => set(r.key, { due_date: e.target.value })}
                     />
                     {r.due_date && (
-                      <span style={{ display: 'flex', justifyContent: 'center', marginTop: 5 }}>
+                      <span style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
                         <span style={{
                           fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em',
                           color: C[st.color] || C.faint,
@@ -735,6 +779,25 @@ export default function WifiServices() {
                         }}>
                           {st.label}
                         </span>
+                        {/* Saved rows only: an unsaved row has no id to write
+                            to, and its date is not a bill anybody has yet. */}
+                        {!isNew && r.id && (
+                          <button
+                            type="button"
+                            onClick={() => markPaid(r)}
+                            title={hi ? 'बिल भरा — अगले महीने की तारीख़' : 'Paid — move to next month'}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                              fontSize: 10, fontWeight: 800, letterSpacing: '0.03em',
+                              color: C.green, background: C.gBg,
+                              border: `1px solid ${C.green}55`, borderRadius: 999,
+                              padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            <Icon name="check" size={11} color={C.green} />
+                            {hi ? 'भर दिया' : 'Paid'}
+                          </button>
+                        )}
                       </span>
                     )}
                   </span>

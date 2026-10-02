@@ -121,7 +121,14 @@ function AdminDashboard({ user }) {
       // Wifi bills. Rows, not a count: the reminder names the connection and the
       // day, and a number on its own would send an admin hunting through the
       // register for which of ten it meant.
-      scopedRows('wifi_services', 'id, wifi_name, wifi_name_hi, property, due_date', false),
+      //
+      // Every venue this admin may see, whatever the venue bar is on. The bar
+      // opens on Pushpanjali, so a bill due at Exotica was hidden by default —
+      // a reminder you have to go looking for is not one. Each row already
+      // names its venue. A venue-locked admin still sees only their own.
+      (propScope
+        ? supabase.from('wifi_services').select('id, wifi_name, wifi_name_hi, property, due_date').eq('property', propScope)
+        : supabase.from('wifi_services').select('id, wifi_name, wifi_name_hi, property, due_date')),
     ])
 
     const cnt = (r) => r.count || 0
@@ -151,10 +158,11 @@ function AdminDashboard({ user }) {
       else fireStat.ok++
     })
 
-    // Bills falling due inside the next two days, and any already past. Two days
-    // because that is the notice somebody needs to actually pay one — the day
-    // itself is too late to arrange anything, and a week out it is noise that
-    // gets scrolled past until it stops being read.
+    // Bills falling due inside the next three days, and any already past. It was
+    // two, and a bill three days out sat in the WiFi register marked "In 3 days"
+    // with nothing on this screen — the notice the admins actually wanted is
+    // three. Marking a bill Paid in the register moves its date a month on,
+    // which is what takes it off here.
     //
     // The nightly roll-over moves a date on to next month once it has passed
     // (SUPABASE-MIGRATION-WIFI-DUE-ROLLOVER.sql), so "overdue" here means today
@@ -162,7 +170,7 @@ function AdminDashboard({ user }) {
     const wifiSoon = (wifiR.data || [])
       .filter((r) => r.due_date)
       .map((r) => ({ ...r, days: Math.ceil((new Date(r.due_date) - new Date(today)) / 86400000) }))
-      .filter((r) => r.days <= 2)
+      .filter((r) => r.days <= 3)
       .sort((a, b) => a.days - b.days)
 
     setD({
@@ -188,6 +196,22 @@ function AdminDashboard({ user }) {
   }, [user, prop, member])
 
   useEffect(() => { load() }, [load])
+
+  // Keep the figures current without a reload, like the Daily Task board does:
+  // every minute, and the moment the tab comes back into view. Without it, a
+  // bill marked paid — or put back — in the WiFi register in another tab left
+  // this screen showing the old answer until somebody refreshed by hand.
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) load() }
+    const id = setInterval(tick, 60000)
+    document.addEventListener('visibilitychange', tick)
+    window.addEventListener('focus', tick)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+      window.removeEventListener('focus', tick)
+    }
+  }, [load])
 
   // people options for the filter — scoped to the selected property, sorted by name
   const memberOptions = useMemo(() => {
