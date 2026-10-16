@@ -5,6 +5,7 @@ import { uploadPhotos } from '../../lib/storage'
 import { Spinner } from './UI'
 import Icon from './Icon'
 import PhotoViewer from './PhotoViewer'
+import InPageCamera, { canUseInPageCamera } from './InPageCamera'
 
 // Ten per field. There was no ceiling at all, so a single task could carry as
 // many photos as somebody kept tapping — each one a full-size upload sitting in
@@ -33,6 +34,16 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
   // photo opens when you tap it; here it was a 72px square and nothing else, so
   // there was no way to check what you had just uploaded before submitting it.
   const [viewAt, setViewAt] = useState(null)
+  // The camera drawn on this page (see InPageCamera). Falls back to the phone's
+  // camera app only when it cannot be opened here — and remembers that for the
+  // rest of the visit, so a refused permission is not asked again on every tap.
+  const [camOpen, setCamOpen] = useState(false)
+  const [noInPage, setNoInPage] = useState(false)
+
+  const openCamera = () => {
+    if (!noInPage && canUseInPageCamera()) setCamOpen(true)
+    else camRef.current?.click()
+  }
 
   const room = multiple ? Math.max(0, max - value.length) : 1
   const full = room === 0
@@ -103,7 +114,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
       <div style={{ display: 'flex', gap: 10 }}>
         <button
           type="button"
-          onClick={() => camRef.current?.click()}
+          onClick={openCamera}
           disabled={busy || full}
           style={{ ...btn(C, C.brandBg, '#fff'), opacity: full ? 0.5 : 1 }}
         >
@@ -119,7 +130,25 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
         </button>
       </div>
 
-      {/* capture opens the rear camera on phones. NOTE: no `multiple` here —
+      {camOpen && (
+        <InPageCamera
+          onCapture={(file) => { setCamOpen(false); handleFiles([file]) }}
+          onClose={() => setCamOpen(false)}
+          // Not straight to the file input: by now the tap that opened this is
+          // long gone (a permission prompt sat in between), and a browser will
+          // not open a file picker without a fresh one. Say so; the next tap
+          // goes to the phone's camera.
+          onUnavailable={() => {
+            setCamOpen(false); setNoInPage(true)
+            setErr(t.cameraFallback || 'The camera could not open here — tap Take photo again.')
+          }}
+        />
+      )}
+
+      {/* The fallback only: the phone's own camera app, for a browser that
+          cannot show the camera on the page. On a low-memory phone this is the
+          path that loses the photo — see InPageCamera.
+          capture opens the rear camera on phones. NOTE: no `multiple` here —
           many mobile browsers ignore `capture` when `multiple` is set and fall
           back to the file picker, so the camera would never open. */}
       <input
