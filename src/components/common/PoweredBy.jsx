@@ -17,6 +17,13 @@ export default function PoweredBy({ light = false, style }) {
     >
       Powered by{' '}
       <span style={{ fontWeight: 700, color: light ? '#fff' : C.tl }}>Ambria</span>
+      {/* Which build this phone is running. Small, but it is the only way to
+          tell from a screenshot whether a fix has reached somebody yet. */}
+      {import.meta.env.VITE_BUILD && (
+        <span style={{ display: 'block', fontSize: 10, marginTop: 2, opacity: 0.75 }}>
+          v {import.meta.env.VITE_BUILD}
+        </span>
+      )}
     </div>
   )
 }

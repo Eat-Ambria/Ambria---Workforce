@@ -29,6 +29,8 @@ const MAX_DIM = 1280 // Maximum width or height allowed
 // Enough to cover the header and any EXIF thumbnail ahead of the frame marker,
 // without pulling the whole file into memory to read five bytes out of it.
 const HEADER_BYTES = 256 * 1024
+// Past this, a file whose size we cannot read is treated as a full camera photo.
+const LARGE_UNKNOWN = 1024 * 1024
 
 export async function compressImage(file, targetBytes = TARGET_BYTES) {
   // Already small enough to send as it is. Worth checking first: a phone set to
@@ -126,7 +128,20 @@ async function drawScaled(file) {
 async function decodeOptions(file) {
   const opts = { imageOrientation: 'from-image' }
   const dims = await jpegSize(file)
-  if (!dims) return opts // not a JPEG, or an unreadable header: decode as-is
+  if (!dims) {
+    // Not a JPEG we can read the size of — a HEIC or PNG from a phone that
+    // saves those, or a header past where we look. Decoded as-is, a 12 MP one
+    // is about 48 MB in one go: the single-photo crash. Anything big enough to
+    // be a camera photo is decoded straight to the stored width instead; the
+    // height follows the picture's own proportions, so nothing is squashed.
+    // Small files are left alone — they are screenshots and stickers, and
+    // forcing them up to this width would cost more than decoding them.
+    if ((file?.size || 0) > LARGE_UNKNOWN) {
+      opts.resizeWidth = MAX_DIM
+      opts.resizeQuality = 'high'
+    }
+    return opts
+  }
   if (Math.max(dims.width, dims.height) <= MAX_DIM) return opts // no gain
   if (dims.width >= dims.height) opts.resizeWidth = MAX_DIM
   else opts.resizeHeight = MAX_DIM

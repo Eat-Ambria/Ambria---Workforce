@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
-import { uploadPhotos } from '../../lib/storage'
+import { uploadPhoto } from '../../lib/storage'
+import { compressImage } from '../../lib/imageCompress'
+import { makeThumb, rememberThumb, thumbFor } from '../../lib/thumbs'
 import { Spinner } from './UI'
 import Icon from './Icon'
 import PhotoViewer from './PhotoViewer'
@@ -65,7 +67,16 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
       ? t.photoLimitTrimmed.replace('{taken}', taking.length).replace('{n}', max)
       : '')
     try {
-      const urls = await uploadPhotos(taking, folder)
+      // One at a time, compressed first so the preview is drawn from the small
+      // copy rather than from a 12-megapixel gallery original. uploadPhoto then
+      // sees a JPEG already under target and sends it as it is.
+      const urls = []
+      for (const f of taking) {
+        const small = await compressImage(f)
+        const url = await uploadPhoto(small, folder)
+        rememberThumb(url, await makeThumb(small))
+        urls.push(url)
+      }
       const next = multiple ? [...value, ...urls] : urls.slice(-1)
       onChange?.(next)
     } catch (e) {
@@ -88,8 +99,9 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
           {value.map((url, i) => (
             <div key={url} style={{ position: 'relative' }}>
               <img
-                src={url}
+                src={thumbFor(url)}
                 alt=""
+                decoding="async"
                 onClick={() => setViewAt(i)}
                 title={t.viewPhoto}
                 style={{
@@ -138,9 +150,15 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
           // long gone (a permission prompt sat in between), and a browser will
           // not open a file picker without a fresh one. Say so; the next tap
           // goes to the phone's camera.
-          onUnavailable={() => {
+          onUnavailable={(why) => {
             setCamOpen(false); setNoInPage(true)
-            setErr(t.cameraFallback || 'The camera could not open here — tap Take photo again.')
+            // Blocked is the case worth spelling out: it stays blocked on every
+            // visit, and the fallback is the phone's camera app — the path that
+            // loses the photo on these phones. Telling them how to allow it
+            // fixes it for good; quietly falling back would hide it forever.
+            setErr(why === 'denied'
+              ? (t.cameraBlocked || 'Camera is blocked for this app. Tap the lock icon next to the address, choose Permissions, and allow Camera. Or tap Take photo again to use the phone camera.')
+              : (t.cameraFallback || 'The camera could not open here — tap Take photo again.'))
           }}
         />
       )}

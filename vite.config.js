@@ -4,7 +4,17 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // IMPORTANT: base must match the GitHub Pages repo name exactly.
 // Live URL: https://eat-ambria.github.io/Ambria---Workforce/
+// When this build was made, in IST, shown in small type in the footer. With
+// staff on phones that hold an installed app for days, "is this phone running
+// the fix yet?" was a question nobody could answer by looking — this answers it.
+const BUILD_STAMP = new Date().toLocaleString('en-IN', {
+  timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_BUILD': JSON.stringify(BUILD_STAMP),
+  },
   base: '/Ambria---Workforce/',
   // 5173 is vite's default, so it is whatever else is already running. Pinned
   // here rather than passed on the command line so every way of starting the

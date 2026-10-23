@@ -14,6 +14,7 @@ import { statusColors } from '../../constants/status'
 import { Card, Loader, EmptyState, Button, Badge, SectionTitle, Field, inputStyle, filterStyle, FilterField } from '../../components/common/UI'
 import Modal from '../../components/common/Modal'
 import PhotoCapture from '../../components/common/PhotoCapture'
+import { thumbFor } from '../../lib/thumbs'
 import AudioPlayer from '../../components/common/AudioPlayer'
 import Icon from '../../components/common/Icon'
 import PhotoViewer from '../../components/common/PhotoViewer'
@@ -94,6 +95,39 @@ export default function MyTasks() {
   const [status, setStatus] = useState(location.state?.status || 'all')
   const [issueStatus, setIssueStatus] = useState(location.state?.issueStatus || 'all')
   const [active, setActive] = useState(null) // task open in work modal
+
+  // Which task was open, kept for a few minutes past the page itself.
+  //
+  // On a low-memory phone Android can kill the browser while somebody is in the
+  // middle of a job — most often while a camera is open. They come back to a
+  // fresh page and have to find the task again, after which the before-photo
+  // they took is simply missing. This puts them straight back in it. Fifteen
+  // minutes because that is "I was just doing this", not "I opened it on
+  // Tuesday". localStorage, not sessionStorage: a WhatsApp in-app tab that has
+  // been killed comes back as a new session, which sessionStorage would forget.
+  const OPEN_KEY = 'ambria_open_task'
+  const OPEN_TTL = 15 * 60 * 1000
+  useEffect(() => {
+    try {
+      if (active?.id) localStorage.setItem(OPEN_KEY, JSON.stringify({ id: active.id, at: Date.now() }))
+      else localStorage.removeItem(OPEN_KEY)
+    } catch { /* private mode: nothing to restore, nothing lost */ }
+  }, [active?.id])
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current || !user?.id) return
+    restoredRef.current = true
+    let saved = null
+    try { saved = JSON.parse(localStorage.getItem(OPEN_KEY) || 'null') } catch { saved = null }
+    if (!saved?.id || Date.now() - (saved.at || 0) > OPEN_TTL) return
+    ;(async () => {
+      const { data } = await supabase.from('tasks').select('*').eq('id', saved.id).maybeSingle()
+      // only their own, and only if it is still in hand — a job finished or
+      // handed on since should not reappear over the list
+      if (data && data.assigned_to === user.id && data.status !== TASK_STATUS.COMPLETED) setActive(data)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   // Somebody based at one venue never needs to be told which venue. Somebody
   // covering two does — otherwise the same round at each reads as one card
@@ -781,7 +815,7 @@ function WorkModal({ task, onClose, onSaved, user }) {
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {(arr || []).length ? arr.map((u, i) => (
         <img
-          key={u} src={u} alt=""
+          key={u} src={thumbFor(u)} alt="" decoding="async"
           onClick={() => setViewing({ photos: arr, index: i })}
           style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}`, cursor: 'zoom-in' }}
         />

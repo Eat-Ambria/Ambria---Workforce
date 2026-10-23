@@ -141,14 +141,24 @@ describe('compressImage', () => {
     expect(canvases[0].width).toBe(640)
   })
 
-  it('still uploads a file whose header cannot be read', async () => {
-    // A PNG, a truncated file, anything unexpected: decode it plainly rather
-    // than refusing. An unparseable photo must still reach the board.
+  it('still uploads a file whose header cannot be read — decoded small if it is big', async () => {
+    // A HEIC or PNG camera photo, a truncated file, anything unexpected: never
+    // refused, an unparseable photo must still reach the board. But a large one
+    // is decoded straight to the stored width rather than at full size — a
+    // 12 MP image decoded whole is ~48 MB in one go, the single-photo crash.
     const odd = fileOf(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), { size: 4 * 1024 * 1024, type: 'image/png' })
     const out = await compressImage(odd)
 
-    expect(bitmapCalls[0].resizeWidth).toBeUndefined()
+    expect(bitmapCalls[0].resizeWidth).toBe(1280)
+    expect(bitmapCalls[0].resizeHeight).toBeUndefined()   // one side only: never squashed
     expect(bitmapCalls[0].imageOrientation).toBe('from-image')
     expect(out).toBeTruthy()
+  })
+
+  it('leaves a small unreadable file at its own size', async () => {
+    // a screenshot or sticker: forcing it up to 1280 would cost more than it saves
+    const small = fileOf(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), { size: 300 * 1024, type: 'image/png' })
+    await compressImage(small)
+    expect(bitmapCalls[0].resizeWidth).toBeUndefined()
   })
 })
