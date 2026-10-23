@@ -98,6 +98,14 @@ never learns about it.
 
 ## Session log
 
+### 2026-10-23 — tapping a photo removed it
+
+The × on each photo sat on its corner and removed on a tap, no question asked —
+a tap meant to open the photo took it away, so the one before it showed. The
+remove button is now a separate bin under each photo and asks "Remove this
+photo?" first. The viewer no longer closes on a backdrop tap while the photo is
+still loading (it says "Loading photo…"); ✕ always closes.
+
 ### 2026-09-29 — monthly work, pinned to one exact date
 Not committed. One new migration to run.
 

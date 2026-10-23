@@ -34,8 +34,13 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
   // A backdrop tap in the first moment after opening is the opening tap still
   // arriving, or a nervous second one — not a request to close. Buttons still
   // close at once; only the bare backdrop waits.
+  // And not at all while the photo is still on its way: a tap then is somebody
+  // wondering where it is, not asking to leave. The ✕ always closes.
   const openedAt = useRef(Date.now())
-  const closeFromBackdrop = () => { if (Date.now() - openedAt.current > 450) onClose?.() }
+  const closeFromBackdrop = () => {
+    if (!ready) return
+    if (Date.now() - openedAt.current > 450) onClose?.()
+  }
 
   useEffect(() => {
     const onKey = (e) => {
@@ -98,8 +103,9 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
             style={{ width: 'min(86vw, 520px)', maxHeight: '80vh', objectFit: 'contain', borderRadius: 10, filter: 'blur(1px)' }}
           />
         ) : (
-          <div style={{ width: 'min(86vw, 420px)', height: 260, display: 'grid', placeItems: 'center' }}>
+          <div style={{ width: 'min(86vw, 420px)', height: 260, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, color: '#fff', fontSize: 13.5 }}>
             <Spinner size={28} color="#fff" />
+            <span>{t.loadingPhoto || 'Loading photo…'}</span>
           </div>
         ))}
         {!ready && hasPreview && (

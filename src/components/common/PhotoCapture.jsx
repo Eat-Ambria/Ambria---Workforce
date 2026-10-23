@@ -8,6 +8,7 @@ import { Spinner } from './UI'
 import Icon from './Icon'
 import PhotoViewer from './PhotoViewer'
 import InPageCamera, { canUseInPageCamera } from './InPageCamera'
+import { useConfirm } from './ConfirmDialog'
 
 // Ten per field. There was no ceiling at all, so a single task could carry as
 // many photos as somebody kept tapping — each one a full-size upload sitting in
@@ -28,6 +29,7 @@ export const MAX_PHOTOS = 10
 export default function PhotoCapture({ folder = 'misc', multiple = true, value = [], onChange, max = MAX_PHOTOS }) {
   const C = useColors()
   const t = useT()
+  const confirm = useConfirm()
   const camRef = useRef(null)
   const galRef = useRef(null)
   const [busy, setBusy] = useState(false)
@@ -89,16 +91,24 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
     }
   }
 
-  function remove(url) {
-    onChange?.(value.filter((u) => u !== url))
+  // Asked, not done on the tap. The photo is the proof the work was done, and
+  // on a phone the remove button was the easiest thing on this field to hit by
+  // accident — reported as "I tap the photo to look at it and it disappears".
+  async function remove(url) {
+    const ok = await confirm({ message: t.removePhotoConfirm || 'Remove this photo?', confirmLabel: t.remove })
+    if (ok) onChange?.(value.filter((u) => u !== url))
   }
 
   return (
     <div>
       {value.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          {/* The remove button sits UNDER the photo, not on its corner. On the
+              corner it overlapped the photo by a finger's width, so a tap meant
+              to open the photo took it away instead, and the one before it was
+              what showed. Now the photo is the photo and the bin is the bin. */}
           {value.map((url, i) => (
-            <div key={url} style={{ position: 'relative' }}>
+            <div key={url} style={{ display: 'grid', gap: 5, width: 80 }}>
               <img
                 src={thumbFor(url)}
                 alt=""
@@ -106,19 +116,21 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
                 onClick={() => setViewAt(i)}
                 title={t.viewPhoto}
                 style={{
-                  width: 72, height: 72, objectFit: 'cover', borderRadius: 10,
+                  width: 80, height: 80, objectFit: 'cover', borderRadius: 10,
                   border: `1px solid ${C.border}`, cursor: 'zoom-in', display: 'block',
                 }}
               />
               <button
                 type="button"
                 onClick={() => remove(url)}
-                style={{
-                  position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
-                  background: C.dangerBg, color: '#fff', fontSize: 13, lineHeight: '18px',
-                }}
                 aria-label={t.remove}
-              >×</button>
+                style={{
+                  height: 26, borderRadius: 8, display: 'grid', placeItems: 'center',
+                  background: 'transparent', border: `1px solid ${C.red}55`,
+                }}
+              >
+                <Icon name="trash" size={14} color={C.red} />
+              </button>
             </div>
           ))}
         </div>
