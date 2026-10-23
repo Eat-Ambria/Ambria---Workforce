@@ -318,3 +318,11 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   .seg-opt, .seg-opt:hover { transform: none !important; }
   .seg-opt.is-on { animation: none; }
 }
+
+/* Nothing inside a dialog may be wider than the dialog. A photo, a video or a
+   canvas at its natural size was the other way a form came to scroll sideways
+   on a phone. */
+.modal-scroll img,
+.modal-scroll video,
+.modal-scroll canvas,
+.modal-scroll audio { max-width: 100%; }

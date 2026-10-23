@@ -3,7 +3,7 @@ import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import { uploadPhoto } from '../../lib/storage'
 import { compressImage } from '../../lib/imageCompress'
-import { makeThumb, rememberThumb, thumbFor } from '../../lib/thumbs'
+import { makeThumb, rememberThumb, rememberFull, thumbFor } from '../../lib/thumbs'
 import { Spinner } from './UI'
 import Icon from './Icon'
 import PhotoViewer from './PhotoViewer'
@@ -75,6 +75,7 @@ export default function PhotoCapture({ folder = 'misc', multiple = true, value =
         const small = await compressImage(f)
         const url = await uploadPhoto(small, folder)
         rememberThumb(url, await makeThumb(small))
+        rememberFull(url, small)
         urls.push(url)
       }
       const next = multiple ? [...value, ...urls] : urls.slice(-1)

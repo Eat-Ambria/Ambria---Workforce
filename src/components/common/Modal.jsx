@@ -88,7 +88,15 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
 
         {/* scrollbar left visible on purpose: tall forms (repair request, new
             user) overflow, and a hidden bar makes them look truncated */}
-        <div className="modal-scroll" style={{ padding: 18, overflowY: 'auto', flex: 1, overscrollBehavior: 'contain' }}>
+        {/* Down, never sideways. overflowY alone makes the other axis `auto`
+            too, so anything a few pixels wider than a phone — a pasted link, a
+            long word with no space to break at — turned the whole form into
+            something that slid left and right under the thumb. Long text now
+            breaks onto the next line instead; media is capped in index.css. */}
+        <div className="modal-scroll" style={{
+          padding: 18, overflowY: 'auto', overflowX: 'hidden', flex: 1, minWidth: 0,
+          overscrollBehavior: 'contain', overflowWrap: 'anywhere',
+        }}>
           {children}
         </div>
 

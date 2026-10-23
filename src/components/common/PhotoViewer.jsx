@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useColors } from '../../context/ThemeContext'
 import { useT } from '../../context/LangContext'
 import Icon from './Icon'
+import { Spinner } from './UI'
+import { thumbFor, fullFor } from '../../lib/thumbs'
 
 // Full-screen look at a photo. Thumbnails in this app are 80–90px, which is
 // enough to see THAT there is a photo and not much else — and the whole point of
@@ -15,6 +17,25 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
   const t = useT()
   const many = photos.length > 1
   const step = (d) => onIndex?.((index + d + photos.length) % photos.length)
+
+  // Which full-size photos have arrived. Until one has, its small preview is
+  // shown in its place, scaled up — reported from a phone: tap a photo, get a
+  // black screen while the full one downloads, tap again to see what is going
+  // on, and that tap lands on the backdrop and closes it. Then the next tap on
+  // the thumbnail "opens by itself", because by now the photo is cached.
+  const [loaded, setLoaded] = useState(() => new Set())
+  const url = photos[index]
+  // the copy already on this phone, when it was taken this visit — opens at once
+  const src = fullFor(url)
+  const ready = loaded.has(src)
+  const preview = thumbFor(url)
+  const hasPreview = preview !== url
+
+  // A backdrop tap in the first moment after opening is the opening tap still
+  // arriving, or a nervous second one — not a request to close. Buttons still
+  // close at once; only the bare backdrop waits.
+  const openedAt = useRef(Date.now())
+  const closeFromBackdrop = () => { if (Date.now() - openedAt.current > 450) onClose?.() }
 
   useEffect(() => {
     const onKey = (e) => {
@@ -39,7 +60,7 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
   // dialog it was trying to cover. At body level neither can reach it.
   return createPortal(
     <div
-      onClick={onClose}
+      onClick={closeFromBackdrop}
       style={{
         position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.88)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16,
@@ -55,12 +76,36 @@ export default function PhotoViewer({ photos = [], index = 0, onIndex, onClose }
         </button>
       )}
 
-      <img
-        src={photos[index]}
-        alt=""
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: '100%', maxHeight: '86vh', objectFit: 'contain', borderRadius: 10 }}
-      />
+      <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'grid', placeItems: 'center', minWidth: 0 }}>
+        {/* the full photo, hidden until it has actually arrived */}
+        <img
+          key={src}
+          src={src}
+          alt=""
+          decoding="async"
+          onLoad={() => setLoaded((s) => new Set(s).add(src))}
+          style={{
+            maxWidth: '100%', maxHeight: '86vh', objectFit: 'contain', borderRadius: 10,
+            display: ready ? 'block' : 'none',
+          }}
+        />
+        {!ready && (hasPreview ? (
+          // this visit's thumbnail, stretched: soft, but it is the right photo,
+          // on screen at once, and something to look at rather than to tap
+          <img
+            src={preview}
+            alt=""
+            style={{ width: 'min(86vw, 520px)', maxHeight: '80vh', objectFit: 'contain', borderRadius: 10, filter: 'blur(1px)' }}
+          />
+        ) : (
+          <div style={{ width: 'min(86vw, 420px)', height: 260, display: 'grid', placeItems: 'center' }}>
+            <Spinner size={28} color="#fff" />
+          </div>
+        ))}
+        {!ready && hasPreview && (
+          <span style={{ position: 'absolute', bottom: 12, right: 12 }}><Spinner size={20} color="#fff" /></span>
+        )}
+      </div>
 
       {many && (
         <button type="button" onClick={(e) => { e.stopPropagation(); step(1) }} aria-label={t.nextMonth} style={btn}>

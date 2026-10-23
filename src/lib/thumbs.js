@@ -15,9 +15,28 @@
 
 const THUMB = 160
 const cache = new Map()   // public url -> data url
+const fulls = new Map()   // public url -> object url of the uploaded copy
+
+// The full photo too, for the viewer.
+//
+// Before the thumbnails, each square loaded the full photo, so by the time
+// somebody tapped one it was already downloaded and the viewer opened at once.
+// The thumbnails took that away: the tap started the download, the screen sat
+// black, and a second tap closed it. The compressed copy that was uploaded is
+// still here in memory as a ~100 KB blob, so the viewer opens that — no
+// download, no wait — and it is only decoded when somebody actually looks.
 
 /** The preview to draw for `url`: its thumbnail if this visit made one. */
 export const thumbFor = (url) => cache.get(url) || url
+
+/** The image to open full-size for `url`: the local copy if this visit has one. */
+export const fullFor = (url) => fulls.get(url) || url
+
+/** Keep `blob` — the uploaded copy — as what the viewer shows for `url`. */
+export const rememberFull = (url, blob) => {
+  if (!url || !blob || typeof URL === 'undefined' || !URL.createObjectURL) return
+  fulls.set(url, URL.createObjectURL(blob))
+}
 
 /** Remember `dataUrl` as the preview for `url`. */
 export const rememberThumb = (url, dataUrl) => { if (url && dataUrl) cache.set(url, dataUrl) }
