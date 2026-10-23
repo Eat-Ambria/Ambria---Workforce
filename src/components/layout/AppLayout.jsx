@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import PullToRefresh from './PullToRefresh'
 import PoweredBy from '../common/PoweredBy'
 import Icon from '../common/Icon'
 
@@ -58,6 +59,8 @@ export default function AppLayout() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
+      {/* touch only by nature: nothing happens without a finger on the screen */}
+      <PullToRefresh />
       {!isMobile && !wideMode && <Sidebar />}
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>

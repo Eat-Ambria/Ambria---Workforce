@@ -326,3 +326,8 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .modal-scroll video,
 .modal-scroll canvas,
 .modal-scroll audio { max-width: 100%; }
+
+/* Pull-to-refresh: the circle spins while the page reloads. */
+@keyframes ptrSpin { to { transform: rotate(360deg); } }
+.ptr-spin { animation: ptrSpin .7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ptr-spin { animation: none; } }
