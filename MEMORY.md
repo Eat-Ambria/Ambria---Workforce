@@ -98,6 +98,15 @@ never learns about it.
 
 ## Session log
 
+### 2026-10-29 — zoom and crop in the in-page camera
+
+Asked for both, with "nothing heavy on any phone". Zoom: the camera's own zoom
+where getCapabilities() offers it (sent one change at a time so a pinch does
+not flood a slow phone), otherwise a CSS scale of the preview and a centre cut
+of the frame, capped at 3x. Pinch or the 1x/2x/3x chips. Crop: after the shot
+the photo is shown on the same canvas it was drawn to, with a drag box; tick
+uses it, the circle arrow retakes. Not tried on a real phone camera from here.
+
 ### 2026-10-23 — tapping a photo removed it
 
 The × on each photo sat on its corner and removed on a tap, no question asked —
